@@ -32,7 +32,6 @@ A YouTube Video Archiver with Webinterface
 - Display everything in a nice ui
   - https://www.tremor.so/
   - https://nextui.org/
-  - https://www.chartjs.org/
 
 ## Additional Ideas
 - Configure Prometheus with Grafana

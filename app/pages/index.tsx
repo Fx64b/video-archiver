@@ -34,7 +34,7 @@ const valueFormatter = (number: number) => `$ ${Intl.NumberFormat("us").format(n
 export default function Home() {
     return (
     <main className={'flex flex-col justify-center items-center'}>
-        <h1 className={'text-5xl text-center mt-10'}>Next.js + TypeScript + NextUI + Tremor + Chart.js</h1>
+        <h1 className={'text-5xl text-center mt-10'}>Next.js + TypeScript + NextUI + Tremor</h1>
         <Button color="primary" className={'mt-10'}>Click Me!</Button>
         <Card className="max-w-lg mt-10">
             <Title>Sales</Title>
