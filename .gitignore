@@ -36,3 +36,11 @@ app/next-env.d.ts
 
 # IDE
 .idea
+
+# project specific
+*.mp3
+*.mp4
+*.webm
+*.mov
+*.avi
+*.wmv

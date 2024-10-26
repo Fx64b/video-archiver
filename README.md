@@ -1,39 +1,14 @@
 # video-archiver
 A YouTube Video Archiver with Webinterface
 
-<br>
+## Run it
 
-## Planned Features
-**Downloads**
-- Download YouTube Videos
-  - Videos
-  - Playlists
-  - Channels
-- Get ytdlp command output
+````bash
+docker-compose up --build
+````
 
-**Cronjobs**
-- Periodically Download
-  - Videos
-  - Playlists
-  - Channels
+**Debug backend container:**
 
-**System**
-- Get basic system info
-  - cpu usage/total
-  - disk usage/total
-  - memory usage/total
-  - Heat?
-
-**Configs**
-- Configure all important options
-  - Disk/Folder to store data
-
-**UI**
-- Display everything in a nice ui
-  - https://www.tremor.so/
-  - https://nextui.org/
-
-## Additional Ideas
-- Configure Prometheus with Grafana
-- Advanced system commands (update system, create directories)
-- Live command output streaming
+````bash
+docker-compose exec backend sh
+````

@@ -1,0 +1,10 @@
+services:
+  backend:
+    build:
+      context: ./services/backend
+    volumes:
+      - ./downloads:/app/downloads
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
