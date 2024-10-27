@@ -2,7 +2,8 @@
 FROM golang:1.23-alpine
 
 # Install yt-dlp dependencies
-RUN apk add --no-cache curl ffmpeg python3
+ENV CGO_ENABLED=1
+RUN apk add --no-cache gcc musl-dev curl ffmpeg python3
 
 # Download yt-dlp and make it executable
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \

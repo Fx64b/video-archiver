@@ -19,12 +19,6 @@ type Response struct {
 	Message string `json:"message"`
 }
 
-/*var youtubeURLRegex = regexp.MustCompile(`^(https?://)?(www\.)?(youtube\.com|youtu\.be)/(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})`)
-
-func isValidYouTubeURL(url string) bool {
-	return youtubeURLRegex.Match([]byte(url))
-}*/
-
 func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	var req DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -32,13 +26,7 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*	if !isValidYouTubeURL(req.URL) {
-		http.Error(w, "Invalid YouTube URL", http.StatusBadRequest)
-		return
-	}*/
-
 	log.Infof("Received download request for URL: %s", req.URL)
-	// TODO: Call yt-dlp command here and handle response
 
 	job := models.DownloadJob{
 		ID:        uuid.New().String(),

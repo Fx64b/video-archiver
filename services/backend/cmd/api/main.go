@@ -9,6 +9,7 @@ import (
 	"video-archiver/internal/handlers"
 	"video-archiver/internal/helpers/ytdlp"
 	"video-archiver/internal/queue"
+	"video-archiver/internal/storage"
 )
 
 func main() {
@@ -22,25 +23,41 @@ func main() {
 	var r *chi.Mux = chi.NewRouter()
 	handlers.Handler(r)
 
+	fmt.Printf(`
+__     _____ ____  _____ ___                       
+\ \   / /_ _|  _ \| ____/ _ \                      
+ \ \ / / | || | | |  _|| | | |                     
+  \ V /  | || |_| | |__| |_| |                     
+   \_/  |___|____/|_____\___/___     _______ ____  
+   / \  |  _ \ / ___| | | |_ _\ \   / / ____|  _ \ 
+  / _ \ | |_) | |   | |_| || | \ \ / /|  _| | |_) |
+ / ___ \|  _ <| |___|  _  || |  \ V / | |___|  _ < 
+/_/   \_\_| \_\\____|_| |_|___|  \_/  |_____|_| \_\
+
+`)
+
+	fmt.Println("Initializing database...")
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "./data/db/video-archiver.db"
+	}
+
+	if err := storage.InitDB(dbPath); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+		os.Exit(1) // Terminate if db intialization fails
+	}
+
+	defer func() {
+		err := storage.CloseDB()
+		if err != nil {
+			log.Errorf("Failed to close database: %v", err)
+		}
+	}()
+
 	fmt.Println("Starting Queue worker...")
 	queue.StartQueueWorker()
 
 	fmt.Println("Starting GO API service...")
-
-	fmt.Printf(`
-
- ___      ___ ___  ________  _______   ________          ________  ________  ________  ___  ___  ___  ___      ___ _______   ________     
-|\  \    /  /|\  \|\   ___ \|\  ___ \ |\   __  \        |\   __  \|\   __  \|\   ____\|\  \|\  \|\  \|\  \    /  /|\  ___ \ |\   __  \    
-\ \  \  /  / | \  \ \  \_|\ \ \   __/|\ \  \|\  \       \ \  \|\  \ \  \|\  \ \  \___|\ \  \\\  \ \  \ \  \  /  / | \   __/|\ \  \|\  \   
- \ \  \/  / / \ \  \ \  \ \\ \ \  \_|/_\ \  \\\  \       \ \   __  \ \   _  _\ \  \    \ \   __  \ \  \ \  \/  / / \ \  \_|/_\ \   _  _\  
-  \ \    / /   \ \  \ \  \_\\ \ \  \_|\ \ \  \\\  \       \ \  \ \  \ \  \\  \\ \  \____\ \  \ \  \ \  \ \    / /   \ \  \_|\ \ \  \\  \| 
-   \ \__/ /     \ \__\ \_______\ \_______\ \_______\       \ \__\ \__\ \__\\ _\\ \_______\ \__\ \__\ \__\ \__/ /     \ \_______\ \__\\ _\ 
-    \|__|/       \|__|\|_______|\|_______|\|_______|        \|__|\|__|\|__|\|__|\|_______|\|__|\|__|\|__|\|__|/       \|_______|\|__|\|__|
-                                                                                                                                          
-                                                                                                                                          
-                                                                                                                                          
-
-`)
 
 	err := http.ListenAndServe("0.0.0.0:8080", r)
 	if err != nil {

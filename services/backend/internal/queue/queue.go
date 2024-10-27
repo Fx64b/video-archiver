@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	jobs "video-archiver/internal/helpers/job"
+	"video-archiver/internal/storage"
 	"video-archiver/models"
 )
 
@@ -27,14 +29,22 @@ func processJob(job models.DownloadJob) {
 
 	downloadPath := os.Getenv("DOWNLOAD_PATH")
 	if downloadPath == "" {
-		downloadPath = "./downloads"
+		downloadPath = "./data/downloads"
+	}
+
+	var isPlaylist bool = !jobs.IsVideo(job.URL)
+
+	// job needs to be added before processing
+	err := storage.AddJob(job.ID, job.URL, isPlaylist)
+	if err != nil {
+		log.Errorf("failed to add job to queue with job ID %s: %v", job.ID, err)
 	}
 
 	outputPath := fmt.Sprintf("%s/%%(uploader)s/%%(playlist|title)s/%%(title)s.%%(ext)s", downloadPath)
 
 	cmd := exec.Command("yt-dlp",
 		"-N", "8",
-		"--format", "bestvideo[height<=1080]+bestaudio/best",
+		"--format", "bestvideo[height<=1080]", // +bestaudio/best
 		"--merge-output-format", "mp4",
 		"--retries", "3",
 		"--continue",
@@ -47,20 +57,24 @@ func processJob(job models.DownloadJob) {
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 
-	// Start the command
 	if err := cmd.Start(); err != nil {
 		log.Errorf("Failed to start yt-dlp for job ID %s: %v", job.ID, err)
-		return
 	}
 
-	// Track progress in a separate goroutine
 	go trackProgress(stdout, job.ID)
 	go trackProgress(stderr, job.ID)
 
-	// Wait for the command to finish
 	if err := cmd.Wait(); err != nil {
 		log.Errorf("Failed to download job ID %s: %v", job.ID, err)
+		err := storage.UpdateJobProgress(job.ID, 100.0, "error")
+		if err != nil {
+			log.Errorf("failed to finish errored job progress for job ID %s: %v", job.ID, err)
+		}
 	} else {
+		err := storage.UpdateJobProgress(job.ID, 100.0, "completed")
+		if err != nil {
+			log.Errorf("failed to finish successful job progress for job ID %s: %v", job.ID, err)
+		}
 		log.Infof("Successfully downloaded job ID: %s", job.ID)
 	}
 }
@@ -80,8 +94,12 @@ func trackProgress(pipe io.Reader, jobID string) {
 			totalItems = parseToInt(match[2])
 
 			progress = (float64(currentItem) / float64(totalItems)) * 100
+			progress = float64(int(progress*100)) / 100
 
-			//log.Infof("Job ID %s: Downloading item %d of %d - %.2f%%", jobID, currentItem, totalItems, progress)
+			err := storage.UpdateJobProgress(jobID, progress, "in_progress")
+			if err != nil {
+				log.Errorf("Failed to update job progress for job ID %s: %v", jobID, err)
+			}
 			fmt.Printf("Job ID %s: Downloading item %d of %d - %.2f%%\n", jobID, currentItem, totalItems, progress)
 		}
 	}
@@ -91,14 +109,6 @@ func parseToInt(s string) int {
 	val, err := strconv.Atoi(s)
 	if err != nil {
 		return 0
-	}
-	return val
-}
-
-func parseToFloat(s string) float64 {
-	val, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0.0
 	}
 	return val
 }
