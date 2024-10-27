@@ -17,7 +17,6 @@ updates:
       
   - package-ecosystem: "docker" 
     directories: 
-      - "/"
       - "/services/backend"
       - "/web"
     schedule:
