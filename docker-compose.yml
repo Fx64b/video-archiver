@@ -8,3 +8,11 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
+
+  web:
+    build:
+      context: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
