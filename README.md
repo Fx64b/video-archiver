@@ -5,9 +5,11 @@ A YouTube Video Archiver with Webinterface
 
 ````bash
 docker-compose up --build
+````
 
-# or
+or
 
+````bash
 docker-compose up --build && docker-compose down
 ````
 
