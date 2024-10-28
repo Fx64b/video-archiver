@@ -5,6 +5,10 @@ A YouTube Video Archiver with Webinterface
 
 ````bash
 docker-compose up --build
+
+# or
+
+docker-compose up --build && docker-compose down
 ````
 
 **Debug backend container:**
