@@ -1,0 +1,12 @@
+{
+  "name": "video-archiver",
+  "version": "0.0.0",
+  "scripts": {
+    "release": "semantic-release"
+  },
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.0",
+    "@semantic-release/github": "^11.0.0",
+    "@semantic-release/npm": "^12.0.1"
+  }
+}
