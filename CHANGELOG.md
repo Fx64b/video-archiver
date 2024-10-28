@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/Fx64b/video-archiver/compare/v1.0.0...v1.1.0) (2024-10-28)
+
+
+### Features
+
+* **README:** trigger release workflow ([b73583b](https://github.com/Fx64b/video-archiver/commit/b73583bfe8fca9b17f4df0f4026dd9f56c429bf8))
+
 # 1.0.0 (2024-10-28)
 
 
