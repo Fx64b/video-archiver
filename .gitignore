@@ -44,3 +44,6 @@ app/next-env.d.ts
 *.mov
 *.avi
 *.wmv
+*.db
+
+data/downloads/*

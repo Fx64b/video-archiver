@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	jobs "video-archiver/internal/helpers/job"
+	"video-archiver/internal/metadata"
 	"video-archiver/internal/storage"
 	"video-archiver/models"
 )
@@ -44,12 +45,14 @@ func processJob(job models.DownloadJob) {
 
 	cmd := exec.Command("yt-dlp",
 		"-N", "8",
-		"--format", "bestvideo[height<=1080]", // +bestaudio/best
+		"--format", "bestvideo[height<=1080]+bestaudio/best",
 		"--merge-output-format", "mp4",
 		"--retries", "3",
 		"--continue",
 		"--ignore-errors",
 		"--add-metadata",
+		"--write-info-json",
+		"--write-playlist-metafiles",
 		"--output", outputPath,
 		job.URL,
 	)
@@ -75,6 +78,11 @@ func processJob(job models.DownloadJob) {
 		if err != nil {
 			log.Errorf("failed to finish successful job progress for job ID %s: %v", job.ID, err)
 		}
+
+		if err := metadata.ExtractAndStoreMetadata(job.ID, downloadPath, isPlaylist); err != nil {
+			log.Errorf("Failed to extract metadata for job ID %s: %v", job.ID, err)
+		}
+
 		log.Infof("Successfully downloaded job ID: %s", job.ID)
 	}
 }

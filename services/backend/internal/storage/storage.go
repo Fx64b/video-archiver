@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"os"
 	"time"
+	"video-archiver/models"
 )
 
 var db *sql.DB
@@ -56,8 +57,20 @@ func UpdateJobProgress(jobID string, progress float64, status string) error {
 	return err
 }
 
-func StoreVideoMetadata(jobID, title, uploader, filePath string) error {
-	_, err := db.Exec(`INSERT INTO videos (job_id, title, uploader, file_path, last_downloaded_at) VALUES (?, ?, ?, ?, ?)`, jobID, title, uploader, filePath, time.Now())
+func SaveVideoMetadata(video models.Video) error {
+	_, err := db.Exec(`
+		INSERT INTO videos (job_id, title, uploader, file_path, last_downloaded_at, length, size, quality, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		video.JobID, video.Title, video.Uploader, video.FilePath, video.LastDownloadedAt, video.Length, video.Size, video.Quality, time.Now())
+	return err
+}
+
+func SavePlaylistMetadata(playlist models.Playlist) error {
+	_, err := db.Exec(`
+		INSERT INTO playlists (id, title, description)
+		VALUES (?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET title=excluded.title, description=excluded.description`,
+		playlist.ID, playlist.Title, playlist.Description)
 	return err
 }
 
