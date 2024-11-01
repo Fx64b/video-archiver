@@ -6,6 +6,7 @@ import {useState} from "react"
 import {Button} from "@/components/ui/button"
 import {Input} from "@/components/ui/input"
 import {AlertDestructive} from "@/components/alert-destructive";
+import {toast} from "sonner";
 
 export function UrlInput() {
     const [url, setUrl] = useState("")
@@ -39,6 +40,7 @@ export function UrlInput() {
 
             // Handle the response
             setUrl("")
+            toast('Job has been added to queue.')
         } catch (error) {
             console.error(error)
             setError("Failed to download the video.")

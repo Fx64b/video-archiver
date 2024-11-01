@@ -55,7 +55,10 @@ __     _____ ____  _____ ___
 	}()
 
 	fmt.Println("Starting Queue worker...")
-	queue.StartQueueWorker()
+	go queue.StartQueueWorker()
+
+	fmt.Println("Starting WebSocket service...")
+	go queue.StartWebSocketServer()
 
 	fmt.Println("Starting GO API service...")
 

@@ -3,12 +3,15 @@ package queue
 import (
 	"bufio"
 	"fmt"
+	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
+	"sync"
 	jobs "video-archiver/internal/helpers/job"
 	"video-archiver/internal/metadata"
 	"video-archiver/internal/storage"
@@ -16,6 +19,11 @@ import (
 )
 
 var DownloadQueue = make(chan models.DownloadJob, 10)
+var clients = make(map[*websocket.Conn]bool)
+var wsMutex sync.Mutex
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
 
 func StartQueueWorker() {
 	go func() {
@@ -108,6 +116,8 @@ func trackProgress(pipe io.Reader, jobID string) {
 			if err != nil {
 				log.Errorf("Failed to update job progress for job ID %s: %v", jobID, err)
 			}
+
+			sendProgressUpdate(jobID, currentItem, totalItems, progress)
 			fmt.Printf("Job ID %s: Downloading item %d of %d - %.2f%%\n", jobID, currentItem, totalItems, progress)
 		}
 	}
@@ -119,4 +129,48 @@ func parseToInt(s string) int {
 		return 0
 	}
 	return val
+}
+
+func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Errorf("Failed to upgrade connection to WebSocket: %v", err)
+		return
+	}
+	defer ws.Close()
+
+	wsMutex.Lock()
+	clients[ws] = true
+	wsMutex.Unlock()
+
+	for {
+		_, _, err := ws.ReadMessage()
+		if err != nil {
+			wsMutex.Lock()
+			delete(clients, ws)
+			wsMutex.Unlock()
+			break
+		}
+	}
+}
+
+func sendProgressUpdate(jobID string, currentItem, totalItems int, progress float64) {
+	wsMutex.Lock()
+	defer wsMutex.Unlock()
+
+	message := fmt.Sprintf(`{"jobID":"%s","currentItem":%d,"totalItems":%d,"progress":%.2f}`, jobID, currentItem, totalItems, progress)
+
+	for client := range clients {
+		err := client.WriteMessage(websocket.TextMessage, []byte(message))
+		if err != nil {
+			log.Errorf("Failed to send WebSocket message: %v", err)
+			client.Close()
+			delete(clients, client)
+		}
+	}
+}
+
+func StartWebSocketServer() {
+	http.HandleFunc("/ws", WebSocketHandler)
+	log.Fatal(http.ListenAndServe(":8081", nil))
 }

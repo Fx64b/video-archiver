@@ -1,3 +1,5 @@
+'use client'
+
 import {Home, MonitorPlay, Settings, GitBranch, ListVideo, Users, Wrench, ChartArea} from "lucide-react"
 
 import {
@@ -11,8 +13,8 @@ import {
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import Link from "next/link";
+import {useEffect, useState} from "react";
 
-// Menu items.
 const items = [
     {
         title: "Overview",
@@ -52,6 +54,23 @@ const items = [
 ]
 
 export function AppSidebar() {
+    const [version, setVersion] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchVersion = async () => {
+            try {
+                const response = await fetch('/api/info');
+                const data = await response.json();
+                setVersion(data.info.version);
+            } catch (error) {
+                console.error('Failed to fetch version:', error);
+            }
+        };
+
+        fetchVersion();
+    }, []);
+
+
     return (
         <Sidebar>
             <SidebarHeader>
@@ -67,7 +86,7 @@ export function AppSidebar() {
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild>
                                         <a href={item.url}>
-                                            <item.icon />
+                                            <item.icon/>
                                             <span>{item.title}</span>
                                         </a>
                                     </SidebarMenuButton>
@@ -80,7 +99,9 @@ export function AppSidebar() {
             <SidebarFooter>
                 <SidebarGroupLabel className={'gap-x-4'}>
 
-                    <p className={'text-md'}>v0.0.0</p> <Link target={'_blank'} href={'https://github.com/Fx64b/video-archiver'}><GitBranch size={20} /></Link>
+                    <p className={'text-md'}>version {version}</p> <Link target={'_blank'}
+                                                                      href={'https://github.com/Fx64b/video-archiver'}><GitBranch
+                    size={20}/></Link>
                 </SidebarGroupLabel>
             </SidebarFooter>
         </Sidebar>

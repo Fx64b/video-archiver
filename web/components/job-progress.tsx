@@ -1,0 +1,55 @@
+import React, { useEffect, useState } from 'react';
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+
+interface JobProgress {
+    jobID: string;
+    currentItem: number;
+    totalItems: number;
+    progress: number;
+}
+
+const JobProgress: React.FC = () => {
+    const [jobs, setJobs] = useState<Record<string, JobProgress>>({});
+
+    useEffect(() => {
+        const socket = new WebSocket("ws://localhost:8081/ws");
+
+        socket.onmessage = (event) => {
+            const data: JobProgress = JSON.parse(event.data);
+
+            setJobs((prevJobs) => ({
+                ...prevJobs,
+                [data.jobID]: data,
+            }));
+        };
+
+        socket.onclose = () => {
+            console.log("WebSocket connection closed");
+        };
+
+        return () => {
+            socket.close();
+        };
+    }, []);
+
+    return (
+        <div className="space-y-4 max-w-screen-md">
+            {Object.entries(jobs).reverse().map(([jobID, job]) => (
+                <Card key={jobID} className="w-full max-w-screen-sm">
+                    <CardHeader>
+                        <CardTitle>Job ID: {jobID}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p>
+                            Progress: {job.currentItem}/{job.totalItems} ({job.progress}%)
+                        </p>
+                        <Progress value={job.progress} className="mt-2" />
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
+    );
+};
+
+export default JobProgress;
