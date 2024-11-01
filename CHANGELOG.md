@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/Fx64b/video-archiver/compare/v1.1.3...v1.2.0) (2024-11-01)
+
+
+### Features
+
+* add websocket channel for download status and display it in the frontend ([6a7a2b0](https://github.com/Fx64b/video-archiver/commit/6a7a2b0d32a5698178add9d1617ed443e3fb0f1b))
+
 ## [1.1.3](https://github.com/Fx64b/video-archiver/compare/v1.1.2...v1.1.3) (2024-11-01)
 
 
