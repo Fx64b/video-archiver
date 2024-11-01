@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/Fx64b/video-archiver/compare/v1.1.1...v1.1.2) (2024-11-01)
+
+
+### Bug Fixes
+
+* **workflows:** actions improvement ([41e0515](https://github.com/Fx64b/video-archiver/commit/41e0515a23570c5b7a88d8452b0fc406813e2f05))
+
 ## [1.1.1](https://github.com/Fx64b/video-archiver/compare/v1.1.0...v1.1.1) (2024-11-01)
 
 
