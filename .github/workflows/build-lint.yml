@@ -48,12 +48,10 @@ jobs:
 
       - name: Lint Next.js
         run: |
-          cd web
           pnpm run lint
 
       - name: Build Next.js
         run: |
-          cd web
           pnpm run build
 
   build_and_lint_go:
