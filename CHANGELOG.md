@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/Fx64b/video-archiver/compare/v1.1.0...v1.1.1) (2024-11-01)
+
+
+### Bug Fixes
+
+* **workflows:** pnpm not installed ([7277e01](https://github.com/Fx64b/video-archiver/commit/7277e0140314b7fe494a588dd30b325e9881419f))
+
 # [1.1.0](https://github.com/Fx64b/video-archiver/compare/v1.0.0...v1.1.0) (2024-10-28)
 
 
