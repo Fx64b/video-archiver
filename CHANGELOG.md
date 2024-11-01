@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/Fx64b/video-archiver/compare/v1.1.2...v1.1.3) (2024-11-01)
+
+
+### Bug Fixes
+
+* **workflows:** remove cd ([ef06cf0](https://github.com/Fx64b/video-archiver/commit/ef06cf026a9921db3dbf7c6d620779f885443ab7))
+
 ## [1.1.2](https://github.com/Fx64b/video-archiver/compare/v1.1.1...v1.1.2) (2024-11-01)
 
 
