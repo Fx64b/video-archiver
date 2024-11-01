@@ -12,6 +12,9 @@ jobs:
   build_and_lint_nextjs:
     runs-on: ubuntu-latest
     name: Build and Lint Next.js App
+    defaults:
+      run:
+        working-directory: ./web
 
     steps:
       - name: Checkout code
@@ -56,6 +59,9 @@ jobs:
   build_and_lint_go:
     runs-on: ubuntu-latest
     name: Build and Lint Go Backend
+    defaults:
+      run:
+        working-directory: ./services/backend
 
     steps:
       - name: Checkout code
@@ -68,16 +74,13 @@ jobs:
 
       - name: Install Go dependencies
         run: |
-          cd services/backend
           go mod download
 
       - name: Lint Go code
         run: |
-          cd services/backend
           go fmt ./...
           go vet -v ./...
 
       - name: Build Go
         run: |
-          cd services/backend
           go build -v ./...
