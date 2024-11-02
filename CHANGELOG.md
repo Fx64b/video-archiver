@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/Fx64b/video-archiver/compare/v1.3.0...v1.3.1) (2024-11-02)
+
+
+### Bug Fixes
+
+* **url-input:** small spacing issue ([1c6c5f9](https://github.com/Fx64b/video-archiver/commit/1c6c5f983e27070129564ff527e3ab2b199d18de))
+
 # [1.3.0](https://github.com/Fx64b/video-archiver/compare/v1.2.0...v1.3.0) (2024-11-02)
 
 
