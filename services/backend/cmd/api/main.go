@@ -6,10 +6,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
-	"video-archiver/internal/handlers"
-	"video-archiver/internal/helpers/ytdlp"
-	"video-archiver/internal/queue"
+	"video-archiver/internal/api/handlers"
+	queue "video-archiver/internal/services/download"
 	"video-archiver/internal/storage"
+	ytdlp "video-archiver/internal/utils"
 )
 
 func main() {

@@ -19,14 +19,12 @@ func ExtractAndStoreMetadata(jobID, downloadPath string, isPlaylist bool) error 
 		folderPath = downloadPath
 	}
 
-	// Identify the playlist .info.json file (if it exists)
 	playlistInfoPath := ""
 	if isPlaylist {
 		err := filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			// Detect playlist .info.json based on unique properties
 			if strings.HasSuffix(info.Name(), ".info.json") && isPlaylistFile(path) {
 				playlistInfoPath = path
 				return nil
@@ -38,14 +36,12 @@ func ExtractAndStoreMetadata(jobID, downloadPath string, isPlaylist bool) error 
 		}
 	}
 
-	// Process playlist metadata if found
 	if playlistInfoPath != "" {
 		if err := parseAndStorePlaylistMetadata(playlistInfoPath, jobID); err != nil {
 			return fmt.Errorf("failed to parse playlist metadata: %v", err)
 		}
 	}
 
-	// Process individual video metadata files
 	return filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -58,7 +54,6 @@ func ExtractAndStoreMetadata(jobID, downloadPath string, isPlaylist bool) error 
 }
 
 func isPlaylistFile(filename string) bool {
-	// Logic to identify a playlist .info.json file
 	file, err := os.Open(filename)
 	if err != nil {
 		return false
@@ -70,7 +65,6 @@ func isPlaylistFile(filename string) bool {
 		return false
 	}
 
-	// Check for fields unique to playlist info
 	_, hasID := data["id"]
 	_, hasTitle := data["title"]
 	return hasID && hasTitle && data["id"] != nil && data["title"] != nil

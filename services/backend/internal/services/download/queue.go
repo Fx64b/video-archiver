@@ -1,4 +1,4 @@
-package queue
+package download
 
 import (
 	"bufio"
@@ -12,9 +12,9 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
-	jobs "video-archiver/internal/helpers/job"
-	"video-archiver/internal/metadata"
+	"video-archiver/internal/services/metadata"
 	"video-archiver/internal/storage"
+	jobs "video-archiver/internal/utils"
 	"video-archiver/models"
 )
 

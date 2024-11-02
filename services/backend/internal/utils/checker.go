@@ -1,4 +1,4 @@
-package ytdlp
+package utils
 
 import (
 	"fmt"

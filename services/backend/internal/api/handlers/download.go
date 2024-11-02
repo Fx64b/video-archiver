@@ -7,7 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"time"
-	"video-archiver/internal/queue"
+	queue "video-archiver/internal/services/download"
 	"video-archiver/models"
 )
 
