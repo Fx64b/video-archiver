@@ -65,11 +65,12 @@ export function UrlInput() {
                     disabled={loading}
                     className={'w-24'}
                 >
-                    {loading ? <LoaderCircle className={'animate-spin'} /> : "Download"}
+                    {loading ? <LoaderCircle className={'animate-spin'}/> : "Download"}
                 </Button>
             </div>
-            <div className="my-2" />
+            <div className="my-2"/>
             {error && <AlertDestructive message={error}/>}
+            <div className="my-2"/>
         </div>
     )
 }
