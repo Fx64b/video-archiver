@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/Fx64b/video-archiver/compare/v1.2.0...v1.3.0) (2024-11-02)
+
+
+### Features
+
+* add run.sh script ([de56f19](https://github.com/Fx64b/video-archiver/commit/de56f1962acc248cb3b3d7af9e3a960148f1348b))
+
 # [1.2.0](https://github.com/Fx64b/video-archiver/compare/v1.1.3...v1.2.0) (2024-11-01)
 
 
