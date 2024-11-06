@@ -1,16 +1,19 @@
 # video-archiver
 A YouTube Video Archiver with Webinterface
 
+> [!CAUTION]
+> This project is under active development and likely to not work when you clone it. Scope is to be added.
+
 ## Run it
 
 ````bash
-docker-compose up --build
+./run.sh
 ````
 
-or
+or with `--clear` to clear the database
 
 ````bash
-docker-compose up --build && docker-compose down
+./run.sh --clear
 ````
 
 **Debug backend container:**
