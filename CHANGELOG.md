@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/Fx64b/video-archiver/compare/v1.4.1...v1.5.0) (2024-11-10)
+
+
+### Features
+
+* **README:** update project description ([159f609](https://github.com/Fx64b/video-archiver/commit/159f609cadc8c1912dddb97a93093d74e877c2da))
+
 ## [1.4.1](https://github.com/Fx64b/video-archiver/compare/v1.4.0...v1.4.1) (2024-11-10)
 
 
