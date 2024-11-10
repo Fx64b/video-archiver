@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/Fx64b/video-archiver/compare/v1.5.0...v1.5.1) (2024-11-10)
+
+
+### Bug Fixes
+
+* **workflows:** prevent action from being executed twice ([aefda55](https://github.com/Fx64b/video-archiver/commit/aefda55e250385c7c97f35cc0357ea8746ba563d))
+
 # [1.5.0](https://github.com/Fx64b/video-archiver/compare/v1.4.1...v1.5.0) (2024-11-10)
 
 
