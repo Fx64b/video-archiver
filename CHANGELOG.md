@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/Fx64b/video-archiver/compare/v1.6.0...v1.7.0) (2024-11-10)
+
+
+### Features
+
+* **README:** add categorization checkbox ([ac6a2b2](https://github.com/Fx64b/video-archiver/commit/ac6a2b2ac40d38d8c1ce6c0e8ffbe28e0228223f))
+
 # [1.6.0](https://github.com/Fx64b/video-archiver/compare/v1.5.1...v1.6.0) (2024-11-10)
 
 
