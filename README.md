@@ -40,6 +40,7 @@ docker-compose exec backend sh
   - [ ] Display downloaded elements
   - [ ] Usage statistics
   - [ ] Full text search
+  - [ ] Categorization
 - [ ] Overview
   - [x] Show current downloads and progress
   - [ ] Show recent downloads
