@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/Fx64b/video-archiver/compare/v1.4.0...v1.4.1) (2024-11-10)
+
+
+### Bug Fixes
+
+* **theme-provider:** type import causing error ([061a180](https://github.com/Fx64b/video-archiver/commit/061a1808c5a78f237dcd682bebec582c7c7c5c9a))
+
 # [1.4.0](https://github.com/Fx64b/video-archiver/compare/v1.3.1...v1.4.0) (2024-11-02)
 
 
