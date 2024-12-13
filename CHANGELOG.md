@@ -1,3 +1,14 @@
+# [1.8.0](https://github.com/Fx64b/video-archiver/compare/v1.7.0...v1.8.0) (2024-12-13)
+
+
+### Features
+
+* **backend/recent:** add endpoint for recent jobs and do refactoring ([cd6f653](https://github.com/Fx64b/video-archiver/commit/cd6f6538db875b858cfe59c979552f3498cfbd08))
+* **backend:** add automatically generated typescript types based on go code ([b537a11](https://github.com/Fx64b/video-archiver/commit/b537a1113e692aa2ba00dd876172f09691308fca))
+* **web/dashboard:** add placeholder pages ([56a080c](https://github.com/Fx64b/video-archiver/commit/56a080c2390301c6ca8b60c88f95dd96a15b1f68))
+* **web/recent:** display recently downloaded jobs ([da435f0](https://github.com/Fx64b/video-archiver/commit/da435f047a7e59f4e91fa2b58d93ce030c237ff5))
+* **web:** minor styling fixes ([b962749](https://github.com/Fx64b/video-archiver/commit/b962749167c4073983f335eb6c530f2432a0af70))
+
 # [1.7.0](https://github.com/Fx64b/video-archiver/compare/v1.6.0...v1.7.0) (2024-11-10)
 
 
