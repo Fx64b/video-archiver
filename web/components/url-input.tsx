@@ -7,12 +7,15 @@ import {Button} from "@/components/ui/button"
 import {Input} from "@/components/ui/input"
 import {AlertDestructive} from "@/components/alert-destructive";
 import {toast} from "sonner";
+import useAppState from "@/store/appState";
 
 export function UrlInput() {
     const [url, setUrl] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
+
     const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL
+    const setIsDownloading = useAppState((state) => state.setIsDownloading);
 
     const isValidYoutubeUrl = (url: string) => {
         const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/
@@ -27,6 +30,7 @@ export function UrlInput() {
         }
 
         setLoading(true)
+        setIsDownloading(true)
         try {
             const response = await fetch(`${SERVER_URL}/download`, {
                 method: "POST",
