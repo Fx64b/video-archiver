@@ -47,6 +47,26 @@ func loadSchema(filePath string) error {
 	return nil
 }
 
+func GetRecentJobs() ([]models.JobData, error) {
+	rows, err := db.Query(`SELECT * FROM jobs ORDER BY updated_at DESC LIMIT 5`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobs []models.JobData
+	for rows.Next() {
+		var job models.JobData
+		err := rows.Scan(&job.ID, &job.JobID, &job.URL, &job.IsPlaylist, &job.STATUS, &job.PROGRESS, &job.CreatedAt, &job.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
+}
+
 func AddJob(jobID string, url string, isPlaylist bool) error {
 	_, err := db.Exec(`INSERT INTO jobs (job_id, url, is_playlist, status, progress) VALUES (?, ?, ?, 'pending', 0)`, jobID, url, isPlaylist)
 	return err

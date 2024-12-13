@@ -7,7 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"time"
-	queue "video-archiver/internal/services/download"
+	"video-archiver/internal/services/download"
 	"video-archiver/models"
 )
 
@@ -16,7 +16,7 @@ type DownloadRequest struct {
 }
 
 type Response struct {
-	Message string `json:"message"`
+	Message interface{} `json:"message"`
 }
 
 func DownloadHandler(w http.ResponseWriter, r *http.Request) {
@@ -34,13 +34,27 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 		TIMESTAMP: time.Now(),
 	}
 
-	queue.DownloadQueue <- job
+	download.DownloadQueue <- job
 
 	resp := Response{Message: "Video added to download queue"}
 	json.NewEncoder(w).Encode(resp)
 }
 
+func RecentHandler(w http.ResponseWriter, r *http.Request) {
+	recentJobs := download.GetRecentJobs()
+
+	if recentJobs == nil {
+		http.Error(w, "No recent downloads found", http.StatusNotFound)
+		return
+	}
+
+	resp := Response{recentJobs}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
 func Handler(r *chi.Mux) {
 	r.Post("/download", DownloadHandler)
-	// TODO: Other routes (e.g., /progress, /categorize, /stream) to be added here
+	r.Get("/recent", RecentHandler)
+	// TODO: Other routes (e.g., /categorize, /stream) to be added here
 }
