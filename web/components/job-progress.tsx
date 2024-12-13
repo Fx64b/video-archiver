@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import React, {useEffect, useState} from 'react';
+import {Card, CardHeader, CardContent, CardTitle} from "@/components/ui/card";
+import {Progress} from "@/components/ui/progress";
 
 interface JobProgress {
     jobID: string;
@@ -34,7 +34,7 @@ const JobProgress: React.FC = () => {
     }, []);
 
     return (
-        <div className="space-y-4 max-w-screen-md">
+        <div className="space-y-4 mb-4 max-w-screen-md">
             {Object.entries(jobs).reverse().map(([jobID, job]) => (
                 <Card key={jobID} className="w-full max-w-screen-sm">
                     <CardHeader>
@@ -44,7 +44,7 @@ const JobProgress: React.FC = () => {
                         <p>
                             Progress: {job.currentItem}/{job.totalItems} ({job.progress}%)
                         </p>
-                        <Progress value={job.progress} className="mt-2" />
+                        <Progress value={job.progress} className="mt-2"/>
                     </CardContent>
                 </Card>
             ))}

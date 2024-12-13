@@ -52,6 +52,8 @@ jobs:
           jq ".version = \"$VERSION\"" web/package.json > tmp.$$.json && mv tmp.$$.json web/package.json
         shell: bash
 
+      # TODO: only update if there are any changes
+
       - name: Commit updated web/package.json
         run: |
           git config --global user.name "GitHub Actions"
