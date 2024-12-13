@@ -59,6 +59,7 @@ export function UrlInput() {
                 <Input
                     type="url"
                     placeholder="YouTube URL"
+                    className={'w-5/6'}
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     disabled={loading}
