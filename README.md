@@ -47,3 +47,7 @@ docker-compose exec backend sh
 - [ ] Streaming
   - [ ] Stream to other devices 
 
+<br>
+
+## Known Issues
+First time startup after clonening can take up to 150 seconds due to docker downloading images and go building the app.
