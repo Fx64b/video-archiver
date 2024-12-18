@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/Fx64b/video-archiver/compare/v1.8.0...v1.8.1) (2024-12-18)
+
+
+### Bug Fixes
+
+* **handlers:** cors issues ([0f90af5](https://github.com/Fx64b/video-archiver/commit/0f90af5d8a09f026bd2ccb34f5433ce431c6969a))
+
 # [1.8.0](https://github.com/Fx64b/video-archiver/compare/v1.7.0...v1.8.0) (2024-12-13)
 
 
