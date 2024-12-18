@@ -1,9 +1,7 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   release:
@@ -52,14 +50,16 @@ jobs:
           jq ".version = \"$VERSION\"" web/package.json > tmp.$$.json && mv tmp.$$.json web/package.json
         shell: bash
 
-      # TODO: only update if there are any changes
-
       - name: Commit updated web/package.json
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add web/package.json
-          git commit -m "chore(release): sync version with root package.json [skip ci]"
-          git push
+          if [[ -n "$(git status --porcelain web/package.json)" ]]; then
+            git config --global user.name "GitHub Actions"
+            git config --global user.email "actions@github.com"
+            git add web/package.json
+            git commit -m "chore(release): sync version with root package.json [skip ci]"
+            git push
+          else
+            echo "No changes to web/package.json, skipping commit"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
