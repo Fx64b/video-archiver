@@ -19,6 +19,23 @@ type Response struct {
 	Message interface{} `json:"message"`
 }
 
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers for all requests
+		w.Header().Set("Access-Control-Allow-Origin", "*") // or your specific domains
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	var req DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -49,11 +66,12 @@ func RecentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{recentJobs}
-
 	json.NewEncoder(w).Encode(resp)
 }
 
 func Handler(r *chi.Mux) {
+	r.Use(corsMiddleware)
+
 	r.Post("/download", DownloadHandler)
 	r.Get("/recent", RecentHandler)
 	// TODO: Other routes (e.g., /categorize, /stream) to be added here
