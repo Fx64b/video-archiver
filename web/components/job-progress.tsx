@@ -13,7 +13,7 @@ const JobProgress: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, JobProgress>>({});
 
     useEffect(() => {
-        const socket = new WebSocket("ws://localhost:8081/ws");
+        const socket = new WebSocket(process.env.NEXT_PUBLIC_SERVER_URL + "/ws");
 
         socket.onmessage = (event) => {
             const data: JobProgress = JSON.parse(event.data);
