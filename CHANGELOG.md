@@ -1,3 +1,11 @@
+## [1.8.2](https://github.com/Fx64b/video-archiver/compare/v1.8.1...v1.8.2) (2025-01-04)
+
+
+### Bug Fixes
+
+* **env:** incorrect env variable for websocket ([5350f95](https://github.com/Fx64b/video-archiver/commit/5350f95926bed132230f57ba24eb3ea8c8476e7a))
+* **env:** no websocket env variable ([fcc9e35](https://github.com/Fx64b/video-archiver/commit/fcc9e35fbaaef07ea5be3495ac7bfdbc682dbc5f))
+
 ## [1.8.1](https://github.com/Fx64b/video-archiver/compare/v1.8.0...v1.8.1) (2024-12-18)
 
 
