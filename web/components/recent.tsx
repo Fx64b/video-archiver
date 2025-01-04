@@ -1,11 +1,11 @@
 import React, {useEffect, useState} from 'react';
 import {Card, CardHeader, CardContent, CardTitle} from "@/components/ui/card";
 import {Progress} from "@/components/ui/progress";
-import {JobData} from "@/types";
+import {Job} from "@/types";
 import useAppState from "@/store/appState";
 
 const Recent: React.FC = () => {
-    const [jobs, setJobs] = useState<JobData[]>();
+    const [jobs, setJobs] = useState<Job[]>();
     const [message, setMessage] = useState("");
 
     useEffect(() => {
@@ -32,15 +32,15 @@ const Recent: React.FC = () => {
     return (
         <div className="space-y-4 max-w-screen-md">
             {jobs && !message && jobs.map((job) => (
-                <Card key={job.JobID} className="w-full max-w-screen-sm">
+                <Card key={job.id} className="w-full max-w-screen-sm">
                     <CardHeader>
-                        <CardTitle>{job.URL}</CardTitle>
+                        <CardTitle>{job.url}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <p>
-                            Progress: ({job.PROGRESS}%)
+                            Progress: ({job.progress}%)
                         </p>
-                        <Progress value={job.PROGRESS} className="mt-2"/>
+                        <Progress value={job.progress} className="mt-2"/>
                     </CardContent>
                 </Card>
             ))}

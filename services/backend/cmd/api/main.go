@@ -7,21 +7,19 @@ import (
 	"net/http"
 	"os"
 	"video-archiver/internal/api/handlers"
-	queue "video-archiver/internal/services/download"
-	"video-archiver/internal/storage"
-	ytdlp "video-archiver/internal/utils"
+	"video-archiver/internal/repositories/sqlite"
+	"video-archiver/internal/services/download"
 )
 
 func main() {
 	log.SetReportCaller(true)
 
-	if err := ytdlp.CheckAndInstall(); err != nil {
-		log.Fatalf("yt-dlp setup failed: %v", err)
-		os.Exit(1) // Terminate if yt-dlp setup fails
+	if os.Getenv("DEBUG") == "true" {
+		log.SetLevel(log.DebugLevel)
+		log.Debug("Debug logging enabled")
+	} else {
+		log.SetLevel(log.InfoLevel)
 	}
-
-	var r *chi.Mux = chi.NewRouter()
-	handlers.Handler(r)
 
 	fmt.Printf(`
 __     _____ ____  _____ ___                       
@@ -42,28 +40,44 @@ __     _____ ____  _____ ___
 		dbPath = "./data/db/video-archiver.db"
 	}
 
-	if err := storage.InitDB(dbPath); err != nil {
+	db, err := sqlite.NewDB(dbPath)
+	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
-		os.Exit(1) // Terminate if db intialization fails
 	}
+	defer db.Close()
 
-	defer func() {
-		err := storage.CloseDB()
-		if err != nil {
-			log.Errorf("Failed to close database: %v", err)
+	jobRepo := sqlite.NewJobRepository(db)
+
+	fmt.Println("Starting Download Service...")
+	downloadService := download.NewService(&download.Config{
+		JobRepository: jobRepo,
+		DownloadPath:  os.Getenv("DOWNLOAD_PATH"),
+		Concurrency:   8,
+		MaxQuality:    1080,
+	})
+
+	if err := downloadService.Start(); err != nil {
+		log.Fatalf("Failed to start download service: %v", err)
+	}
+	defer downloadService.Stop()
+
+	handler := handlers.NewHandler(downloadService)
+
+	apiRouter := chi.NewRouter()
+	handler.RegisterRoutes(apiRouter)
+
+	wsRouter := chi.NewRouter()
+	handler.RegisterWSRoutes(wsRouter)
+
+	go func() {
+		fmt.Println("Starting WebSocket server on :8081...")
+		if err := http.ListenAndServe(":8081", wsRouter); err != nil {
+			log.Fatal(err)
 		}
 	}()
 
-	fmt.Println("Starting Queue worker...")
-	go queue.StartQueueWorker()
-
-	fmt.Println("Starting WebSocket service...")
-	go queue.StartWebSocketServer()
-
-	fmt.Println("Starting GO API service...")
-
-	err := http.ListenAndServe("0.0.0.0:8080", r)
-	if err != nil {
-		log.Error(err)
+	fmt.Println("Starting API server on :8080...")
+	if err := http.ListenAndServe(":8080", apiRouter); err != nil {
+		log.Fatal(err)
 	}
 }
