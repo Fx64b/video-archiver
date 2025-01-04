@@ -5,6 +5,7 @@
 
 # build
 *.exe
+/services/backend/main
 
 # local env files
 .env*.local
@@ -27,5 +28,5 @@ app/next-env.d.ts
 *.avi
 *.wmv
 *.db
-
+repomix-output.txt
 data/downloads/*

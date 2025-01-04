@@ -19,12 +19,6 @@ RUN go mod download
 
 COPY . .
 
-# Generate TypeScript files from Go structs
-RUN go install github.com/gzuidhof/tygo@latest && \
-    tygo generate && \
-    mkdir -p /app/web/types && \
-    mv generated/types/index.ts /app/web/types/index.ts
-
 RUN go build -o main ./cmd/api
 
 EXPOSE 8080

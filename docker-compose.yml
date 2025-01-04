@@ -12,6 +12,7 @@ services:
       - PORT=8080
       - DOWNLOAD_PATH=/app/data/downloads
       - DATABASE_PATH=/app/data/db/video-archiver.db
+      - DEBUG=${DEBUG:-false}
 
   web:
     build:

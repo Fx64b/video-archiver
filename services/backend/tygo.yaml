@@ -1,5 +1,5 @@
 packages:
-  - path: "video-archiver/models"
+  - path: "video-archiver/internal/domain"
     output_path: "./generated/types"
     type_mappings:
       time.Time: "string /* RFC3339 */"
