@@ -2,87 +2,106 @@ package download
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 type ProgressUpdate struct {
-	JobID       string  `json:"jobID"`
-	CurrentItem int     `json:"currentItem"`
-	TotalItems  int     `json:"totalItems"`
-	Progress    float64 `json:"progress"`
+	JobID                string  `json:"jobID"`
+	jobType              string  `json:"jobType"`
+	CurrentItem          int     `json:"currentItem"`
+	TotalItems           int     `json:"totalItems"`
+	Progress             float64 `json:"progress"`
+	CurrentVideoProgress float64 `json:"currentVideoProgress"`
 }
 
 func (s *Service) trackProgress(pipe io.Reader, jobID string) {
-	scanner := bufio.NewScanner(pipe)
-
-	const maxCapacity = 1024 * 1024 // 1MB buffer due to some problems with yt-dlp logs
-	buf := make([]byte, maxCapacity)
-	scanner.Buffer(buf, maxCapacity)
+	reader := bufio.NewReader(pipe)
+	var line bytes.Buffer
 
 	itemRegex := regexp.MustCompile(`\[download\] Downloading item (\d+) of (\d+)`)
-	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)%`)
+	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of\s+\d+\.?\d*\w+`)
 
 	var totalItems, currentItem int
-	var progress float64
+	var overallProgress float64
+	isPlaylist := false
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		log.Debug(line)
+	for {
+		char, err := reader.ReadByte()
+		if err != nil {
+			if err != io.EOF {
+				log.WithError(err).Error("Error reading progress output")
+			}
+			break
+		}
 
-		if match := itemRegex.FindStringSubmatch(line); match != nil {
-			currentItem = s.parseToInt(match[1])
-			totalItems = s.parseToInt(match[2])
+		if char == '\r' || char == '\n' {
+			currentLine := line.String()
+			line.Reset()
 
-			progress = (float64(currentItem-1) / float64(totalItems)) * 100
-
-			update := ProgressUpdate{
-				JobID:       jobID,
-				CurrentItem: currentItem,
-				TotalItems:  totalItems,
-				Progress:    progress,
+			log.Debug(currentLine)
+			if len(strings.TrimSpace(currentLine)) == 0 {
+				continue
 			}
 
-			if err := s.updateJobProgress(jobID, progress); err != nil {
-				log.WithError(err).Error("Failed to update job progress")
-			}
-
-			// Broadcast progress via WebSocket hub
-			s.hub.broadcast <- update
-		} else if match := progressRegex.FindStringSubmatch(line); match != nil {
-			if currentProgress, err := strconv.ParseFloat(match[1], 64); err == nil {
-				if totalItems > 0 {
-					// If we're downloading multiple items, add the progress for the current item
-					itemProgress := currentProgress / float64(totalItems)
-					baseProgress := (float64(currentItem-1) / float64(totalItems)) * 100
-					progress = baseProgress + itemProgress
-				} else {
-					progress = currentProgress
-				}
+			if match := itemRegex.FindStringSubmatch(currentLine); match != nil {
+				isPlaylist = true
+				currentItem = s.parseToInt(match[1])
+				totalItems = s.parseToInt(match[2])
+				overallProgress = (float64(currentItem-1) / float64(totalItems)) * 100
 
 				update := ProgressUpdate{
-					JobID:       jobID,
-					CurrentItem: currentItem,
-					TotalItems:  totalItems,
-					Progress:    progress,
+					JobID:                jobID,
+					CurrentItem:          currentItem,
+					TotalItems:           totalItems,
+					Progress:             overallProgress,
+					CurrentVideoProgress: 0, // Reset for new video
 				}
 
-				// Update job in database
-				if err := s.updateJobProgress(jobID, progress); err != nil {
+				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
 					log.WithError(err).Error("Failed to update job progress")
 				}
 
-				// Broadcast progress via WebSocket hub
+				s.hub.broadcast <- update
+				continue
+			}
+
+			if match := progressRegex.FindStringSubmatch(currentLine); match != nil {
+				currentProgress, err := strconv.ParseFloat(match[1], 64)
+				if err != nil {
+					continue
+				}
+
+				if !isPlaylist {
+					currentItem = 1
+					totalItems = 1
+					overallProgress = currentProgress
+				} else {
+					overallProgress = (float64(currentItem) / float64(totalItems)) * 100
+				}
+
+				update := ProgressUpdate{
+					JobID:                jobID,
+					CurrentItem:          currentItem,
+					TotalItems:           totalItems,
+					Progress:             overallProgress,
+					CurrentVideoProgress: currentProgress,
+				}
+
+				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+					log.WithError(err).Error("Failed to update job progress")
+				}
+
 				s.hub.broadcast <- update
 			}
+		} else {
+			line.WriteByte(char)
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.WithError(err).Error("Error reading progress output")
 	}
 }
 
