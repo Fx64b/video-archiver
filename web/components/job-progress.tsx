@@ -7,6 +7,7 @@ interface JobProgress {
     currentItem: number;
     totalItems: number;
     progress: number;
+    currentVideoProgress: number;
 }
 
 const JobProgress: React.FC = () => {
@@ -42,7 +43,7 @@ const JobProgress: React.FC = () => {
                     </CardHeader>
                     <CardContent>
                         <p>
-                            Progress: {job.currentItem}/{job.totalItems} ({job.progress}%)
+                            Progress: {job.currentItem}/{job.totalItems} ({job.currentVideoProgress}%)
                         </p>
                         <Progress value={job.progress} className="mt-2"/>
                     </CardContent>

@@ -16,7 +16,9 @@ const Recent: React.FC = () => {
             }
             return res.json()
         }).then((data) => {
-            setJobs(data.message);
+            if (data) {
+                setJobs(data.message);
+            }
         });
 
         const unsubscribe = useAppState.subscribe(
