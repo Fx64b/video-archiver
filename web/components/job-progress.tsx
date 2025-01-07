@@ -4,6 +4,7 @@ import {Progress} from "@/components/ui/progress";
 
 interface JobProgress {
     jobID: string;
+    jobType: string;
     currentItem: number;
     totalItems: number;
     progress: number;
