@@ -13,7 +13,7 @@ import (
 
 type ProgressUpdate struct {
 	JobID                string  `json:"jobID"`
-	jobType              string  `json:"jobType"`
+	JobType              string  `json:"jobType"`
 	CurrentItem          int     `json:"currentItem"`
 	TotalItems           int     `json:"totalItems"`
 	Progress             float64 `json:"progress"`
@@ -26,10 +26,12 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 
 	itemRegex := regexp.MustCompile(`\[download\] Downloading item (\d+) of (\d+)`)
 	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of\s+\d+\.?\d*\w+`)
+	destinationRegex := regexp.MustCompile(`\[download\] Destination: .+\.(f\d+)\.(mp4|webm)`)
 
 	var totalItems, currentItem int
 	var overallProgress float64
 	isPlaylist := false
+	jobType := "video"
 
 	for {
 		char, err := reader.ReadByte()
@@ -49,6 +51,18 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 				continue
 			}
 
+			// Check for destination to determine if video or audio
+			if match := destinationRegex.FindStringSubmatch(currentLine); match != nil {
+				format := match[1]
+				// Typically f251 is audio, higher numbers are video
+				if format == "f251" {
+					jobType = "audio"
+				} else {
+					jobType = "video"
+				}
+				continue
+			}
+
 			if match := itemRegex.FindStringSubmatch(currentLine); match != nil {
 				isPlaylist = true
 				currentItem = s.parseToInt(match[1])
@@ -57,10 +71,11 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 
 				update := ProgressUpdate{
 					JobID:                jobID,
+					JobType:              jobType,
 					CurrentItem:          currentItem,
 					TotalItems:           totalItems,
 					Progress:             overallProgress,
-					CurrentVideoProgress: 0, // Reset for new video
+					CurrentVideoProgress: 0,
 				}
 
 				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
@@ -87,6 +102,7 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 
 				update := ProgressUpdate{
 					JobID:                jobID,
+					JobType:              jobType,
 					CurrentItem:          currentItem,
 					TotalItems:           totalItems,
 					Progress:             overallProgress,
