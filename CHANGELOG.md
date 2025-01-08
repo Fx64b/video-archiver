@@ -1,3 +1,16 @@
+# [1.9.0](https://github.com/Fx64b/video-archiver/compare/v1.8.2...v1.9.0) (2025-01-08)
+
+
+### Bug Fixes
+
+* **jobs:** minor fixes ([1bbce34](https://github.com/Fx64b/video-archiver/commit/1bbce34b7c76d2b25f417b368927fca1853c07b9))
+* **progress:** tracking of playlist/channels and videos not working as expected ([353d726](https://github.com/Fx64b/video-archiver/commit/353d72612cab82ba38ae73bf6e01e47fabb5f98a))
+
+
+### Features
+
+* **progress:** add jobType ([8ccac29](https://github.com/Fx64b/video-archiver/commit/8ccac293a08f750bb0744f2951bcc6cb3cd7e914))
+
 ## [1.8.2](https://github.com/Fx64b/video-archiver/compare/v1.8.1...v1.8.2) (2025-01-04)
 
 
