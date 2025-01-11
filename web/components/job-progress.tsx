@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {Card, CardHeader, CardContent, CardTitle} from "@/components/ui/card";
 import {Progress} from "@/components/ui/progress";
-import {JobTypeVideo} from "@/types";
+import {JobTypeMetadata, JobTypeVideo} from "@/types";
 
 interface JobProgress {
     jobID: string;
@@ -47,11 +47,11 @@ const JobProgress: React.FC = () => {
                         <div className="flex items-center justify-between">
 
                             <p>
-                                Progress: {job.currentItem}/{job.totalItems}
+                                {job.totalItems > 1 && <>Progress: {job.currentItem}/{job.totalItems}</>}
 
                             </p>
                             <p>
-                                {job.progress === 100 && job.jobType !== JobTypeVideo  ? (
+                                {job.progress === 100 && job.jobType !== JobTypeVideo && job.jobType !== JobTypeMetadata ? (
                                     <span>Download Finished</span>
                                     ) :
                                     (
