@@ -1,9 +1,11 @@
 import React, {useEffect, useState} from 'react';
 import {Card, CardHeader, CardContent, CardTitle} from "@/components/ui/card";
 import {Progress} from "@/components/ui/progress";
+import {JobTypeMetadata, JobTypeVideo} from "@/types";
 
 interface JobProgress {
     jobID: string;
+    jobType: string;
     currentItem: number;
     totalItems: number;
     progress: number;
@@ -42,10 +44,27 @@ const JobProgress: React.FC = () => {
                         <CardTitle>Job ID: {jobID}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p>
-                            Progress: {job.currentItem}/{job.totalItems} ({job.currentVideoProgress}%)
-                        </p>
-                        <Progress value={job.progress} className="mt-2"/>
+                        <div className="flex items-center justify-between">
+
+                            <p>
+                                {job.totalItems > 1 && <>Progress: {job.currentItem}/{job.totalItems}</>}
+
+                            </p>
+                            <p>
+                                {job.progress === 100 && job.jobType !== JobTypeVideo && job.jobType !== JobTypeMetadata ? (
+                                    <span>Download Finished</span>
+                                    ) :
+                                    (
+                                        job.progress > 100 ? (
+                                            <span>Video already downloaded</span>
+                                            ) : (
+                                            <span>Downloading {job.jobType} ({job.currentVideoProgress}%)</span>
+                                        )
+                                    )
+                                }
+                            </p>
+                        </div>
+                        <Progress value={job.progress > 100 ? 100 : job.progress} className="mt-2"/>
                     </CardContent>
                 </Card>
             ))}

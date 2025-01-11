@@ -40,7 +40,7 @@ if [ -n "$BUILD" ]; then
    echo "Generating TypeScript types..."
    cd services/backend
    tygo generate
-   mkdir -p ../web/types
+   mkdir -p ../../web/types
    cp generated/types/index.ts ../../web/types/index.ts
    cd ../..
    docker-compose up --build --remove-orphans

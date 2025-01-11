@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
+	"video-archiver/internal/domain"
 )
 
 var upgrader = websocket.Upgrader{
@@ -13,7 +14,7 @@ var upgrader = websocket.Upgrader{
 
 type WebSocketHub struct {
 	clients    map[*websocket.Conn]bool
-	broadcast  chan ProgressUpdate
+	broadcast  chan domain.ProgressUpdate
 	register   chan *websocket.Conn
 	unregister chan *websocket.Conn
 	mu         sync.RWMutex
@@ -22,7 +23,7 @@ type WebSocketHub struct {
 func NewWebSocketHub() *WebSocketHub {
 	return &WebSocketHub{
 		clients:    make(map[*websocket.Conn]bool),
-		broadcast:  make(chan ProgressUpdate),
+		broadcast:  make(chan domain.ProgressUpdate),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
 	}

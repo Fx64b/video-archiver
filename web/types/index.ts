@@ -16,4 +16,17 @@ export interface Job {
   created_at: string /* RFC3339 */;
   updated_at: string /* RFC3339 */;
 }
+
 export type JobRepository = any;
+export type JobType = string;
+export const JobTypeVideo: JobType = "video";
+export const JobTypeAudio: JobType = "audio";
+export const JobTypeMetadata: JobType = "metadata";
+export interface ProgressUpdate {
+  jobID: string;
+  jobType: string;
+  currentItem: number /* int */;
+  totalItems: number /* int */;
+  progress: number /* float64 */;
+  currentVideoProgress: number /* float64 */;
+}

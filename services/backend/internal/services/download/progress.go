@@ -6,32 +6,38 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
+	"video-archiver/internal/domain"
 )
-
-type ProgressUpdate struct {
-	JobID                string  `json:"jobID"`
-	JobType              string  `json:"jobType"`
-	CurrentItem          int     `json:"currentItem"`
-	TotalItems           int     `json:"totalItems"`
-	Progress             float64 `json:"progress"`
-	CurrentVideoProgress float64 `json:"currentVideoProgress"`
-}
 
 func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 	reader := bufio.NewReader(pipe)
 	var line bytes.Buffer
 
 	itemRegex := regexp.MustCompile(`\[download\] Downloading item (\d+) of (\d+)`)
-	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of\s+\d+\.?\d*\w+`)
+	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of.* \s+\d+\.?\d*\w+`)
 	destinationRegex := regexp.MustCompile(`\[download\] Destination: .+\.(f\d+)\.(mp4|webm)`)
+	metadataRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON`)
+	alreadyDownloadedRegex := regexp.MustCompile(`\[download\].*has already been downloaded`)
+	tabRegex := regexp.MustCompile(`\[youtube(?::tab)?\]`)
+	playlistStartRegex := regexp.MustCompile(`\[download\] Downloading playlist:`)
+	playlistEndRegex := regexp.MustCompile(`\[download\] Finished downloading playlist:`)
+	videoCompleteRegex := regexp.MustCompile(`\[download\] .*: .* has already been recorded in archive`)
+	mergerCompleteRegex := regexp.MustCompile(`\[Merger\] Merging formats into`)
 
 	var totalItems, currentItem int
 	var overallProgress float64
+	var lastVideoProgress float64
+
+	// Flags
 	isPlaylist := false
-	jobType := "video"
+	jobType := string(domain.JobTypeVideo)
+	isProcessingAudio := false
+	currentVideoComplete := false
+	mergerComplete := false
 
 	for {
 		char, err := reader.ReadByte()
@@ -51,25 +57,140 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 				continue
 			}
 
-			// Check for destination to determine if video or audio
+			if mergerCompleteRegex.MatchString(currentLine) {
+				mergerComplete = true
+				if !isPlaylist {
+					overallProgress = 100
+					update := domain.ProgressUpdate{
+						JobID:                jobID,
+						JobType:              jobType,
+						CurrentItem:          currentItem,
+						TotalItems:           totalItems,
+						Progress:             overallProgress,
+						CurrentVideoProgress: 100,
+					}
+					s.hub.broadcast <- update
+					if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+						log.WithError(err).Error("Failed to update job progress")
+					}
+				}
+				continue
+			}
+
+			// Handle video completion detection
+			if videoCompleteRegex.MatchString(currentLine) {
+				if isPlaylist && !currentVideoComplete {
+					currentItem++
+					currentVideoComplete = true
+					overallProgress = (float64(currentItem) / float64(totalItems)) * 100
+
+					update := domain.ProgressUpdate{
+						JobID:                jobID,
+						JobType:              jobType,
+						CurrentItem:          currentItem,
+						TotalItems:           totalItems,
+						Progress:             overallProgress,
+						CurrentVideoProgress: 100,
+					}
+					s.hub.broadcast <- update
+					if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+						log.WithError(err).Error("Failed to update job progress")
+					}
+				}
+				continue
+			}
+
+			if playlistStartRegex.MatchString(currentLine) {
+				isPlaylist = true
+				currentVideoComplete = false
+				continue
+			}
+
+			if playlistEndRegex.MatchString(currentLine) {
+				overallProgress = 100
+				update := domain.ProgressUpdate{
+					JobID:                jobID,
+					JobType:              jobType,
+					CurrentItem:          totalItems,
+					TotalItems:           totalItems,
+					Progress:             overallProgress,
+					CurrentVideoProgress: 100,
+				}
+				s.hub.broadcast <- update
+				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+					log.WithError(err).Error("Failed to update job progress")
+				}
+				continue
+			}
+
+			if match := alreadyDownloadedRegex.FindStringSubmatch(currentLine); match != nil {
+				if !isProcessingAudio {
+					if isPlaylist {
+						currentItem++
+						currentVideoComplete = true
+						overallProgress = (float64(currentItem) / float64(totalItems)) * 100
+					} else {
+						overallProgress = 100
+					}
+					lastVideoProgress = 100
+				}
+
+				update := domain.ProgressUpdate{
+					JobID:                jobID,
+					JobType:              jobType,
+					CurrentItem:          currentItem,
+					TotalItems:           totalItems,
+					Progress:             overallProgress,
+					CurrentVideoProgress: 101,
+				}
+
+				if !isProcessingAudio {
+					if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+						log.WithError(err).Error("Failed to update job progress")
+					}
+				}
+
+				s.hub.broadcast <- update
+				continue
+			}
+
+			if metadataRegex.MatchString(currentLine) || tabRegex.MatchString(currentLine) {
+				jobType = string(domain.JobTypeMetadata)
+
+				lastVideoProgress = 0
+
+				update := domain.ProgressUpdate{
+					JobID:                jobID,
+					JobType:              jobType,
+					CurrentItem:          currentItem,
+					TotalItems:           totalItems,
+					Progress:             overallProgress,
+					CurrentVideoProgress: lastVideoProgress,
+				}
+				s.hub.broadcast <- update
+				continue
+			}
+
 			if match := destinationRegex.FindStringSubmatch(currentLine); match != nil {
 				format := match[1]
-				// Typically f251 is audio, higher numbers are video
-				if format == "f251" {
-					jobType = "audio"
-				} else {
-					jobType = "video"
+				isProcessingAudio = format == "f251"
+				currentVideoComplete = false
+				jobType = string(domain.JobTypeAudio)
+				if !isProcessingAudio {
+					jobType = string(domain.JobTypeVideo)
 				}
 				continue
 			}
 
 			if match := itemRegex.FindStringSubmatch(currentLine); match != nil {
-				isPlaylist = true
-				currentItem = s.parseToInt(match[1])
-				totalItems = s.parseToInt(match[2])
-				overallProgress = (float64(currentItem-1) / float64(totalItems)) * 100
+				if !isProcessingAudio && !currentVideoComplete {
+					currentItem = s.parseToInt(match[1])
+					totalItems = s.parseToInt(match[2])
+					overallProgress = ((float64(currentItem) - 1) / float64(totalItems)) * 100
+					lastVideoProgress = 0
+				}
 
-				update := ProgressUpdate{
+				update := domain.ProgressUpdate{
 					JobID:                jobID,
 					JobType:              jobType,
 					CurrentItem:          currentItem,
@@ -78,8 +199,10 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					CurrentVideoProgress: 0,
 				}
 
-				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
-					log.WithError(err).Error("Failed to update job progress")
+				if !isProcessingAudio {
+					if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+						log.WithError(err).Error("Failed to update job progress")
+					}
 				}
 
 				s.hub.broadcast <- update
@@ -92,15 +215,29 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					continue
 				}
 
-				if !isPlaylist {
-					currentItem = 1
-					totalItems = 1
-					overallProgress = currentProgress
-				} else {
-					overallProgress = (float64(currentItem) / float64(totalItems)) * 100
+				if !isProcessingAudio && !currentVideoComplete {
+					if !isPlaylist {
+						currentItem = 1
+						totalItems = 1
+						// For single videos, cap progress at 99% until merger completes
+						if !mergerComplete {
+							overallProgress = math.Min(currentProgress, 99)
+						}
+					} else {
+						overallProgress = ((float64(currentItem) - 1) / float64(totalItems)) * 100
+						overallProgress += currentProgress / float64(totalItems)
+					}
+					lastVideoProgress = currentProgress
+
+					if currentProgress >= 100 {
+						currentVideoComplete = true
+						if isPlaylist {
+							currentItem++
+						}
+					}
 				}
 
-				update := ProgressUpdate{
+				update := domain.ProgressUpdate{
 					JobID:                jobID,
 					JobType:              jobType,
 					CurrentItem:          currentItem,
@@ -109,8 +246,10 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					CurrentVideoProgress: currentProgress,
 				}
 
-				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
-					log.WithError(err).Error("Failed to update job progress")
+				if !isProcessingAudio {
+					if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+						log.WithError(err).Error("Failed to update job progress")
+					}
 				}
 
 				s.hub.broadcast <- update
