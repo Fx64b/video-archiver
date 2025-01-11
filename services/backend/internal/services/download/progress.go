@@ -9,29 +9,24 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"video-archiver/internal/domain"
 )
-
-type ProgressUpdate struct {
-	JobID                string  `json:"jobID"`
-	JobType              string  `json:"jobType"`
-	CurrentItem          int     `json:"currentItem"`
-	TotalItems           int     `json:"totalItems"`
-	Progress             float64 `json:"progress"`
-	CurrentVideoProgress float64 `json:"currentVideoProgress"`
-}
 
 func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 	reader := bufio.NewReader(pipe)
 	var line bytes.Buffer
 
 	itemRegex := regexp.MustCompile(`\[download\] Downloading item (\d+) of (\d+)`)
-	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of\s+\d+\.?\d*\w+`)
+	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of.* \s+\d+\.?\d*\w+`)
 	destinationRegex := regexp.MustCompile(`\[download\] Destination: .+\.(f\d+)\.(mp4|webm)`)
+	metadataRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON`)
+	alreadyDownloadedRegex := regexp.MustCompile(`\[download\].*has already been downloaded`)
+	tabRegex := regexp.MustCompile(`\[youtube(?::tab)?\]`)
 
 	var totalItems, currentItem int
 	var overallProgress float64
 	isPlaylist := false
-	jobType := "video"
+	jobType := string(domain.JobTypeVideo)
 
 	for {
 		char, err := reader.ReadByte()
@@ -51,14 +46,27 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 				continue
 			}
 
-			// Check for destination to determine if video or audio
+			if metadataRegex.MatchString(currentLine) || tabRegex.MatchString(currentLine) {
+				jobType = string(domain.JobTypeMetadata)
+				update := domain.ProgressUpdate{
+					JobID:                jobID,
+					JobType:              jobType,
+					CurrentItem:          currentItem,
+					TotalItems:           totalItems,
+					Progress:             overallProgress,
+					CurrentVideoProgress: 0,
+				}
+				s.hub.broadcast <- update
+				continue
+			}
+
 			if match := destinationRegex.FindStringSubmatch(currentLine); match != nil {
 				format := match[1]
 				// Typically f251 is audio, higher numbers are video
 				if format == "f251" {
-					jobType = "audio"
+					jobType = string(domain.JobTypeAudio)
 				} else {
-					jobType = "video"
+					jobType = string(domain.JobTypeVideo)
 				}
 				continue
 			}
@@ -67,15 +75,38 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 				isPlaylist = true
 				currentItem = s.parseToInt(match[1])
 				totalItems = s.parseToInt(match[2])
-				overallProgress = (float64(currentItem-1) / float64(totalItems)) * 100
 
-				update := ProgressUpdate{
+				if jobType != string(domain.JobTypeAudio) {
+					overallProgress = (float64(currentItem-1) / float64(totalItems)) * 100
+				}
+
+				update := domain.ProgressUpdate{
 					JobID:                jobID,
 					JobType:              jobType,
 					CurrentItem:          currentItem,
 					TotalItems:           totalItems,
 					Progress:             overallProgress,
 					CurrentVideoProgress: 0,
+				}
+
+				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
+					log.WithError(err).Error("Failed to update job progress")
+				}
+
+				s.hub.broadcast <- update
+				continue
+			}
+
+			// Check if job has already been downloaded
+			if match := alreadyDownloadedRegex.FindStringSubmatch(currentLine); match != nil {
+				overallProgress = 100
+				update := domain.ProgressUpdate{
+					JobID:                jobID,
+					JobType:              jobType,
+					CurrentItem:          0,
+					TotalItems:           0,
+					Progress:             101,
+					CurrentVideoProgress: 100,
 				}
 
 				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
@@ -97,10 +128,11 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					totalItems = 1
 					overallProgress = currentProgress
 				} else {
-					overallProgress = (float64(currentItem) / float64(totalItems)) * 100
+					overallProgress = (float64(currentItem-1) / float64(totalItems)) * 100
+					overallProgress += currentProgress / float64(totalItems)
 				}
 
-				update := ProgressUpdate{
+				update := domain.ProgressUpdate{
 					JobID:                jobID,
 					JobType:              jobType,
 					CurrentItem:          currentItem,
@@ -117,6 +149,10 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 			}
 		} else {
 			line.WriteByte(char)
+		}
+
+		if totalItems == currentItem {
+			overallProgress = 100
 		}
 	}
 }
