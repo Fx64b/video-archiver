@@ -1,3 +1,16 @@
+# [1.10.0](https://github.com/Fx64b/video-archiver/compare/v1.9.0...v1.10.0) (2025-01-11)
+
+
+### Bug Fixes
+
+* minor improvements ([724109f](https://github.com/Fx64b/video-archiver/commit/724109f31bc09b093b984cb9d674c69e1a3b0a59))
+
+
+### Features
+
+* **progress:** metadata download detection general improvements, performance and bug fixes ([90c71ab](https://github.com/Fx64b/video-archiver/commit/90c71ab79657dd1bf3f0273ee3e081730a9da2e5))
+* **progress:** several progress tracking features ([5b573ea](https://github.com/Fx64b/video-archiver/commit/5b573ea6b5181c92c6c5687c7a87f039d406bc0b))
+
 # [1.9.0](https://github.com/Fx64b/video-archiver/compare/v1.8.2...v1.9.0) (2025-01-08)
 
 
