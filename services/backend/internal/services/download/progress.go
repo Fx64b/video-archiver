@@ -38,6 +38,7 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 	isProcessingAudio := false
 	currentVideoComplete := false
 	mergerComplete := false
+	alreadyDownloaded := false
 
 	for {
 		char, err := reader.ReadByte()
@@ -106,6 +107,12 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 				continue
 			}
 
+			currentVideoProgress := 100.0
+
+			if alreadyDownloaded {
+				currentVideoProgress = 101
+			}
+
 			if playlistEndRegex.MatchString(currentLine) {
 				overallProgress = 100
 				update := domain.ProgressUpdate{
@@ -114,7 +121,7 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					CurrentItem:          totalItems,
 					TotalItems:           totalItems,
 					Progress:             overallProgress,
-					CurrentVideoProgress: 100,
+					CurrentVideoProgress: currentVideoProgress,
 				}
 				s.hub.broadcast <- update
 				if err := s.updateJobProgress(jobID, overallProgress); err != nil {
@@ -134,6 +141,8 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					}
 					lastVideoProgress = 100
 				}
+
+				alreadyDownloaded = true
 
 				update := domain.ProgressUpdate{
 					JobID:                jobID,
@@ -157,7 +166,11 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 			if metadataRegex.MatchString(currentLine) || tabRegex.MatchString(currentLine) {
 				jobType = string(domain.JobTypeMetadata)
 
-				lastVideoProgress = 0
+				if alreadyDownloaded {
+					lastVideoProgress = 101
+				} else {
+					lastVideoProgress = 0
+				}
 
 				update := domain.ProgressUpdate{
 					JobID:                jobID,

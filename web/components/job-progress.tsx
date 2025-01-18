@@ -55,7 +55,7 @@ const JobProgress: React.FC = () => {
                                     <span>Download Finished</span>
                                     ) :
                                     (
-                                        job.progress > 100 ? (
+                                        job.currentVideoProgress > 100 ? (
                                             <span>Video already downloaded</span>
                                             ) : (
                                             <span>Downloading {job.jobType} ({job.currentVideoProgress}%)</span>
