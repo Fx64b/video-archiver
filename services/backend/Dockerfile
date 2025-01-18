@@ -1,27 +1,37 @@
-# Use an official Golang image as a base
-FROM golang:1.23-alpine
+FROM golang:1.23-alpine AS builder
 
-# Install yt-dlp dependencies
-ENV CGO_ENABLED=1
-RUN apk add --no-cache gcc musl-dev curl ffmpeg python3
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev
 
-# Download yt-dlp and make it executable
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
-    chmod +x /usr/local/bin/yt-dlp
-
-WORKDIR /app
-
-COPY go.mod ./
-COPY go.sum ./
-
-
-RUN go mod download
-
+WORKDIR /build
 COPY . .
-
 RUN go build -o main ./cmd/api
 
-EXPOSE 8080
-EXPOSE 8081
+FROM alpine:latest
 
+# Install runtime dependencies
+RUN apk add --no-cache ffmpeg python3 curl \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod +x /usr/local/bin/yt-dlp
+
+# Create non-root user and necessary directories
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /build/main .
+COPY --from=builder /build/db/schema.sql ./db/
+
+# Create and set permissions for data and cache directories
+RUN mkdir -p /app/data/downloads /app/data/db /app/cache \
+    && chown -R appuser:appgroup /app \
+    && chmod -R 755 /app/cache
+
+# Switch to non-root user
+USER appuser
+
+# Set environment variables for yt-dlp cache
+ENV XDG_CACHE_HOME=/app/cache
+
+EXPOSE 8080 8081
 CMD ["./main"]
