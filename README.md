@@ -72,6 +72,16 @@ Common use cases:
   - Real-time progress tracking
   - Download management interface
 
+## Know Issues
+### 403 Error when Downloading
+After a certain number of downloads, YouTube may block requests that are not made through the official site or app.
+This is a known issue: https://github.com/yt-dlp/yt-dlp/issues/11868
+Temporary solutions:
+- Use a VPN and switch servers when the limit is reached
+- Wait a few hours before attempting downloads again
+- Use a different IP address if possible
+
+
 ## Development
 
 The project uses:
