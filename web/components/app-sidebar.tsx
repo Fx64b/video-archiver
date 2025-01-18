@@ -1,75 +1,87 @@
 'use client'
 
-import {Home, MonitorPlay, Settings, GitBranch, ListVideo, Users, Wrench, ChartArea} from "lucide-react"
+import {
+    ChartArea,
+    GitBranch,
+    Home,
+    ListVideo,
+    MonitorPlay,
+    Settings,
+    Users,
+    Wrench,
+} from 'lucide-react'
+
+import { useEffect, useState } from 'react'
+
+import Link from 'next/link'
 
 import {
     Sidebar,
-    SidebarContent, SidebarFooter,
+    SidebarContent,
+    SidebarFooter,
     SidebarGroup,
     SidebarGroupContent,
-    SidebarGroupLabel, SidebarHeader,
+    SidebarGroupLabel,
+    SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import Link from "next/link";
-import {useEffect, useState} from "react";
+} from '@/components/ui/sidebar'
 
 const items = [
     {
-        title: "Overview",
-        url: "/",
+        title: 'Overview',
+        url: '/',
         icon: Home,
     },
     {
-        title: "Dashboard",
-        url: "/dashboard",
+        title: 'Dashboard',
+        url: '/dashboard',
         icon: ChartArea,
     },
     {
-        title: "Videos",
-        url: "/videos",
+        title: 'Videos',
+        url: '/videos',
         icon: MonitorPlay,
     },
     {
-        title: "Playlists",
-        url: "/playlists",
+        title: 'Playlists',
+        url: '/playlists',
         icon: ListVideo,
     },
     {
-        title: "Channels",
-        url: "/channels",
+        title: 'Channels',
+        url: '/channels',
         icon: Users,
     },
     {
-        title: "Tools",
-        url: "/tools",
+        title: 'Tools',
+        url: '/tools',
         icon: Wrench,
     },
     {
-        title: "Settings",
-        url: "/settings",
+        title: 'Settings',
+        url: '/settings',
         icon: Settings,
     },
 ]
 
 export function AppSidebar() {
-    const [version, setVersion] = useState<string | null>(null);
+    const [version, setVersion] = useState<string | null>(null)
 
     useEffect(() => {
         const fetchVersion = async () => {
             try {
-                const response = await fetch('/api/info');
-                const data = await response.json();
-                setVersion(data.info.version);
+                const response = await fetch('/api/info')
+                const data = await response.json()
+                setVersion(data.info.version)
             } catch (error) {
-                console.error('Failed to fetch version:', error);
+                console.error('Failed to fetch version:', error)
             }
-        };
+        }
 
-        fetchVersion();
-    }, []);
-
+        fetchVersion()
+    }, [])
 
     return (
         <Sidebar>
@@ -86,7 +98,7 @@ export function AppSidebar() {
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild>
                                         <a href={item.url}>
-                                            <item.icon/>
+                                            <item.icon />
                                             <span>{item.title}</span>
                                         </a>
                                     </SidebarMenuButton>
@@ -98,10 +110,13 @@ export function AppSidebar() {
             </SidebarContent>
             <SidebarFooter>
                 <SidebarGroupLabel className={'gap-x-4'}>
-
-                    <p className={'text-md'}>version {version}</p> <Link target={'_blank'}
-                                                                      href={'https://github.com/Fx64b/video-archiver'}><GitBranch
-                    size={20}/></Link>
+                    <p className={'text-md'}>version {version}</p>{' '}
+                    <Link
+                        target={'_blank'}
+                        href={'https://github.com/Fx64b/video-archiver'}
+                    >
+                        <GitBranch size={20} />
+                    </Link>
                 </SidebarGroupLabel>
             </SidebarFooter>
         </Sidebar>
