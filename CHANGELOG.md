@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/Fx64b/video-archiver/compare/v1.10.0...v1.10.1) (2025-01-18)
+
+
+### Bug Fixes
+
+* **progress:** video already downloaded message not working properly when downloading a playlist twice ([6bfc878](https://github.com/Fx64b/video-archiver/commit/6bfc8784f198841aba3dce2e21cdd68679330ea7))
+
 # [1.10.0](https://github.com/Fx64b/video-archiver/compare/v1.9.0...v1.10.0) (2025-01-11)
 
 
