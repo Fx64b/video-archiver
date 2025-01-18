@@ -1,5 +1,8 @@
 #!/bin/bash
 
+export CURRENT_UID=$(id -u)
+export CURRENT_GID=$(id -g)
+
 DEBUG=""
 
 while [[ $# -gt 0 ]]; do
@@ -32,6 +35,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Initialize directories and permissions if they don't exist
+mkdir -p data/downloads data/db data/cache
+chmod 755 data/downloads data/db data/cache
+chown -R $(id -u):$(id -g) data/
 
 clear
 echo "./run.sh --help for more information."

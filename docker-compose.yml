@@ -5,6 +5,8 @@ services:
     volumes:
       - ./data/downloads:/app/data/downloads
       - ./data/db:/app/data/db
+      - ./data/cache:/app/cache
+    user: "${CURRENT_UID}:${CURRENT_GID}"
     ports:
       - "8080:8080"
       - "8081:8081"
@@ -13,6 +15,7 @@ services:
       - DOWNLOAD_PATH=/app/data/downloads
       - DATABASE_PATH=/app/data/db/video-archiver.db
       - DEBUG=${DEBUG:-false}
+      - XDG_CACHE_HOME=/app/cache
 
   web:
     build:
