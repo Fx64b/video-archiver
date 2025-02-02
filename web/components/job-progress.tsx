@@ -1,6 +1,8 @@
-import { JobTypeMetadata, JobTypeVideo } from '@/types'
+import { JobTypeMetadata, JobTypeVideo, VideoMetadata } from '@/types'
 
 import React, { useEffect, useState } from 'react'
+
+import Image from 'next/image'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -12,6 +14,7 @@ interface JobProgress {
     totalItems: number
     progress: number
     currentVideoProgress: number
+    metadata?: VideoMetadata
 }
 
 const JobProgress: React.FC = () => {
@@ -29,6 +32,10 @@ const JobProgress: React.FC = () => {
                 ...prevJobs,
                 [data.jobID]: data,
             }))
+
+            if (data.metadata) {
+                console.log(data.metadata)
+            }
         }
 
         socket.onclose = () => {
@@ -46,39 +53,68 @@ const JobProgress: React.FC = () => {
                 .reverse()
                 .map(([jobID, job]) => (
                     <Card key={jobID} className="w-full max-w-screen-sm">
-                        <CardHeader>
-                            <CardTitle>Job ID: {jobID}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between">
-                                <p>
-                                    {job.totalItems > 1 && (
-                                        <>
-                                            Progress: {job.currentItem}/
-                                            {job.totalItems}
-                                        </>
-                                    )}
-                                </p>
-                                <p>
-                                    {job.progress === 100 &&
-                                    job.jobType !== JobTypeVideo &&
-                                    job.jobType !== JobTypeMetadata ? (
-                                        <span>Download Finished</span>
-                                    ) : job.currentVideoProgress > 100 ? (
-                                        <span>Video already downloaded</span>
-                                    ) : (
-                                        <span>
-                                            Downloading {job.jobType} (
-                                            {job.currentVideoProgress}%)
-                                        </span>
-                                    )}
-                                </p>
+                        <div className="flex">
+                            <div className="relative h-28 w-48">
+                                <Image
+                                    src={
+                                        job.metadata?.thumbnail ||
+                                        'https://placehold.co/100x50'
+                                    }
+                                    alt={'Thumbnail'}
+                                    fill
+                                    className="object-cover" // This makes the image cover the area without distortion
+                                    sizes="(max-width: 768px) 100vw, 192px" // Optimize loading for the container width
+                                />
                             </div>
-                            <Progress
-                                value={job.progress > 100 ? 100 : job.progress}
-                                className="mt-2"
-                            />
-                        </CardContent>
+                            <div className={'flex-1 p-4'}>
+                                <CardHeader>
+                                    {job.metadata ? (
+                                        <CardTitle>
+                                            {job.metadata.title}
+                                        </CardTitle>
+                                    ) : (
+                                        <CardTitle>Job ID: {jobID}</CardTitle>
+                                    )}
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex items-center justify-between">
+                                        <p>
+                                            {job.totalItems > 1 && (
+                                                <>
+                                                    Progress: {job.currentItem}/
+                                                    {job.totalItems}
+                                                </>
+                                            )}
+                                        </p>
+                                        <p>
+                                            {job.progress === 100 &&
+                                            job.jobType !== JobTypeVideo &&
+                                            job.jobType !== JobTypeMetadata ? (
+                                                <span>Download Finished</span>
+                                            ) : job.currentVideoProgress >
+                                              100 ? (
+                                                <span>
+                                                    Video already downloaded
+                                                </span>
+                                            ) : (
+                                                <span>
+                                                    Downloading {job.jobType} (
+                                                    {job.currentVideoProgress}%)
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                    <Progress
+                                        value={
+                                            job.progress > 100
+                                                ? 100
+                                                : job.progress
+                                        }
+                                        className="mt-2"
+                                    />
+                                </CardContent>
+                            </div>
+                        </div>
                     </Card>
                 ))}
         </div>

@@ -51,7 +51,7 @@ if [ -n "$BUILD" ]; then
    mkdir -p ../../web/types
    cp generated/types/index.ts ../../web/types/index.ts
    cd ../..
-   docker-compose up --build --remove-orphans
+   docker-compose up --build --remove-orphans --watch
 else
-   docker-compose up --remove-orphans
+   docker-compose up --remove-orphans --watch
 fi

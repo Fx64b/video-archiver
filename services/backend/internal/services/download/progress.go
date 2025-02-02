@@ -21,6 +21,7 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of.* \s+\d+\.?\d*\w+`)
 	destinationRegex := regexp.MustCompile(`\[download\] Destination: .+\.(f\d+)\.(mp4|webm)`)
 	metadataRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON`)
+	metadataFileRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON to: (.+\.info\.json)`)
 	alreadyDownloadedRegex := regexp.MustCompile(`\[download\].*has already been downloaded`)
 	tabRegex := regexp.MustCompile(`\[youtube(?::tab)?\]`)
 	playlistStartRegex := regexp.MustCompile(`\[download\] Downloading playlist:`)
@@ -165,6 +166,13 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 
 			if metadataRegex.MatchString(currentLine) || tabRegex.MatchString(currentLine) {
 				jobType = string(domain.JobTypeMetadata)
+
+				var metadataPath string
+
+				if match := metadataFileRegex.FindStringSubmatch(currentLine); match != nil {
+					metadataPath = match[1]
+					s.setMetadataPath(jobID, metadataPath)
+				}
 
 				if alreadyDownloaded {
 					lastVideoProgress = 101

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 	"video-archiver/internal/domain"
@@ -74,4 +75,28 @@ func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 		jobs = append(jobs, job)
 	}
 	return jobs, nil
+}
+
+func (r *JobRepository) StoreMetadata(jobID string, metadata *domain.VideoMetadata) error {
+	// Store channel if not exists
+	_, err := r.db.Exec(`
+        INSERT OR IGNORE INTO channels (id, name, url, follower_count)
+        VALUES (?, ?, ?, ?)`,
+		metadata.ChannelID, metadata.Channel, metadata.ChannelURL, metadata.ChannelFollowers)
+	if err != nil {
+		return fmt.Errorf("store channel: %w", err)
+	}
+
+	// Store video metadata
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	_, err = r.db.Exec(`
+        INSERT INTO videos (job_id, title, channel_id, metadata_json)
+        VALUES (?, ?, ?, ?)`,
+		jobID, metadata.Title, metadata.ChannelID, string(metadataJSON))
+
+	return err
 }

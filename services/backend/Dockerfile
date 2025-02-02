@@ -10,12 +10,12 @@ RUN go build -o main ./cmd/api
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk add --no-cache ffmpeg python3 curl \
+RUN apk add --no-cache ffmpeg python3 curl shadow \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp
 
 # Create non-root user and necessary directories
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -g 1000 appgroup && adduser -u 1000 -G appgroup -D appuser
 WORKDIR /app
 
 # Copy binary from builder

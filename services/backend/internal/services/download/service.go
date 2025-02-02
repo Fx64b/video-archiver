@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sync"
 	"video-archiver/internal/domain"
+	"video-archiver/internal/services/metadata"
 )
 
 type Config struct {
@@ -17,13 +18,14 @@ type Config struct {
 }
 
 type Service struct {
-	config *Config
-	jobs   domain.JobRepository
-	queue  chan domain.Job
-	wg     sync.WaitGroup
-	hub    *WebSocketHub
-	ctx    context.Context
-	cancel context.CancelFunc
+	config        *Config
+	jobs          domain.JobRepository
+	queue         chan domain.Job
+	wg            sync.WaitGroup
+	hub           *WebSocketHub
+	ctx           context.Context
+	cancel        context.CancelFunc
+	metadataPaths sync.Map
 }
 
 func NewService(config *Config) *Service {
@@ -98,6 +100,18 @@ func (s *Service) processJobs() {
 	}
 }
 
+func (s *Service) setMetadataPath(jobID string, path string) {
+	s.metadataPaths.Store(jobID, path)
+}
+
+func (s *Service) getMetadataPath(jobID string) (string, bool) {
+	path, ok := s.metadataPaths.Load(jobID)
+	if !ok {
+		return "", false
+	}
+	return path.(string), true
+}
+
 func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	job.Status = domain.JobStatusInProgress
 	if err := s.jobs.Update(&job); err != nil {
@@ -142,10 +156,11 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 		return fmt.Errorf("download failed: %w", err)
 	}
 
-	// Extract and store metadata
-	if err := s.extractMetadata(job); err != nil {
-		log.WithError(err).WithField("jobID", job.ID).Error("Failed to extract metadata")
-		// Don't return error here as download was successful
+	if metadataPath, ok := s.getMetadataPath(job.ID); ok {
+		if err := s.processMetadata(ctx, job, metadataPath); err != nil {
+			log.WithError(err).Error("Failed to process metadata")
+		}
+		s.metadataPaths.Delete(job.ID)
 	}
 
 	job.Status = domain.JobStatusComplete
@@ -154,8 +169,21 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	return s.jobs.Update(&job)
 }
 
-func (s *Service) extractMetadata(job domain.Job) error {
-	// TODO: Implement metadata extraction
-	// This would move from your current metadata service to here
-	return nil
+func (s *Service) storeMetadata(ctx context.Context, jobID string, metadata *domain.VideoMetadata) error {
+	return s.jobs.StoreMetadata(jobID, metadata)
+}
+
+func (s *Service) processMetadata(ctx context.Context, job domain.Job, metadataPath string) error {
+	extractedMetadata, err := metadata.ExtractMetadata(metadataPath)
+	if err != nil {
+		return err
+	}
+
+	update := domain.MetadataUpdate{
+		JobID:    job.ID,
+		Metadata: extractedMetadata,
+	}
+	s.hub.broadcast <- update
+
+	return s.storeMetadata(ctx, job.ID, extractedMetadata)
 }

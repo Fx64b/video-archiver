@@ -31,6 +31,22 @@ CREATE TABLE IF NOT EXISTS playlists (
                                          description TEXT
 );
 
+
+
+
+CREATE TABLE IF NOT EXISTS channels (
+                                        id TEXT PRIMARY KEY,
+                                        name TEXT NOT NULL,
+                                        url TEXT NOT NULL,
+                                        follower_count INTEGER,
+                                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE videos ADD COLUMN channel_id TEXT REFERENCES channels(id);
+ALTER TABLE videos ADD COLUMN metadata_json TEXT;
+
+
+
 CREATE TABLE IF NOT EXISTS tags (
                                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                                     name TEXT UNIQUE
