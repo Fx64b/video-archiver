@@ -16,6 +16,24 @@ services:
       - DATABASE_PATH=/app/data/db/video-archiver.db
       - DEBUG=${DEBUG:-false}
       - XDG_CACHE_HOME=/app/cache
+    develop:
+      watch:
+        - action: sync
+          path: ./services/backend/cmd
+          target: /app/cmd
+        - action: sync
+          path: ./services/backend/db
+          target: /app/db
+        - action: sync
+          path: ./services/backend/generated
+          target: /app/generated
+        - action: sync
+          path: ./services/backend/internal
+          target: /app/internal
+        - action: rebuild
+          path: ./services/backend/go.mod
+        - action: rebuild
+          path: ./services/backend/go.sum
 
   web:
     build:

@@ -30,3 +30,23 @@ export interface ProgressUpdate {
   progress: number /* float64 */;
   currentVideoProgress: number /* float64 */;
 }
+export interface VideoMetadata {
+  id: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  duration: number /* int */;
+  view_count: number /* int */;
+  channel: string;
+  channel_id: string;
+  channel_url: string;
+  channel_follower_count: number /* int */;
+  tags: string[];
+  categories: string[];
+  upload_date: string;
+  filesize_approx: number /* int64 */;
+}
+export interface MetadataUpdate {
+  jobID: string;
+  metadata?: VideoMetadata;
+}
