@@ -126,10 +126,9 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 
 	// Extract metadata first
 	if err := s.extractMetadata(ctx, job, basePath); err != nil {
-		log.WithError(err).Error("Failed to extract metadata")
+		log.WithError(err).Error("Failed to extract metadata: %w", err)
 	}
 
-	// Download video
 	if err := s.downloadVideo(ctx, job, basePath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
@@ -245,13 +244,13 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 	}
 	s.hub.broadcast <- metadataUpdate
 
-	update.Progress = 100
+	update.Progress = 1
 	s.hub.broadcast <- update
 
 	return nil
 }
 
-func (s *Service) storeMetadata(ctx context.Context, jobID string, metadata *domain.VideoMetadata) error {
+func (s *Service) storeMetadata(jobID string, metadata *domain.VideoMetadata) error {
 	return s.jobs.StoreMetadata(jobID, metadata)
 }
 
@@ -267,5 +266,5 @@ func (s *Service) processMetadata(ctx context.Context, job domain.Job, metadataP
 	}
 	s.hub.broadcast <- update
 
-	return s.storeMetadata(ctx, job.ID, extractedMetadata)
+	return s.storeMetadata(job.ID, extractedMetadata)
 }
