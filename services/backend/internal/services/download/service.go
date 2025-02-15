@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"io"
+	"os"
 	"os/exec"
-	"strings"
+	"regexp"
 	"sync"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/metadata"
@@ -122,17 +124,13 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 
 	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s", s.config.DownloadPath)
 
-	// TODO: this part is incorrect because the metadata path is only known after metadata has been extracted
-	// Instead you should read the metdata path from the console output with a regex like "[info] * .info.json"
-	metadataPath := basePath + ".%(ext)s"
-
-	videoPath := basePath + ".%(ext)s"
-
-	if err := s.extractMetadata(ctx, job, metadataPath); err != nil {
+	// Extract metadata first
+	if err := s.extractMetadata(ctx, job, basePath); err != nil {
 		log.WithError(err).Error("Failed to extract metadata")
 	}
 
-	if err := s.downloadVideo(ctx, job, videoPath); err != nil {
+	// Download video
+	if err := s.downloadVideo(ctx, job, basePath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
 
@@ -178,8 +176,7 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 }
 
 func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPath string) error {
-	//pathRegex := regexp.MustCompile(`\[info\]\s+.+\.(f\d+)\.info.json`)
-
+	var stdoutBuf, stderrBuf bytes.Buffer
 	metadataCmd := exec.CommandContext(ctx, "yt-dlp",
 		"--skip-download",
 		"--write-info-json",
@@ -188,34 +185,22 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		job.URL,
 	)
 
-	var metadataPath bytes.Buffer
-	metadataCmd.Stdout = &metadataPath
-
-	if err := metadataCmd.Run(); err != nil {
-		return fmt.Errorf("metadata extraction failed: %w", err)
-	}
-
-	// TODO: pretty sure this does not work
-	// Get the actual path from yt-dlp output
-	actualPath := strings.TrimSpace(metadataPath.String())
-
-	// Extract and process metadata
-	extractedMetadata, err := metadata.ExtractMetadata(actualPath)
-	if err != nil {
-		return fmt.Errorf("failed to extract metadata from file: %w", err)
-	}
-
-	stdout, err := metadataCmd.StdoutPipe()
+	stdoutPipe, err := metadataCmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
-	stderr, err := metadataCmd.StderrPipe()
+	stderrPipe, err := metadataCmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 
-	// Notify about metadata extraction start
+	stdoutWriter := io.MultiWriter(&stdoutBuf, os.Stdout)
+	stderrWriter := io.MultiWriter(&stderrBuf, os.Stderr)
+
+	go io.Copy(stdoutWriter, stdoutPipe)
+	go io.Copy(stderrWriter, stderrPipe)
+
 	update := domain.ProgressUpdate{
 		JobID:    job.ID,
 		JobType:  string(domain.JobTypeMetadata),
@@ -227,37 +212,39 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		return fmt.Errorf("failed to start metadata extraction: %w", err)
 	}
 
-	// Track progress
-	go s.trackProgress(stdout, job.ID, string(domain.JobTypeMetadata))
-	go s.trackProgress(stderr, job.ID, string(domain.JobTypeMetadata))
-
-	// Wait for command completion
 	if err := metadataCmd.Wait(); err != nil {
 		return fmt.Errorf("metadata extraction failed: %w", err)
 	}
 
-	// The metadata file will be at outputPath + ".info.json"
-	actualMetadataPath := outputPath + ".info.json"
+	metadataPath := ""
+	infoJsonRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON to: (.+\.info\.json)`)
 
-	// Extract and process metadata
-	extractedMetadata, err = metadata.ExtractMetadata(actualMetadataPath)
+	for _, output := range []string{stdoutBuf.String(), stderrBuf.String()} {
+		if matches := infoJsonRegex.FindStringSubmatch(output); len(matches) > 1 {
+			metadataPath = matches[1]
+			break
+		}
+	}
+
+	if metadataPath == "" {
+		return fmt.Errorf("could not find metadata file path in command output")
+	}
+
+	extractedMetadata, err := metadata.ExtractMetadata(metadataPath)
 	if err != nil {
 		return fmt.Errorf("failed to extract metadata from file: %w", err)
 	}
 
-	// Store metadata in database
 	if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
 		return fmt.Errorf("failed to store metadata: %w", err)
 	}
 
-	// Send metadata update to frontend
 	metadataUpdate := domain.MetadataUpdate{
 		JobID:    job.ID,
 		Metadata: extractedMetadata,
 	}
 	s.hub.broadcast <- metadataUpdate
 
-	// Send completion update
 	update.Progress = 100
 	s.hub.broadcast <- update
 
