@@ -1,4 +1,4 @@
-import { JobTypeMetadata, JobTypeVideo, VideoMetadata } from '@/types'
+import { JobTypeMetadata, MetadataUpdate, ProgressUpdate, VideoMetadata } from '@/types'
 
 import React, { useEffect, useState } from 'react'
 
@@ -6,6 +6,9 @@ import Image from 'next/image'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Clock, User } from 'lucide-react'
+import { formatSeconds } from '@/lib/utils'
 
 interface JobProgress {
     jobID: string
@@ -14,7 +17,6 @@ interface JobProgress {
     totalItems: number
     progress: number
     currentVideoProgress: number
-    metadata?: VideoMetadata
 }
 
 const JobProgress: React.FC = () => {
@@ -27,17 +29,17 @@ const JobProgress: React.FC = () => {
         )
 
         socket.onmessage = (event) => {
-            const data: JobProgress = JSON.parse(event.data)
+            const data: ProgressUpdate | MetadataUpdate = JSON.parse(event.data)
 
             setJobs((prevJobs) => ({
                 ...prevJobs,
-                [data.jobID]: data,
+                [data.jobID]: (data as ProgressUpdate),
             }))
 
-            if (data.metadata) {
+            if ('metadata' in data && data?.metadata) {
                 setMetadata((prevMetadata) => ({
                     ...prevMetadata,
-                    [data.jobID]: (data.metadata as VideoMetadata),
+                    [data.jobID]: data.metadata as VideoMetadata,
                 }))
             }
         }
@@ -51,36 +53,68 @@ const JobProgress: React.FC = () => {
         }
     }, [])
 
+    const getMetadataField = (
+        jobID: string,
+        field: keyof VideoMetadata
+    ): string | null => {
+        return metadata[jobID]?.[field].toString() || null
+    }
+
     return (
         <div className="mb-4 max-w-screen-md space-y-4">
             {Object.entries(jobs)
                 .reverse()
                 .map(([jobID, job]) => (
-                    <Card key={jobID} className="w-full max-w-screen-sm">
-                        <div className="flex">
-                            <div className="relative h-28 w-48">
-                                <Image
-                                    src={
-                                        metadata[jobID]?.thumbnail ||
-                                        'https://placehold.co/100x50'
-                                    }
-                                    alt={'Thumbnail'}
-                                    fill
-                                    className="object-cover"
-                                    sizes="(max-width: 768px) 100vw, 192px"
-                                />
+                    <Card key={jobID} className="w-full">
+                        <div className="flex items-center">
+                            <div className="relative h-36 w-64 flex-shrink-0">
+                                {
+                                    getMetadataField(jobID, 'thumbnail') ? (
+                                        <Image
+                                            src={
+                                                getMetadataField(jobID, 'thumbnail') ||
+                                                ''
+                                            }
+                                            alt={'Thumbnail'}
+                                            fill
+                                            className="object-cover rounded-lg ml-4"
+                                            sizes="(max-width: 768px) 100vw, 192px"
+                                        />
+                                        ) : (
+                                        <Skeleton className={'object-cover ml-4 h-36 w-64'}/>
+                                    )
+                                }
+
                             </div>
                             <div className={'flex-1 p-4'}>
                                 <CardHeader>
-                                    {metadata[jobID] ? (
+                                    {getMetadataField(jobID, 'title') ? (
                                         <CardTitle>
-                                            {metadata[jobID]?.title}
+                                            {getMetadataField(jobID, 'title')}
                                         </CardTitle>
                                     ) : (
-                                        <CardTitle>Job ID: {jobID}</CardTitle>
+                                        <Skeleton className={'h-12 w-full'}/>
                                     )}
                                 </CardHeader>
                                 <CardContent>
+                                    <div className={'flex items-center gap-8 mb-2'}>
+                                        { getMetadataField(jobID, 'duration') ? (
+                                            <div className={'flex items-center gap-2'}>
+                                                <Clock />
+                                                {formatSeconds(getMetadataField(jobID, 'duration'))}
+                                            </div>
+                                        ) : (
+                                            <Skeleton className={'h-8 w-16'}/>
+                                        )}
+                                        { getMetadataField(jobID, 'channel') ? (
+                                            <div className={'flex items-center gap-2'}>
+                                                <User />
+                                                {getMetadataField(jobID, 'channel')}
+                                            </div>
+                                        ) : (
+                                            <Skeleton className={'h-8 w-16'}/>
+                                        )}
+                                    </div>
                                     <div className="flex items-center justify-between">
                                         <p>
                                             {job.totalItems > 1 && (
@@ -92,7 +126,6 @@ const JobProgress: React.FC = () => {
                                         </p>
                                         <p>
                                             {job.progress === 100 &&
-                                            job.jobType !== JobTypeVideo &&
                                             job.jobType !== JobTypeMetadata ? (
                                                 <span>Download Finished</span>
                                             ) : job.currentVideoProgress >
