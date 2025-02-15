@@ -1,7 +1,7 @@
 'use client'
 
 import useAppState from '@/store/appState'
-import { LoaderCircle } from 'lucide-react'
+import { LoaderCircle, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useState } from 'react'
@@ -12,11 +12,11 @@ import { Input } from '@/components/ui/input'
 
 export function UrlInput() {
     const [url, setUrl] = useState('')
-    const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
     const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL
-    const setIsDownloading = useAppState((state) => state.setIsDownloading)
+    const setIsDownloaindg = useAppState((state) => state.setIsDownloading)
+    const isDownloading = useAppState((state) => state.isDownloading)
 
     const isValidYoutubeUrl = (url: string) => {
         const youtubeRegex =
@@ -31,8 +31,7 @@ export function UrlInput() {
             return
         }
 
-        setLoading(true)
-        setIsDownloading(true)
+        setIsDownloaindg(true)
         try {
             const response = await fetch(`${SERVER_URL}/download`, {
                 method: 'POST',
@@ -44,35 +43,47 @@ export function UrlInput() {
                 setError('Download failed.')
             }
 
-            // Handle the response
             setUrl('')
             toast('Job has been added to queue.')
         } catch (error) {
             console.error(error)
             setError('Failed to download the video.')
         } finally {
-            setLoading(false)
+            setIsDownloaindg(false)
         }
+    }
+
+    const settings = () => {
+        console.log('Settings')
     }
 
     return (
         <div className="flex w-full max-w-screen-md flex-col">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center justify-between gap-2">
                 <Input
                     type="url"
                     placeholder="YouTube URL"
-                    className={'w-5/6'}
+                    className={'w-full'}
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    disabled={loading}
+                    disabled={isDownloading}
                 />
                 <Button
                     type="submit"
+                    variant={'outline'}
+                    onClick={settings}
+                    disabled={isDownloading}
+                    className={'w-12'}
+                >
+                        <Settings />
+                </Button>
+                <Button
+                    type="submit"
                     onClick={download}
-                    disabled={loading}
+                    disabled={isDownloading}
                     className={'w-24'}
                 >
-                    {loading ? (
+                    {isDownloading ? (
                         <LoaderCircle className={'animate-spin'} />
                     ) : (
                         'Download'
