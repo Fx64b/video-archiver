@@ -13,7 +13,7 @@ export function formatSeconds(seconds: string | number | null): string {
     seconds = Number(seconds)
 
     if (seconds < 3600) {
-        return new Date(seconds * 1000).toISOString().slice(14, 19).toString();
+        return new Date(seconds * 1000).toISOString().slice(14, 19).toString()
     }
-    return new Date(seconds * 1000).toISOString().slice(11, 19).toString();
+    return new Date(seconds * 1000).toISOString().slice(11, 19).toString()
 }

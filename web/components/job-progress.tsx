@@ -1,14 +1,20 @@
-import { JobTypeMetadata, MetadataUpdate, ProgressUpdate, VideoMetadata } from '@/types'
+import {
+    JobTypeMetadata,
+    MetadataUpdate,
+    ProgressUpdate,
+    VideoMetadata,
+} from '@/types'
+import { Clock, User } from 'lucide-react'
 
 import React, { useEffect, useState } from 'react'
 
 import Image from 'next/image'
 
+import { formatSeconds } from '@/lib/utils'
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Clock, User } from 'lucide-react'
-import { formatSeconds } from '@/lib/utils'
 
 interface JobProgress {
     jobID: string
@@ -33,7 +39,7 @@ const JobProgress: React.FC = () => {
 
             setJobs((prevJobs) => ({
                 ...prevJobs,
-                [data.jobID]: (data as ProgressUpdate),
+                [data.jobID]: data as ProgressUpdate,
             }))
 
             if ('metadata' in data && data?.metadata) {
@@ -68,23 +74,26 @@ const JobProgress: React.FC = () => {
                     <Card key={jobID} className="w-full">
                         <div className="flex items-center">
                             <div className="relative h-36 w-64 flex-shrink-0">
-                                {
-                                    getMetadataField(jobID, 'thumbnail') ? (
-                                        <Image
-                                            src={
-                                                getMetadataField(jobID, 'thumbnail') ||
-                                                ''
-                                            }
-                                            alt={'Thumbnail'}
-                                            fill
-                                            className="object-cover rounded-lg ml-4"
-                                            sizes="(max-width: 768px) 100vw, 192px"
-                                        />
-                                        ) : (
-                                        <Skeleton className={'object-cover ml-4 h-36 w-64'}/>
-                                    )
-                                }
-
+                                {getMetadataField(jobID, 'thumbnail') ? (
+                                    <Image
+                                        src={
+                                            getMetadataField(
+                                                jobID,
+                                                'thumbnail'
+                                            ) || ''
+                                        }
+                                        alt={'Thumbnail'}
+                                        fill
+                                        className="ml-4 rounded-lg object-cover"
+                                        sizes="(max-width: 768px) 100vw, 192px"
+                                    />
+                                ) : (
+                                    <Skeleton
+                                        className={
+                                            'ml-4 h-36 w-64 object-cover'
+                                        }
+                                    />
+                                )}
                             </div>
                             <div className={'flex-1 p-4'}>
                                 <CardHeader>
@@ -93,26 +102,46 @@ const JobProgress: React.FC = () => {
                                             {getMetadataField(jobID, 'title')}
                                         </CardTitle>
                                     ) : (
-                                        <Skeleton className={'h-12 w-full'}/>
+                                        <Skeleton className={'h-12 w-full'} />
                                     )}
                                 </CardHeader>
                                 <CardContent>
-                                    <div className={'flex items-center gap-8 mb-2'}>
-                                        { getMetadataField(jobID, 'duration') ? (
-                                            <div className={'flex items-center gap-2'}>
+                                    <div
+                                        className={
+                                            'mb-2 flex items-center gap-8'
+                                        }
+                                    >
+                                        {getMetadataField(jobID, 'duration') ? (
+                                            <div
+                                                className={
+                                                    'flex items-center gap-2'
+                                                }
+                                            >
                                                 <Clock />
-                                                {formatSeconds(getMetadataField(jobID, 'duration'))}
+                                                {formatSeconds(
+                                                    getMetadataField(
+                                                        jobID,
+                                                        'duration'
+                                                    )
+                                                )}
                                             </div>
                                         ) : (
-                                            <Skeleton className={'h-8 w-16'}/>
+                                            <Skeleton className={'h-8 w-16'} />
                                         )}
-                                        { getMetadataField(jobID, 'channel') ? (
-                                            <div className={'flex items-center gap-2'}>
+                                        {getMetadataField(jobID, 'channel') ? (
+                                            <div
+                                                className={
+                                                    'flex items-center gap-2'
+                                                }
+                                            >
                                                 <User />
-                                                {getMetadataField(jobID, 'channel')}
+                                                {getMetadataField(
+                                                    jobID,
+                                                    'channel'
+                                                )}
                                             </div>
                                         ) : (
-                                            <Skeleton className={'h-8 w-16'}/>
+                                            <Skeleton className={'h-8 w-16'} />
                                         )}
                                     </div>
                                     <div className="flex items-center justify-between">

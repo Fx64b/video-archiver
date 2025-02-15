@@ -75,7 +75,7 @@ export function UrlInput() {
                     disabled={isDownloading}
                     className={'w-12'}
                 >
-                        <Settings />
+                    <Settings />
                 </Button>
                 <Button
                     type="submit"
