@@ -13,17 +13,14 @@ import (
 	"video-archiver/internal/domain"
 )
 
-func (s *Service) trackProgress(pipe io.Reader, jobID string) {
+func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
 	reader := bufio.NewReader(pipe)
 	var line bytes.Buffer
 
 	itemRegex := regexp.MustCompile(`\[download\] Downloading item (\d+) of (\d+)`)
 	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of.* \s+\d+\.?\d*\w+`)
 	destinationRegex := regexp.MustCompile(`\[download\] Destination: .+\.(f\d+)\.(mp4|webm)`)
-	metadataRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON`)
-	metadataFileRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON to: (.+\.info\.json)`)
 	alreadyDownloadedRegex := regexp.MustCompile(`\[download\].*has already been downloaded`)
-	tabRegex := regexp.MustCompile(`\[youtube(?::tab)?\]`)
 	playlistStartRegex := regexp.MustCompile(`\[download\] Downloading playlist:`)
 	playlistEndRegex := regexp.MustCompile(`\[download\] Finished downloading playlist:`)
 	videoCompleteRegex := regexp.MustCompile(`\[download\] .*: .* has already been recorded in archive`)
@@ -31,11 +28,9 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 
 	var totalItems, currentItem int
 	var overallProgress float64
-	var lastVideoProgress float64
 
 	// Flags
 	isPlaylist := false
-	jobType := string(domain.JobTypeVideo)
 	isProcessingAudio := false
 	currentVideoComplete := false
 	mergerComplete := false
@@ -140,7 +135,6 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					} else {
 						overallProgress = 100
 					}
-					lastVideoProgress = 100
 				}
 
 				alreadyDownloaded = true
@@ -164,34 +158,6 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 				continue
 			}
 
-			if metadataRegex.MatchString(currentLine) || tabRegex.MatchString(currentLine) {
-				jobType = string(domain.JobTypeMetadata)
-
-				var metadataPath string
-
-				if match := metadataFileRegex.FindStringSubmatch(currentLine); match != nil {
-					metadataPath = match[1]
-					s.setMetadataPath(jobID, metadataPath)
-				}
-
-				if alreadyDownloaded {
-					lastVideoProgress = 101
-				} else {
-					lastVideoProgress = 0
-				}
-
-				update := domain.ProgressUpdate{
-					JobID:                jobID,
-					JobType:              jobType,
-					CurrentItem:          currentItem,
-					TotalItems:           totalItems,
-					Progress:             overallProgress,
-					CurrentVideoProgress: lastVideoProgress,
-				}
-				s.hub.broadcast <- update
-				continue
-			}
-
 			if match := destinationRegex.FindStringSubmatch(currentLine); match != nil {
 				format := match[1]
 				isProcessingAudio = format == "f251"
@@ -208,7 +174,6 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 					currentItem = s.parseToInt(match[1])
 					totalItems = s.parseToInt(match[2])
 					overallProgress = ((float64(currentItem) - 1) / float64(totalItems)) * 100
-					lastVideoProgress = 0
 				}
 
 				update := domain.ProgressUpdate{
@@ -248,7 +213,6 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 						overallProgress = ((float64(currentItem) - 1) / float64(totalItems)) * 100
 						overallProgress += currentProgress / float64(totalItems)
 					}
-					lastVideoProgress = currentProgress
 
 					if currentProgress >= 100 {
 						currentVideoComplete = true
@@ -274,6 +238,12 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string) {
 				}
 
 				s.hub.broadcast <- update
+			}
+
+			// TODO: improve
+			if strings.Contains(currentLine, "Writing video metadata as JSON to:") {
+				metadataPath := strings.TrimPrefix(currentLine, "[info] Writing video metadata as JSON to: ")
+				s.setMetadataPath(jobID, strings.TrimSpace(metadataPath))
 			}
 		} else {
 			line.WriteByte(char)
