@@ -19,6 +19,7 @@ interface JobProgress {
 
 const JobProgress: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, JobProgress>>({})
+    const [metadata, setMetadata] = useState<Record<string, VideoMetadata>>({})
 
     useEffect(() => {
         const socket = new WebSocket(
@@ -34,7 +35,10 @@ const JobProgress: React.FC = () => {
             }))
 
             if (data.metadata) {
-                console.log(data.metadata)
+                setMetadata((prevMetadata) => ({
+                    ...prevMetadata,
+                    [data.jobID]: (data.metadata as VideoMetadata),
+                }))
             }
         }
 
@@ -57,20 +61,20 @@ const JobProgress: React.FC = () => {
                             <div className="relative h-28 w-48">
                                 <Image
                                     src={
-                                        job.metadata?.thumbnail ||
+                                        metadata[jobID]?.thumbnail ||
                                         'https://placehold.co/100x50'
                                     }
                                     alt={'Thumbnail'}
                                     fill
-                                    className="object-cover" // This makes the image cover the area without distortion
-                                    sizes="(max-width: 768px) 100vw, 192px" // Optimize loading for the container width
+                                    className="object-cover"
+                                    sizes="(max-width: 768px) 100vw, 192px"
                                 />
                             </div>
                             <div className={'flex-1 p-4'}>
                                 <CardHeader>
-                                    {job.metadata ? (
+                                    {metadata[jobID] ? (
                                         <CardTitle>
-                                            {job.metadata.title}
+                                            {metadata[jobID]?.title}
                                         </CardTitle>
                                     ) : (
                                         <CardTitle>Job ID: {jobID}</CardTitle>
