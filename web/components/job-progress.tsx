@@ -4,7 +4,7 @@ import {
     ProgressUpdate,
     VideoMetadata,
 } from '@/types'
-import { Clock, User } from 'lucide-react'
+import { CircleCheck, Clock, User } from 'lucide-react'
 
 import React, { useEffect, useState } from 'react'
 
@@ -156,7 +156,16 @@ const JobProgress: React.FC = () => {
                                         <p>
                                             {job.progress === 100 &&
                                             job.jobType !== JobTypeMetadata ? (
-                                                <span>Download Finished</span>
+                                                <div className={'flex gap-2'}>
+                                                    <span>
+                                                        Download Finished
+                                                    </span>
+                                                    <CircleCheck
+                                                        className={
+                                                            'text-green-500'
+                                                        }
+                                                    />
+                                                </div>
                                             ) : job.currentVideoProgress >
                                               100 ? (
                                                 <span>
