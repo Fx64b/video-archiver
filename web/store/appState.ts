@@ -6,8 +6,8 @@ interface AppState {
 }
 
 const useAppState = create<AppState>((set) => ({
-    isDownloading: false, // Initial state
-    setIsDownloading: (value) => set(() => ({ isDownloading: value })), // Mutator
+    isDownloading: false,
+    setIsDownloading: (value) => set(() => ({ isDownloading: value })),
 }))
 
 export default useAppState

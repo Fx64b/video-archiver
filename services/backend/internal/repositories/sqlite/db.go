@@ -3,12 +3,17 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
-	"os"
-
 	_ "github.com/mattn/go-sqlite3"
+	"os"
+	"path/filepath"
 )
 
 func NewDB(dbPath string) (*sql.DB, error) {
+	dbDir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		return nil, fmt.Errorf("create database directory: %w", err)
+	}
+
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -18,11 +23,35 @@ func NewDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	if err := initSchema(db); err != nil {
-		return nil, fmt.Errorf("init schema: %w", err)
+	// Check if schema already exists by looking for a core table
+	exists, err := tableExists(db, "jobs")
+	if err != nil {
+		return nil, fmt.Errorf("check schema: %w", err)
+	}
+
+	if !exists {
+		if err := initSchema(db); err != nil {
+			return nil, fmt.Errorf("init schema: %w", err)
+		}
 	}
 
 	return db, nil
+}
+
+func tableExists(db *sql.DB, tableName string) (bool, error) {
+	var name string
+	err := db.QueryRow(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name=?`, tableName).Scan(&name)
+
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("query table existence: %w", err)
+	}
+
+	return true, nil
 }
 
 func initSchema(db *sql.DB) error {
