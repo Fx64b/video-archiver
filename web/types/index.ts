@@ -45,8 +45,30 @@ export interface VideoMetadata {
   categories: string[];
   upload_date: string;
   filesize_approx: number /* int64 */;
+  _type: string;
+}
+export interface Thumbnail {
+  url: string;
+  height: number /* int */;
+  width: number /* int */;
+  id: string;
+}
+export interface PlaylistMetadata {
+  id: string;
+  title: string;
+  description: string;
+  thumbnails: Thumbnail[];
+  uploader_id: string;
+  uploader_url: string;
+  channel_id: string;
+  channel: string;
+  channel_url: string;
+  channel_follower_count: number /* int */;
+  playlist_count: number /* int */;
+  _type: string;
 }
 export interface MetadataUpdate {
   jobID: string;
-  metadata?: VideoMetadata;
+  metadata: Metadata;
 }
+export type Metadata = any;

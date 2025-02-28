@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
             },
             {
                 protocol: 'https',
-                hostname: 'placehold.co',
+                hostname: 'yt3.googleusercontent.com',
                 port: '',
                 pathname: '/**',
             },
