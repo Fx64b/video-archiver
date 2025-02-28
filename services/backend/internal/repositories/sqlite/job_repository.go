@@ -77,8 +77,18 @@ func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 	return jobs, nil
 }
 
-func (r *JobRepository) StoreMetadata(jobID string, metadata *domain.VideoMetadata) error {
-	// Store channel if not exists
+func (r *JobRepository) StoreMetadata(jobID string, metadata domain.Metadata) error {
+	switch m := metadata.(type) {
+	case *domain.VideoMetadata:
+		return r.storeVideoMetadata(jobID, m)
+	case *domain.PlaylistMetadata:
+		return r.storePlaylistMetadata(m)
+	default:
+		return fmt.Errorf("unsupported metadata type: %T", metadata)
+	}
+}
+
+func (r *JobRepository) storeVideoMetadata(jobID string, metadata *domain.VideoMetadata) error {
 	_, err := r.db.Exec(`
         INSERT OR IGNORE INTO channels (id, name, url, follower_count)
         VALUES (?, ?, ?, ?)`,
@@ -87,7 +97,6 @@ func (r *JobRepository) StoreMetadata(jobID string, metadata *domain.VideoMetada
 		return fmt.Errorf("store channel: %w", err)
 	}
 
-	// Store video metadata
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
@@ -97,6 +106,28 @@ func (r *JobRepository) StoreMetadata(jobID string, metadata *domain.VideoMetada
         INSERT INTO videos (job_id, title, channel_id, metadata_json)
         VALUES (?, ?, ?, ?)`,
 		jobID, metadata.Title, metadata.ChannelID, string(metadataJSON))
+
+	return err
+}
+
+func (r *JobRepository) storePlaylistMetadata(metadata *domain.PlaylistMetadata) error {
+	_, err := r.db.Exec(`
+        INSERT OR IGNORE INTO channels (id, name, url, follower_count)
+        VALUES (?, ?, ?, ?)`,
+		metadata.ChannelID, metadata.Channel, metadata.ChannelURL, metadata.ChannelFollowers)
+	if err != nil {
+		return fmt.Errorf("store channel: %w", err)
+	}
+
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	_, err = r.db.Exec(`
+        INSERT INTO playlists (id, title, description, metadata_json)
+        VALUES (?, ?, ?, ?)`,
+		metadata.ID, metadata.Title, metadata.Description, string(metadataJSON))
 
 	return err
 }

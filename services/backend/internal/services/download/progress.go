@@ -3,10 +3,12 @@ package download
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"math"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,10 +23,13 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
 	progressRegex := regexp.MustCompile(`\[download\]\s+(\d+\.?\d*)% of.* \s+\d+\.?\d*\w+`)
 	destinationRegex := regexp.MustCompile(`\[download\] Destination: .+\.(f\d+)\.(mp4|webm)`)
 	alreadyDownloadedRegex := regexp.MustCompile(`\[download\].*has already been downloaded`)
-	playlistStartRegex := regexp.MustCompile(`\[download\] Downloading playlist:`)
-	playlistEndRegex := regexp.MustCompile(`\[download\] Finished downloading playlist:`)
 	videoCompleteRegex := regexp.MustCompile(`\[download\] .*: .* has already been recorded in archive`)
 	mergerCompleteRegex := regexp.MustCompile(`\[Merger\] Merging formats into`)
+
+	playlistStartRegex := regexp.MustCompile(`\[download\] Downloading playlist:`)
+	playlistEndRegex := regexp.MustCompile(`\[download\] Finished downloading playlist:`)
+	playlistMetadataRegex := regexp.MustCompile(`\[info\] Writing playlist metadata as JSON to: (.+\.info\.json)`)
+	playlistProgressRegex := regexp.MustCompile(`\[youtube:tab\] Playlist .+: Downloading (\d+) items of (\d+)`)
 
 	var totalItems, currentItem int
 	var overallProgress float64
@@ -51,6 +56,24 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
 
 			log.Debug(currentLine)
 			if len(strings.TrimSpace(currentLine)) == 0 {
+				continue
+			}
+
+			if match := playlistMetadataRegex.FindStringSubmatch(currentLine); match != nil {
+				metadataPath := strings.TrimSpace(match[1])
+				s.processPlaylistMetadata(jobID, metadataPath)
+				continue
+			}
+
+			if match := playlistProgressRegex.FindStringSubmatch(currentLine); match != nil {
+				totalItems := s.parseToInt(match[2])
+				update := domain.ProgressUpdate{
+					JobID:      jobID,
+					JobType:    string(domain.JobTypeMetadata),
+					TotalItems: totalItems,
+					Progress:   0,
+				}
+				s.hub.broadcast <- update
 				continue
 			}
 
@@ -241,13 +264,37 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
 			}
 
 			// TODO: improve
-			if strings.Contains(currentLine, "Writing video metadata as JSON to:") {
+			if strings.Contains(currentLine, "Writing video metadata as JSON to:") && !isPlaylist {
 				metadataPath := strings.TrimPrefix(currentLine, "[info] Writing video metadata as JSON to: ")
 				s.setMetadataPath(jobID, strings.TrimSpace(metadataPath))
 			}
 		} else {
 			line.WriteByte(char)
 		}
+	}
+}
+
+func (s *Service) processPlaylistMetadata(jobID string, metadataPath string) {
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		log.WithError(err).Error("Failed to read playlist metadata file")
+		return
+	}
+
+	var metadata domain.PlaylistMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		log.WithError(err).Error("Failed to parse playlist metadata")
+		return
+	}
+
+	update := domain.MetadataUpdate{
+		JobID:    jobID,
+		Metadata: &metadata,
+	}
+	s.hub.broadcast <- update
+
+	if err := s.jobs.StoreMetadata(jobID, &metadata); err != nil {
+		log.WithError(err).Error("Failed to store playlist metadata")
 	}
 }
 

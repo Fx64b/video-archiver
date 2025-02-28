@@ -22,13 +22,15 @@ CREATE TABLE IF NOT EXISTS videos (
                                       size INTEGER,
                                       quality TEXT,
                                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                      metadata_json TEXT,
                                       FOREIGN KEY (job_id) REFERENCES jobs (job_id)
 );
 
 CREATE TABLE IF NOT EXISTS playlists (
                                          id TEXT PRIMARY KEY,
                                          title TEXT,
-                                         description TEXT
+                                         description TEXT,
+                                         metadata_json TEXT
 );
 
 
@@ -43,9 +45,6 @@ CREATE TABLE IF NOT EXISTS channels (
 );
 
 ALTER TABLE videos ADD COLUMN channel_id TEXT REFERENCES channels(id);
-ALTER TABLE videos ADD COLUMN metadata_json TEXT;
-
-
 
 CREATE TABLE IF NOT EXISTS tags (
                                     id INTEGER PRIMARY KEY AUTOINCREMENT,

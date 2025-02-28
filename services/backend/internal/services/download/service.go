@@ -180,6 +180,7 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		"--skip-download",
 		"--write-info-json",
 		"--no-progress",
+		"--flat-playlist",
 		"--output", outputPath,
 		job.URL,
 	)
@@ -215,9 +216,10 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		return fmt.Errorf("metadata extraction failed: %w", err)
 	}
 
-	metadataPath := ""
-	infoJsonRegex := regexp.MustCompile(`\[info\] Writing video metadata as JSON to: (.+\.info\.json)`)
+	// New regex pattern to match both video and playlist/channel info JSON paths
+	infoJsonRegex := regexp.MustCompile(`Writing (?:video|playlist) metadata as JSON to: (.+\.info\.json)`)
 
+	var metadataPath string
 	for _, output := range []string{stdoutBuf.String(), stderrBuf.String()} {
 		if matches := infoJsonRegex.FindStringSubmatch(output); len(matches) > 1 {
 			metadataPath = matches[1]
@@ -248,23 +250,4 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 	s.hub.broadcast <- update
 
 	return nil
-}
-
-func (s *Service) storeMetadata(jobID string, metadata *domain.VideoMetadata) error {
-	return s.jobs.StoreMetadata(jobID, metadata)
-}
-
-func (s *Service) processMetadata(ctx context.Context, job domain.Job, metadataPath string) error {
-	extractedMetadata, err := metadata.ExtractMetadata(metadataPath)
-	if err != nil {
-		return err
-	}
-
-	update := domain.MetadataUpdate{
-		JobID:    job.ID,
-		Metadata: extractedMetadata,
-	}
-	s.hub.broadcast <- update
-
-	return s.storeMetadata(job.ID, extractedMetadata)
 }

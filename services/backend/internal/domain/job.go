@@ -26,7 +26,7 @@ type JobRepository interface {
 	Update(job *Job) error
 	GetByID(id string) (*Job, error)
 	GetRecent(limit int) ([]*Job, error)
-	StoreMetadata(jobID string, metadata *VideoMetadata) error
+	StoreMetadata(jobID string, metadata Metadata) error
 }
 
 type JobType string
@@ -61,9 +61,44 @@ type VideoMetadata struct {
 	Categories       []string `json:"categories"`
 	UploadDate       string   `json:"upload_date"`
 	FileSize         int64    `json:"filesize_approx"`
+	Type             string   `json:"_type"`
+}
+
+type Thumbnail struct {
+	URL    string `json:"url"`
+	Height int    `json:"height"`
+	Width  int    `json:"width"`
+	ID     string `json:"id"`
+}
+
+type PlaylistMetadata struct {
+	ID               string      `json:"id"`
+	Title            string      `json:"title"`
+	Description      string      `json:"description"`
+	Thumbnails       []Thumbnail `json:"thumbnails"`
+	UploaderID       string      `json:"uploader_id"`
+	UploaderURL      string      `json:"uploader_url"`
+	ChannelID        string      `json:"channel_id"`
+	Channel          string      `json:"channel"`
+	ChannelURL       string      `json:"channel_url"`
+	ChannelFollowers int         `json:"channel_follower_count"`
+	ItemCount        int         `json:"playlist_count"`
+	Type             string      `json:"_type"`
 }
 
 type MetadataUpdate struct {
-	JobID    string         `json:"jobID"`
-	Metadata *VideoMetadata `json:"metadata"`
+	JobID    string   `json:"jobID"`
+	Metadata Metadata `json:"metadata"`
+}
+
+type Metadata interface {
+	GetType() string
+}
+
+func (p *PlaylistMetadata) GetType() string {
+	return "playlist"
+}
+
+func (v *VideoMetadata) GetType() string {
+	return "video"
 }
