@@ -66,7 +66,7 @@ const JobProgress: React.FC = () => {
     }, [addActiveDownload, removeActiveDownload, getRecentMetadata])
 
     return (
-        <div className="mb-4 max-w-screen-md space-y-4">
+        <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
             {Object.entries(jobs)
                 .reverse()
                 .map(([jobID, job]) =>

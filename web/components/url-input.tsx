@@ -58,7 +58,7 @@ export function UrlInput() {
     }
 
     return (
-        <div className="flex w-full max-w-screen-md flex-col">
+        <div className="flex w-full max-w-(--breakpoint-md) flex-col">
             <div className="flex items-center justify-between gap-2">
                 <Input
                     type="url"

@@ -52,7 +52,7 @@ const Recent: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="mb-4 max-w-screen-md space-y-4">
+            <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
                 <Card>
                     <CardContent className="p-4">
                         <Skeleton className="h-36 w-full" />
@@ -68,7 +68,7 @@ const Recent: React.FC = () => {
     )
 
     return (
-        <div className="mb-4 max-w-screen-md space-y-4">
+        <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
             {filteredJobs.length > 0 ? (
                 filteredJobs.map((job) => (
                     <MetadataCard
