@@ -21,6 +21,6 @@
     "@semantic-release/git",
     "@semantic-release/github"
   ],
-  "tagFormat": "0.${minor}.${patch}-BETA",
+  "tagFormat": "0.${version}-BETA"
   "repositoryUrl": "https://github.com/Fx64b/video-archiver.git"
 }
