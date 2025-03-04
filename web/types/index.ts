@@ -22,6 +22,10 @@ export type JobType = string;
 export const JobTypeVideo: JobType = "video";
 export const JobTypeAudio: JobType = "audio";
 export const JobTypeMetadata: JobType = "metadata";
+export interface JobWithMetadata {
+  job?: Job;
+  metadata?: Metadata;
+}
 export interface ProgressUpdate {
   jobID: string;
   jobType: string;
@@ -30,3 +34,55 @@ export interface ProgressUpdate {
   progress: number /* float64 */;
   currentVideoProgress: number /* float64 */;
 }
+export interface VideoMetadata {
+  id: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  duration: number /* int */;
+  view_count: number /* int */;
+  channel: string;
+  channel_id: string;
+  channel_url: string;
+  channel_follower_count: number /* int */;
+  tags: string[];
+  categories: string[];
+  upload_date: string;
+  filesize_approx: number /* int64 */;
+  _type: string;
+}
+export interface Thumbnail {
+  url: string;
+  height: number /* int */;
+  width: number /* int */;
+  id: string;
+}
+export interface PlaylistMetadata {
+  id: string;
+  title: string;
+  description: string;
+  thumbnails: Thumbnail[];
+  uploader_id: string;
+  uploader_url: string;
+  channel_id: string;
+  channel: string;
+  channel_url: string;
+  channel_follower_count: number /* int */;
+  playlist_count: number /* int */;
+  _type: string;
+}
+export interface ChannelMetadata {
+  id: string;
+  channel: string;
+  channel_url: string;
+  description: string;
+  thumbnails: Thumbnail[];
+  channel_follower_count: number /* int */;
+  playlist_count: number /* int */;
+  _type: string;
+}
+export interface MetadataUpdate {
+  jobID: string;
+  metadata: Metadata;
+}
+export type Metadata = any;

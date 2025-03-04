@@ -14,24 +14,24 @@ RUN apk add --no-cache ffmpeg python3 curl \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp
 
-# Create non-root user and necessary directories
+# Create non-root user and setup directories
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 
-# Copy binary from builder
+# Copy files from builder
 COPY --from=builder /build/main .
 COPY --from=builder /build/db/schema.sql ./db/
 
-# Create and set permissions for data and cache directories
-RUN mkdir -p /app/data/downloads /app/data/db /app/cache \
-    && chown -R appuser:appgroup /app \
-    && chmod -R 755 /app/cache
+# Setup permissions
+RUN mkdir -p /app/data/downloads /app/data/db /app/cache && \
+    chown -R appuser:appgroup /app && \
+    chmod -R 755 /app/data && \
+    chmod -R 777 /app/data/db
 
-# Switch to non-root user
+# Set environment and switch user
+ENV XDG_CACHE_HOME=/app/cache
 USER appuser
 
-# Set environment variables for yt-dlp cache
-ENV XDG_CACHE_HOME=/app/cache
-
 EXPOSE 8080 8081
+
 CMD ["./main"]

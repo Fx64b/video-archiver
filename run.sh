@@ -1,8 +1,9 @@
 #!/bin/bash
 
+set -e
+
 export CURRENT_UID=$(id -u)
 export CURRENT_GID=$(id -g)
-
 DEBUG=""
 
 while [[ $# -gt 0 ]]; do
@@ -13,8 +14,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --clear)
       docker-compose down
-      rm -rf data/db/* && touch data/db/.gitkeep
-      rm -rf data/downloads/* && touch data/downloads/.gitkeep
+      rm -rf data/db data/downloads data/cache
       shift
       ;;
     --build)
@@ -36,10 +36,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Initialize directories and permissions if they don't exist
-mkdir -p data/downloads data/db data/cache
-chmod 755 data/downloads data/db data/cache
-chown -R $(id -u):$(id -g) data/
+echo "Setting up directories and permissions..."
+mkdir -p data/db data/downloads data/cache
+chmod 777 data/db
+chmod 755 data/downloads data/cache
+chown -R $CURRENT_UID:$CURRENT_GID data/
+
 
 clear
 echo "./run.sh --help for more information."

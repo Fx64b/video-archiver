@@ -1,12 +1,17 @@
 package download
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"io"
+	"os"
 	"os/exec"
+	"regexp"
 	"sync"
 	"video-archiver/internal/domain"
+	"video-archiver/internal/services/metadata"
 )
 
 type Config struct {
@@ -17,13 +22,14 @@ type Config struct {
 }
 
 type Service struct {
-	config *Config
-	jobs   domain.JobRepository
-	queue  chan domain.Job
-	wg     sync.WaitGroup
-	hub    *WebSocketHub
-	ctx    context.Context
-	cancel context.CancelFunc
+	config        *Config
+	jobs          domain.JobRepository
+	queue         chan domain.Job
+	wg            sync.WaitGroup
+	hub           *WebSocketHub
+	ctx           context.Context
+	cancel        context.CancelFunc
+	metadataPaths sync.Map
 }
 
 func NewService(config *Config) *Service {
@@ -98,54 +104,37 @@ func (s *Service) processJobs() {
 	}
 }
 
+func (s *Service) setMetadataPath(jobID string, path string) {
+	s.metadataPaths.Store(jobID, path)
+}
+
+func (s *Service) getMetadataPath(jobID string) (string, bool) {
+	path, ok := s.metadataPaths.Load(jobID)
+	if !ok {
+		return "", false
+	}
+	return path.(string), true
+}
+
 func (s *Service) processJob(ctx context.Context, job domain.Job) error {
+	job.Status = domain.JobStatusPending
+	job.Progress = 0
+	_ = s.jobs.Create(&job)
+
 	job.Status = domain.JobStatusInProgress
 	if err := s.jobs.Update(&job); err != nil {
 		return fmt.Errorf("failed to update job status: %w", err)
 	}
 
-	outputPath := fmt.Sprintf("%s/%%(uploader)s/%%(playlist|title)s/%%(title)s.%%(ext)s",
-		s.config.DownloadPath)
+	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s", s.config.DownloadPath)
 
-	cmd := exec.CommandContext(ctx, "yt-dlp",
-		"-N", fmt.Sprintf("%d", s.config.Concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
-		"--merge-output-format", "mp4",
-		"--retries", "3",
-		"--continue",
-		"--ignore-errors",
-		"--add-metadata",
-		"--write-info-json",
-		"--write-playlist-metafiles",
-		"--output", outputPath,
-		job.URL,
-	)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	// Extract metadata first
+	if err := s.extractMetadata(ctx, job, basePath); err != nil {
+		log.WithError(err).Error("Failed to extract metadata: %w", err)
 	}
 
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start download: %w", err)
-	}
-
-	go s.trackProgress(stdout, job.ID)
-	go s.trackProgress(stderr, job.ID)
-
-	if err := cmd.Wait(); err != nil {
+	if err := s.downloadVideo(ctx, job, basePath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
-	}
-
-	// Extract and store metadata
-	if err := s.extractMetadata(job); err != nil {
-		log.WithError(err).WithField("jobID", job.ID).Error("Failed to extract metadata")
-		// Don't return error here as download was successful
 	}
 
 	job.Status = domain.JobStatusComplete
@@ -154,8 +143,123 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	return s.jobs.Update(&job)
 }
 
-func (s *Service) extractMetadata(job domain.Job) error {
-	// TODO: Implement metadata extraction
-	// This would move from your current metadata service to here
+func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath string) error {
+	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
+		"-N", fmt.Sprintf("%d", s.config.Concurrency),
+		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
+		"--merge-output-format", "mp4",
+		"--retries", "3",
+		"--continue",
+		"--ignore-errors",
+		"--add-metadata",
+		"--output", outputPath,
+		job.URL,
+	)
+
+	stdout, err := downloadCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderr, err := downloadCmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	if err := downloadCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start download: %w", err)
+	}
+
+	// Track progress in separate goroutines
+	go s.trackProgress(stdout, job.ID, string(domain.JobTypeVideo))
+	go s.trackProgress(stderr, job.ID, string(domain.JobTypeVideo))
+
+	// Wait for command to complete
+	return downloadCmd.Wait()
+}
+
+func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPath string) error {
+	var stdoutBuf, stderrBuf bytes.Buffer
+	metadataCmd := exec.CommandContext(ctx, "yt-dlp",
+		"--skip-download",
+		"--write-info-json",
+		"--no-progress",
+		"--flat-playlist",
+		"--output", outputPath,
+		job.URL,
+	)
+
+	stdoutPipe, err := metadataCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderrPipe, err := metadataCmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	stdoutWriter := io.MultiWriter(&stdoutBuf, os.Stdout)
+	stderrWriter := io.MultiWriter(&stderrBuf, os.Stderr)
+
+	go io.Copy(stdoutWriter, stdoutPipe)
+	go io.Copy(stderrWriter, stderrPipe)
+
+	update := domain.ProgressUpdate{
+		JobID:    job.ID,
+		JobType:  string(domain.JobTypeMetadata),
+		Progress: 0,
+	}
+	s.hub.broadcast <- update
+
+	if err := metadataCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start metadata extraction: %w", err)
+	}
+
+	if err := metadataCmd.Wait(); err != nil {
+		return fmt.Errorf("metadata extraction failed: %w", err)
+	}
+
+	// New regex pattern to match both video and playlist/channel info JSON paths
+	infoJsonRegex := regexp.MustCompile(`Writing (?:video|playlist) metadata as JSON to: (.+\.info\.json)`)
+
+	var metadataPath string
+	for _, output := range []string{stdoutBuf.String(), stderrBuf.String()} {
+		if matches := infoJsonRegex.FindStringSubmatch(output); len(matches) > 1 {
+			metadataPath = matches[1]
+			break
+		}
+	}
+
+	if metadataPath == "" {
+		return fmt.Errorf("could not find metadata file path in command output")
+	}
+
+	extractedMetadata, err := metadata.ExtractMetadata(metadataPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract metadata from file: %w", err)
+	}
+
+	if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
+		return fmt.Errorf("failed to store metadata: %w", err)
+	}
+
+	metadataUpdate := domain.MetadataUpdate{
+		JobID:    job.ID,
+		Metadata: extractedMetadata,
+	}
+	s.hub.broadcast <- metadataUpdate
+
+	update.Progress = 1
+	s.hub.broadcast <- update
+
 	return nil
+}
+
+func (s *Service) GetJobWithMetadata(jobID string) (*domain.JobWithMetadata, error) {
+	return s.jobs.GetJobWithMetadata(jobID)
+}
+
+func (s *Service) GetRecentWithMetadata(limit int) ([]*domain.JobWithMetadata, error) {
+	return s.jobs.GetRecentWithMetadata(limit)
 }

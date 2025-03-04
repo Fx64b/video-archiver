@@ -1,9 +1,11 @@
-import { JobTypeMetadata, JobTypeVideo } from '@/types'
+import useAppState from '@/store/appState'
+import { Metadata, MetadataUpdate, ProgressUpdate } from '@/types'
 
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+import { MetadataCard } from '@/components/metadata-card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface JobProgress {
     jobID: string
@@ -16,6 +18,9 @@ interface JobProgress {
 
 const JobProgress: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, JobProgress>>({})
+    const [metadata, setMetadata] = useState<Record<string, Metadata>>({})
+    const { addActiveDownload, removeActiveDownload, getRecentMetadata } =
+        useAppState()
 
     useEffect(() => {
         const socket = new WebSocket(
@@ -23,12 +28,32 @@ const JobProgress: React.FC = () => {
         )
 
         socket.onmessage = (event) => {
-            const data: JobProgress = JSON.parse(event.data)
+            const data: ProgressUpdate | MetadataUpdate = JSON.parse(event.data)
 
-            setJobs((prevJobs) => ({
-                ...prevJobs,
-                [data.jobID]: data,
-            }))
+            if ('metadata' in data && data?.metadata) {
+                setMetadata((prev) => ({
+                    ...prev,
+                    [data.jobID]: data.metadata as Metadata,
+                }))
+            } else if ('progress' in data) {
+                addActiveDownload(data.jobID)
+
+                // Check if we have metadata from recent jobs
+                const recentMetadata = getRecentMetadata(data.jobID)
+                if (recentMetadata) {
+                    setMetadata((prev) => ({
+                        ...prev,
+                        [data.jobID]: recentMetadata,
+                    }))
+                }
+
+                setJobs((prev) => {
+                    return {
+                        ...prev,
+                        [data.jobID]: data as JobProgress,
+                    }
+                })
+            }
         }
 
         socket.onclose = () => {
@@ -38,49 +63,27 @@ const JobProgress: React.FC = () => {
         return () => {
             socket.close()
         }
-    }, [])
+    }, [addActiveDownload, removeActiveDownload, getRecentMetadata])
 
     return (
         <div className="mb-4 max-w-screen-md space-y-4">
             {Object.entries(jobs)
                 .reverse()
-                .map(([jobID, job]) => (
-                    <Card key={jobID} className="w-full max-w-screen-sm">
-                        <CardHeader>
-                            <CardTitle>Job ID: {jobID}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between">
-                                <p>
-                                    {job.totalItems > 1 && (
-                                        <>
-                                            Progress: {job.currentItem}/
-                                            {job.totalItems}
-                                        </>
-                                    )}
-                                </p>
-                                <p>
-                                    {job.progress === 100 &&
-                                    job.jobType !== JobTypeVideo &&
-                                    job.jobType !== JobTypeMetadata ? (
-                                        <span>Download Finished</span>
-                                    ) : job.currentVideoProgress > 100 ? (
-                                        <span>Video already downloaded</span>
-                                    ) : (
-                                        <span>
-                                            Downloading {job.jobType} (
-                                            {job.currentVideoProgress}%)
-                                        </span>
-                                    )}
-                                </p>
-                            </div>
-                            <Progress
-                                value={job.progress > 100 ? 100 : job.progress}
-                                className="mt-2"
-                            />
-                        </CardContent>
-                    </Card>
-                ))}
+                .map(([jobID, job]) =>
+                    metadata[jobID] ? (
+                        <MetadataCard
+                            key={jobID}
+                            metadata={metadata[jobID]}
+                            job={job}
+                        />
+                    ) : (
+                        <Card key={jobID}>
+                            <CardContent className="p-4">
+                                <Skeleton className="h-36 w-full" />
+                            </CardContent>
+                        </Card>
+                    )
+                )}
         </div>
     )
 }

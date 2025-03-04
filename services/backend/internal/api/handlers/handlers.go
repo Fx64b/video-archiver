@@ -33,9 +33,9 @@ func NewHandler(downloadService *download.Service) *Handler {
 func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Use(corsMiddleware)
 
-	// Routes at root level
 	r.Post("/download", h.HandleDownload)
 	r.Get("/recent", h.HandleRecent)
+	r.Get("/job/:id", h.HandleGetJob)
 }
 
 func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
@@ -107,10 +107,10 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleRecent(w http.ResponseWriter, r *http.Request) {
-	recentJobs, err := h.downloadService.GetRecent(5)
+	recentJobs, err := h.downloadService.GetRecentWithMetadata(5)
 	if err != nil {
-		log.WithError(err).Error("Failed to get recent jobs")
-		http.Error(w, "Failed to get recent jobs", http.StatusInternalServerError)
+		log.WithError(err).Error("Failed to get recent jobs with metadata")
+		http.Error(w, "Failed to get recent jobs with metadata", http.StatusInternalServerError)
 		return
 	}
 
@@ -120,6 +120,25 @@ func (h *Handler) HandleRecent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{Message: recentJobs}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	if jobID == "" {
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	jobWithMetadata, err := h.downloadService.GetJobWithMetadata(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get job with metadata")
+		http.Error(w, "Failed to get job with metadata", http.StatusInternalServerError)
+		return
+	}
+
+	resp := Response{Message: jobWithMetadata}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
