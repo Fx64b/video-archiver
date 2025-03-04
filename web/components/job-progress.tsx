@@ -1,3 +1,4 @@
+import useAppState from '@/store/appState'
 import { Metadata, MetadataUpdate, ProgressUpdate } from '@/types'
 
 import { useEffect, useState } from 'react'
@@ -18,6 +19,8 @@ interface JobProgress {
 const JobProgress: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, JobProgress>>({})
     const [metadata, setMetadata] = useState<Record<string, Metadata>>({})
+    const { addActiveDownload, removeActiveDownload, getRecentMetadata } =
+        useAppState()
 
     useEffect(() => {
         const socket = new WebSocket(
@@ -32,11 +35,38 @@ const JobProgress: React.FC = () => {
                     ...prev,
                     [data.jobID]: data.metadata as Metadata,
                 }))
-            } else {
-                setJobs((prev) => ({
-                    ...prev,
-                    [data.jobID]: data as JobProgress,
-                }))
+            } else if ('progress' in data) {
+                addActiveDownload(data.jobID)
+
+                // Check if we have metadata from recent jobs
+                const recentMetadata = getRecentMetadata(data.jobID)
+                if (recentMetadata) {
+                    setMetadata((prev) => ({
+                        ...prev,
+                        [data.jobID]: recentMetadata,
+                    }))
+                }
+
+                setJobs((prev) => {
+                    const updatedJobs = {
+                        ...prev,
+                        [data.jobID]: data as JobProgress,
+                    }
+
+                    // If progress is 100%, remove from active after a short delay
+                    /*                if (data.progress === 100) {
+                        setTimeout(() => {
+                            removeActiveDownload(data.jobID)
+                            setJobs(current => {
+                                const newJobs = {...current}
+                                delete newJobs[data.jobID]
+                                return newJobs
+                            })
+                        }, 2000)
+                    }*/
+
+                    return updatedJobs
+                })
             }
         }
 
@@ -47,7 +77,7 @@ const JobProgress: React.FC = () => {
         return () => {
             socket.close()
         }
-    }, [])
+    }, [addActiveDownload, removeActiveDownload, getRecentMetadata])
 
     return (
         <div className="mb-4 max-w-screen-md space-y-4">

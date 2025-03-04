@@ -1,3 +1,4 @@
+// web/components/recent.tsx
 import useAppState from '@/store/appState'
 import { JobWithMetadata } from '@/types'
 
@@ -11,6 +12,7 @@ const Recent: React.FC = () => {
     const [jobs, setJobs] = useState<JobWithMetadata[]>([])
     const [loading, setLoading] = useState(true)
     const [message, setMessage] = useState('')
+    const { isActiveDownload, setRecentMetadata } = useAppState()
 
     useEffect(() => {
         fetch(process.env.NEXT_PUBLIC_SERVER_URL + '/recent')
@@ -23,7 +25,15 @@ const Recent: React.FC = () => {
             })
             .then((data) => {
                 if (data) {
-                    setJobs(data.message)
+                    const recentJobs = data.message
+                    setJobs(recentJobs)
+
+                    // Store metadata from recent jobs in global state
+                    recentJobs.forEach((job: JobWithMetadata) => {
+                        if (job.job && job.metadata) {
+                            setRecentMetadata(job.job.id, job.metadata)
+                        }
+                    })
                 }
                 setLoading(false)
             })
@@ -39,7 +49,7 @@ const Recent: React.FC = () => {
                 unsubscribe()
             }
         })
-    }, [])
+    }, [setRecentMetadata])
 
     if (loading) {
         return (
@@ -53,10 +63,15 @@ const Recent: React.FC = () => {
         )
     }
 
+    // Filter out jobs that are currently being downloaded
+    const filteredJobs = jobs.filter(
+        (job) => job.job && !isActiveDownload(job.job.id)
+    )
+
     return (
         <div className="mb-4 max-w-screen-md space-y-4">
-            {jobs.length > 0 ? (
-                jobs.map((job) => (
+            {filteredJobs.length > 0 ? (
+                filteredJobs.map((job) => (
                     <MetadataCard
                         key={job.job?.id}
                         metadata={job.metadata}

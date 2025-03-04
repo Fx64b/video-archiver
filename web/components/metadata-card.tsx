@@ -5,7 +5,12 @@ import React from 'react'
 
 import Image from 'next/image'
 
-import { formatSeconds, getThumbnailUrl } from '@/lib/utils'
+import {
+    formatNumber,
+    formatSeconds,
+    getThumbnailUrl,
+    isChannel,
+} from '@/lib/utils'
 import { isVideoMetadata } from '@/lib/utils'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -88,10 +93,23 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                     </span>
                                 </div>
                             )}
-                            <div className="flex items-center gap-2">
-                                <User className="h-4 w-4" />
-                                <span>{metadata.channel}</span>
-                            </div>
+                            {!isChannel(metadata) && (
+                                <div className="flex items-center gap-2">
+                                    <User className="h-4 w-4" />
+                                    <span>{metadata.channel}</span>
+                                </div>
+                            )}
+
+                            {isChannel(metadata) && (
+                                <div className="flex items-center gap-2">
+                                    <span>
+                                        {formatNumber(
+                                            metadata.channel_follower_count
+                                        )}{' '}
+                                        subscribers
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex items-center justify-between">
@@ -105,8 +123,9 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                             </p>
                             <div>
                                 {job.progress === 100 &&
-                                'jobType' in job &&
-                                job.jobType !== JobTypeMetadata ? (
+                                ('jobType' in job
+                                    ? job.jobType !== JobTypeMetadata
+                                    : true) ? (
                                     <div className={'flex gap-2'}>
                                         <span>Download Finished</span>
                                         <CircleCheck
