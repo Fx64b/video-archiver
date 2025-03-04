@@ -27,7 +27,7 @@ const Recent: React.FC = () => {
                 }
                 setLoading(false)
             })
-            .catch(err => {
+            .catch((err) => {
                 console.error('Error fetching recent jobs:', err)
                 setMessage('Error loading recent jobs.')
                 setLoading(false)

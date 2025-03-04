@@ -1,6 +1,8 @@
 import { Job, JobTypeMetadata, Metadata } from '@/types'
 import { CircleCheck, Clock, User } from 'lucide-react'
 
+import React from 'react'
+
 import Image from 'next/image'
 
 import { formatSeconds, getThumbnailUrl } from '@/lib/utils'
@@ -9,7 +11,6 @@ import { isVideoMetadata } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import React from 'react'
 
 interface JobProgress {
     jobID: string
@@ -27,7 +28,10 @@ interface MetadataCardProps {
 
 // TODO: This component need serious refactoring and improvement but will do for now
 
-export const MetadataCard: React.FC<MetadataCardProps> = ({ metadata, job }) => {
+export const MetadataCard: React.FC<MetadataCardProps> = ({
+    metadata,
+    job,
+}) => {
     const thumbnailUrl = getThumbnailUrl(metadata)
 
     // Hacky and unreliable way to determine if the metadata is a playlists because all playlists will have a follower count of 0
@@ -69,7 +73,9 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({ metadata, job }) => 
 
                 <div className="flex-1 p-4">
                     <CardHeader>
-                        <CardTitle>{metadata.title ?? metadata.channel}</CardTitle>
+                        <CardTitle>
+                            {metadata.title ?? metadata.channel}
+                        </CardTitle>
                     </CardHeader>
 
                     <CardContent>
@@ -99,19 +105,28 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({ metadata, job }) => 
                             </p>
                             <div>
                                 {job.progress === 100 &&
-                                ('jobType' in job && job.jobType !== JobTypeMetadata) ? (
+                                'jobType' in job &&
+                                job.jobType !== JobTypeMetadata ? (
                                     <div className={'flex gap-2'}>
                                         <span>Download Finished</span>
                                         <CircleCheck
                                             className={'text-green-500'}
                                         />
                                     </div>
-                                ) : ('currentVideoProgress' in job && job.currentVideoProgress > 100) ? (
+                                ) : 'currentVideoProgress' in job &&
+                                  job.currentVideoProgress > 100 ? (
                                     <span>Video already downloaded</span>
                                 ) : (
                                     <span>
-                                        Downloading {('jobType' in job) ? job.jobType : 'video'} (
-                                        {('currentVideoProgress' in job) ? job.currentVideoProgress : job.progress}%)
+                                        Downloading{' '}
+                                        {'jobType' in job
+                                            ? job.jobType
+                                            : 'video'}{' '}
+                                        (
+                                        {'currentVideoProgress' in job
+                                            ? job.currentVideoProgress
+                                            : job.progress}
+                                        %)
                                     </span>
                                 )}
                             </div>
