@@ -117,6 +117,10 @@ func (s *Service) getMetadataPath(jobID string) (string, bool) {
 }
 
 func (s *Service) processJob(ctx context.Context, job domain.Job) error {
+	job.Status = domain.JobStatusPending
+	job.Progress = 0
+	_ = s.jobs.Create(&job)
+
 	job.Status = domain.JobStatusInProgress
 	if err := s.jobs.Update(&job); err != nil {
 		return fmt.Errorf("failed to update job status: %w", err)
@@ -250,4 +254,12 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 	s.hub.broadcast <- update
 
 	return nil
+}
+
+func (s *Service) GetJobWithMetadata(jobID string) (*domain.JobWithMetadata, error) {
+	return s.jobs.GetJobWithMetadata(jobID)
+}
+
+func (s *Service) GetRecentWithMetadata(limit int) ([]*domain.JobWithMetadata, error) {
+	return s.jobs.GetRecentWithMetadata(limit)
 }

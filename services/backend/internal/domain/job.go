@@ -27,6 +27,8 @@ type JobRepository interface {
 	GetByID(id string) (*Job, error)
 	GetRecent(limit int) ([]*Job, error)
 	StoreMetadata(jobID string, metadata Metadata) error
+	GetJobWithMetadata(jobID string) (*JobWithMetadata, error)
+	GetRecentWithMetadata(limit int) ([]*JobWithMetadata, error)
 }
 
 type JobType string
@@ -36,6 +38,11 @@ const (
 	JobTypeAudio    JobType = "audio"
 	JobTypeMetadata JobType = "metadata"
 )
+
+type JobWithMetadata struct {
+	Job      *Job     `json:"job"`
+	Metadata Metadata `json:"metadata,omitempty"`
+}
 
 type ProgressUpdate struct {
 	JobID                string  `json:"jobID"`
@@ -86,6 +93,17 @@ type PlaylistMetadata struct {
 	Type             string      `json:"_type"`
 }
 
+type ChannelMetadata struct {
+	ID               string      `json:"id"`
+	Channel          string      `json:"channel"`
+	URL              string      `json:"channel_url"`
+	Description      string      `json:"description"`
+	Thumbnails       []Thumbnail `json:"thumbnails"`
+	ChannelFollowers int         `json:"channel_follower_count"`
+	PlaylistCount    int         `json:"playlist_count"`
+	Type             string      `json:"_type"`
+}
+
 type MetadataUpdate struct {
 	JobID    string   `json:"jobID"`
 	Metadata Metadata `json:"metadata"`
@@ -101,4 +119,8 @@ func (p *PlaylistMetadata) GetType() string {
 
 func (v *VideoMetadata) GetType() string {
 	return "video"
+}
+
+func (c *ChannelMetadata) GetType() string {
+	return "channel"
 }

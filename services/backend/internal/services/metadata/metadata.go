@@ -3,6 +3,7 @@ package metadata
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"video-archiver/internal/domain"
 )
 
@@ -18,7 +19,23 @@ func ExtractMetadata(path string) (domain.Metadata, error) {
 		return nil, err
 	}
 
-	if typeStr, ok := rawData["_type"].(string); ok && typeStr == "playlist" {
+	typeStr, _ := rawData["_type"].(string)
+
+	_, hasChannelID := rawData["channel_id"]
+	title, _ := rawData["title"].(string)
+	isChannel := typeStr == "playlist" && hasChannelID && strings.HasSuffix(title, " - Videos")
+
+	if isChannel {
+		var metadata domain.ChannelMetadata
+		if err := json.Unmarshal(data, &metadata); err != nil {
+			return nil, err
+		}
+		if strings.HasSuffix(metadata.Channel, " - Videos") {
+			metadata.Channel = strings.TrimSuffix(metadata.Channel, " - Videos")
+		}
+		metadata.Type = "channel"
+		return &metadata, nil
+	} else if typeStr == "playlist" {
 		var metadata domain.PlaylistMetadata
 		if err := json.Unmarshal(data, &metadata); err != nil {
 			return nil, err
