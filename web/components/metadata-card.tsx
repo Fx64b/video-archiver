@@ -1,4 +1,4 @@
-import { JobTypeMetadata, Metadata } from '@/types'
+import { Job, JobTypeMetadata, Metadata } from '@/types'
 import { CircleCheck, Clock, User } from 'lucide-react'
 
 import Image from 'next/image'
@@ -9,6 +9,7 @@ import { isVideoMetadata } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import React from 'react'
 
 interface JobProgress {
     jobID: string
@@ -21,18 +22,19 @@ interface JobProgress {
 
 interface MetadataCardProps {
     metadata: Metadata
-    job: JobProgress
+    job: JobProgress | Job | undefined
 }
 
-export const MetadataCard: React.FC<MetadataCardProps> = ({
-    metadata,
-    job,
-}) => {
+// TODO: This component need serious refactoring and improvement but will do for now
+
+export const MetadataCard: React.FC<MetadataCardProps> = ({ metadata, job }) => {
     const thumbnailUrl = getThumbnailUrl(metadata)
 
     // Hacky and unreliable way to determine if the metadata is a playlists because all playlists will have a follower count of 0
     // Currently, there seems to be no other way to determine if the metadata is a channel or playlists by the metadata itself
     const isPlaylist = metadata.channel_follower_count === 0
+
+    if (!job) return null
 
     return (
         <Card className="w-full">
@@ -53,7 +55,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                             <div className={'relative h-36 w-36'}>
                                 <Image
                                     src={thumbnailUrl}
-                                    alt={metadata.title}
+                                    alt={metadata.channel}
                                     fill
                                     className="ml-4 w-1/2 rounded-full object-cover"
                                     sizes="(max-width: 768px) 100vw, 192px"
@@ -67,7 +69,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
 
                 <div className="flex-1 p-4">
                     <CardHeader>
-                        <CardTitle>{metadata.title}</CardTitle>
+                        <CardTitle>{metadata.title ?? metadata.channel}</CardTitle>
                     </CardHeader>
 
                     <CardContent>
@@ -88,7 +90,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
 
                         <div className="flex items-center justify-between">
                             <p>
-                                {job.totalItems > 1 && (
+                                {'totalItems' in job && job.totalItems > 1 && (
                                     <>
                                         Progress: {job.currentItem}/
                                         {job.totalItems}
@@ -97,19 +99,19 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                             </p>
                             <div>
                                 {job.progress === 100 &&
-                                job.jobType !== JobTypeMetadata ? (
+                                ('jobType' in job && job.jobType !== JobTypeMetadata) ? (
                                     <div className={'flex gap-2'}>
                                         <span>Download Finished</span>
                                         <CircleCheck
                                             className={'text-green-500'}
                                         />
                                     </div>
-                                ) : job.currentVideoProgress > 100 ? (
+                                ) : ('currentVideoProgress' in job && job.currentVideoProgress > 100) ? (
                                     <span>Video already downloaded</span>
                                 ) : (
                                     <span>
-                                        Downloading {job.jobType} (
-                                        {job.currentVideoProgress}%)
+                                        Downloading {('jobType' in job) ? job.jobType : 'video'} (
+                                        {('currentVideoProgress' in job) ? job.currentVideoProgress : job.progress}%)
                                     </span>
                                 )}
                             </div>

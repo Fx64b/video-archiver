@@ -22,6 +22,10 @@ export type JobType = string;
 export const JobTypeVideo: JobType = "video";
 export const JobTypeAudio: JobType = "audio";
 export const JobTypeMetadata: JobType = "metadata";
+export interface JobWithMetadata {
+  job?: Job;
+  metadata?: Metadata;
+}
 export interface ProgressUpdate {
   jobID: string;
   jobType: string;
@@ -63,6 +67,16 @@ export interface PlaylistMetadata {
   channel_id: string;
   channel: string;
   channel_url: string;
+  channel_follower_count: number /* int */;
+  playlist_count: number /* int */;
+  _type: string;
+}
+export interface ChannelMetadata {
+  id: string;
+  channel: string;
+  channel_url: string;
+  description: string;
+  thumbnails: Thumbnail[];
   channel_follower_count: number /* int */;
   playlist_count: number /* int */;
   _type: string;

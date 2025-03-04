@@ -1,13 +1,15 @@
 import useAppState from '@/store/appState'
-import { Job } from '@/types'
+import { JobWithMetadata } from '@/types'
 
 import React, { useEffect, useState } from 'react'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+import { MetadataCard } from '@/components/metadata-card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const Recent: React.FC = () => {
-    const [jobs, setJobs] = useState<Job[]>()
+    const [jobs, setJobs] = useState<JobWithMetadata[]>([])
+    const [loading, setLoading] = useState(true)
     const [message, setMessage] = useState('')
 
     useEffect(() => {
@@ -15,7 +17,7 @@ const Recent: React.FC = () => {
             .then((res) => {
                 if (!res.ok) {
                     setMessage('No recent jobs found.')
-                    return
+                    return null
                 }
                 return res.json()
             })
@@ -23,6 +25,12 @@ const Recent: React.FC = () => {
                 if (data) {
                     setJobs(data.message)
                 }
+                setLoading(false)
+            })
+            .catch(err => {
+                console.error('Error fetching recent jobs:', err)
+                setMessage('Error loading recent jobs.')
+                setLoading(false)
             })
 
         const unsubscribe = useAppState.subscribe((state) => {
@@ -33,22 +41,31 @@ const Recent: React.FC = () => {
         })
     }, [])
 
+    if (loading) {
+        return (
+            <div className="mb-4 max-w-screen-md space-y-4">
+                <Card>
+                    <CardContent className="p-4">
+                        <Skeleton className="h-36 w-full" />
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
+
     return (
-        <div className="max-w-screen-md space-y-4">
-            {jobs &&
-                !message &&
+        <div className="mb-4 max-w-screen-md space-y-4">
+            {jobs.length > 0 ? (
                 jobs.map((job) => (
-                    <Card key={job.id} className="w-full max-w-screen-sm">
-                        <CardHeader>
-                            <CardTitle>{job.url}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <p>Progress: ({job.progress}%)</p>
-                            <Progress value={job.progress} className="mt-2" />
-                        </CardContent>
-                    </Card>
-                ))}
-            {message && <p>{message}</p>}
+                    <MetadataCard
+                        key={job.job?.id}
+                        metadata={job.metadata}
+                        job={job.job}
+                    />
+                ))
+            ) : (
+                <p>{message || 'No recent downloads found.'}</p>
+            )}
         </div>
     )
 }
