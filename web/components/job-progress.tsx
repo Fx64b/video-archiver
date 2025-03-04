@@ -48,24 +48,10 @@ const JobProgress: React.FC = () => {
                 }
 
                 setJobs((prev) => {
-                    const updatedJobs = {
+                    return {
                         ...prev,
                         [data.jobID]: data as JobProgress,
                     }
-
-                    // If progress is 100%, remove from active after a short delay
-                    /*                if (data.progress === 100) {
-                        setTimeout(() => {
-                            removeActiveDownload(data.jobID)
-                            setJobs(current => {
-                                const newJobs = {...current}
-                                delete newJobs[data.jobID]
-                                return newJobs
-                            })
-                        }, 2000)
-                    }*/
-
-                    return updatedJobs
                 })
             }
         }

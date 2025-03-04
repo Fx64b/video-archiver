@@ -1,4 +1,3 @@
-// web/components/recent.tsx
 import useAppState from '@/store/appState'
 import { JobWithMetadata } from '@/types'
 
