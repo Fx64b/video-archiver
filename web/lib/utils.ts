@@ -28,7 +28,7 @@ export const isVideoMetadata = (
 }
 
 export const isChannel = (metadata: Metadata) => {
-    return metadata._type === 'channel' || metadata.channel
+    return metadata._type === 'channel'
 }
 
 export function getThumbnailUrl(metadata: Metadata): string | null {
