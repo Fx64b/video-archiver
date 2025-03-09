@@ -1,11 +1,10 @@
+import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
 import { Metadata, MetadataUpdate, ProgressUpdate } from '@/types'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import { MetadataCard } from '@/components/metadata-card'
-import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 
 interface JobProgress {
     jobID: string
@@ -19,26 +18,19 @@ interface JobProgress {
 const JobProgress: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, JobProgress>>({})
     const [metadata, setMetadata] = useState<Record<string, Metadata>>({})
-    const { addActiveDownload, removeActiveDownload, getRecentMetadata } =
-        useAppState()
+    const { connect, subscribe } = useWebSocketStore()
+    const { addActiveDownload, getRecentMetadata } = useAppState()
 
     useEffect(() => {
-        const socket = new WebSocket(
-            process.env.NEXT_PUBLIC_SERVER_URL_WS + '/ws'
-        )
+        // Connect websocket
+        connect()
 
-        socket.onmessage = (event) => {
-            const data: ProgressUpdate | MetadataUpdate = JSON.parse(event.data)
-
-            if ('metadata' in data && data?.metadata) {
-                setMetadata((prev) => ({
-                    ...prev,
-                    [data.jobID]: data.metadata as Metadata,
-                }))
-            } else if ('progress' in data) {
+        // Subscribe to progress updates
+        const unsubscribeProgress = subscribe(
+            'progress',
+            (data: ProgressUpdate) => {
                 addActiveDownload(data.jobID)
 
-                // Check if we have metadata from recent jobs
                 const recentMetadata = getRecentMetadata(data.jobID)
                 if (recentMetadata) {
                     setMetadata((prev) => ({
@@ -47,23 +39,31 @@ const JobProgress: React.FC = () => {
                     }))
                 }
 
-                setJobs((prev) => {
-                    return {
-                        ...prev,
-                        [data.jobID]: data as JobProgress,
-                    }
-                })
+                setJobs((prev) => ({
+                    ...prev,
+                    [data.jobID]: data as JobProgress,
+                }))
             }
-        }
+        )
 
-        socket.onclose = () => {
-            console.log('WebSocket connection closed')
-        }
+        // Subscribe to metadata updates
+        const unsubscribeMetadata = subscribe(
+            'metadata',
+            (data: MetadataUpdate) => {
+                if (data?.metadata) {
+                    setMetadata((prev) => ({
+                        ...prev,
+                        [data.jobID]: data.metadata as Metadata,
+                    }))
+                }
+            }
+        )
 
         return () => {
-            socket.close()
+            unsubscribeProgress()
+            unsubscribeMetadata()
         }
-    }, [addActiveDownload, removeActiveDownload, getRecentMetadata])
+    }, [connect, subscribe, addActiveDownload, getRecentMetadata])
 
     return (
         <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
@@ -76,13 +76,7 @@ const JobProgress: React.FC = () => {
                             metadata={metadata[jobID]}
                             job={job}
                         />
-                    ) : (
-                        <Card key={jobID}>
-                            <CardContent className="p-4">
-                                <Skeleton className="h-36 w-full" />
-                            </CardContent>
-                        </Card>
-                    )
+                    ) : null
                 )}
         </div>
     )
