@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/Fx64b/video-archiver/compare/0.1.0.0-BETA...0.1.1.0-BETA) (2025-03-09)
+
+
+### Bug Fixes
+
+* **web/metadata:** isChannel not working propperly ([7f7f814](https://github.com/Fx64b/video-archiver/commit/7f7f81431305fd602c0d5d190b193772f7d41f7a))
+
+
+### Features
+
+* **web/websocket:** add automatic websocket reconnect ([c7edda6](https://github.com/Fx64b/video-archiver/commit/c7edda6c73b32a4326a5cbc2d0864295d5ab734e))
+
 # 1.0.0 (2025-03-04)
 
 
