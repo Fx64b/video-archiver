@@ -1,7 +1,8 @@
 'use client'
 
+import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
-import { LoaderCircle, Settings } from 'lucide-react'
+import { AlertCircle, LoaderCircle, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useState } from 'react'
@@ -15,8 +16,9 @@ export function UrlInput() {
     const [error, setError] = useState('')
 
     const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL
-    const setIsDownloaindg = useAppState((state) => state.setIsDownloading)
+    const setIsDownloading = useAppState((state) => state.setIsDownloading)
     const isDownloading = useAppState((state) => state.isDownloading)
+    const isConnected = useWebSocketStore((state) => state.isConnected)
 
     const isValidYoutubeUrl = (url: string) => {
         const youtubeRegex =
@@ -31,7 +33,12 @@ export function UrlInput() {
             return
         }
 
-        setIsDownloaindg(true)
+        if (!isConnected) {
+            setError('No connection to server. Please try again later.')
+            return
+        }
+
+        setIsDownloading(true)
         try {
             const response = await fetch(`${SERVER_URL}/download`, {
                 method: 'POST',
@@ -40,7 +47,7 @@ export function UrlInput() {
             })
 
             if (!response.ok) {
-                setError('Download failed.')
+                throw new Error('Download failed')
             }
 
             setUrl('')
@@ -49,7 +56,7 @@ export function UrlInput() {
             console.error(error)
             setError('Failed to download the video.')
         } finally {
-            setIsDownloaindg(false)
+            setIsDownloading(false)
         }
     }
 
@@ -80,7 +87,7 @@ export function UrlInput() {
                 <Button
                     type="submit"
                     onClick={download}
-                    disabled={isDownloading}
+                    disabled={isDownloading || !isConnected}
                     className={'w-24'}
                 >
                     {isDownloading ? (
@@ -90,6 +97,14 @@ export function UrlInput() {
                     )}
                 </Button>
             </div>
+
+            {!isConnected && (
+                <div className={`text-destructive mt-2 flex items-center ${isConnected ? 'display-none' : 'fade-in'}`}>
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                    <span>Connection lost. Reconnecting...</span>
+                </div>
+            )}
+
             <div className="my-2" />
             {error && <AlertDestructive message={error} />}
             <div className="my-2" />

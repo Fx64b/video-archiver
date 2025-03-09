@@ -35,7 +35,12 @@ git clone https://github.com/Fx64b/video-archiver.git
 cd video-archiver
 ```
 
-2. Start the application:
+2. Set .env variables:
+```bash
+cp web/.env.local.example web/.env.local
+```
+
+3. Start the application:
 ```bash
 ./run.sh
 ```

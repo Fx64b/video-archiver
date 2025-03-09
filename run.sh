@@ -5,6 +5,7 @@ set -e
 export CURRENT_UID=$(id -u)
 export CURRENT_GID=$(id -g)
 DEBUG=""
+export COMPOSE_BAKE=true
 
 while [[ $# -gt 0 ]]; do
   case $1 in
