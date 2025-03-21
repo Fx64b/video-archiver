@@ -110,7 +110,7 @@ export function AppSidebar() {
             </SidebarContent>
             <SidebarFooter>
                 <SidebarGroupLabel className={'gap-x-4'}>
-                    <p className={'text-md'}>version {version}</p>{' '}
+                    <p className={'text-md'}>version {version}-BETA</p>{' '}
                     <Link
                         target={'_blank'}
                         href={'https://github.com/Fx64b/video-archiver'}
