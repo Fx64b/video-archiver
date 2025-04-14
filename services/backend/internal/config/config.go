@@ -8,7 +8,7 @@ type Config struct {
 		DatabasePath string `env:"DATABASE_PATH" envDefault:"./data/db/video-archiver.db"`
 	}
 	YtDlp struct {
-		Concurrency int    `env:"YTDLP_CONCURRENCY" envDefault:"4"`
+		Concurrency int    `env:"YTDLP_CONCURRENCY" envDefault:"2"`
 		MaxQuality  string `env:"YTDLP_MAX_QUALITY" envDefault:"1080"`
 	}
 }

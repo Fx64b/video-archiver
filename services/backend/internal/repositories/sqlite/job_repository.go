@@ -179,6 +179,55 @@ func (r *JobRepository) GetRecentWithMetadata(limit int) ([]*domain.JobWithMetad
 	return result, nil
 }
 
+func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
+	rows, err := r.db.Query(`
+		SELECT job_id, url, status, progress, created_at, updated_at 
+		FROM jobs`)
+	if err != nil {
+		return nil, fmt.Errorf("get jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []*domain.Job
+	for rows.Next() {
+		job := &domain.Job{}
+		err := rows.Scan(&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.CreatedAt, &job.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("scan job row: %w", err)
+		}
+		jobs = append(jobs, job)
+	}
+	return jobs, nil
+}
+
+func (r *JobRepository) CountVideos() (int, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM videos").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count videos: %w", err)
+	}
+	return count, nil
+}
+
+func (r *JobRepository) CountPlaylists() (int, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM playlists").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count playlists: %w", err)
+	}
+	return count, nil
+}
+
+func (r *JobRepository) CountChannels() (int, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM channels").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count channels: %w", err)
+	}
+	return count, nil
+}
+
 func (r *JobRepository) getMetadataForJob(jobID string) (domain.Metadata, error) {
 	var metadataJSON string
 	var metadataType string
