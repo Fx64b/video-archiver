@@ -55,10 +55,11 @@ The `run.sh` script provides several options to manage the application:
 ./run.sh [options]
 
 Options:
-  --clear    Clear the database and downloads
-  --build    Rebuild the containers and regenerate TypeScript types
-  --debug    Enable debug logging in backend
-  --help|-h  Show help message
+  --clear         Clear the database and downloads
+  --build         Rebuild the containers and regenerate TypeScript types
+  --debug         Enable debug logging in backend
+  --backend-only  Start only the backend service
+  --help|-h       Show help message
 ```
 
 Common use cases:

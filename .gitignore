@@ -29,6 +29,7 @@ app/next-env.d.ts
 *.wmv
 *.db
 repomix-output.txt
+repomix-output.xml
 data/*
 *.journal
 *.part
