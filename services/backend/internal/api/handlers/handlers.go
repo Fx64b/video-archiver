@@ -10,6 +10,7 @@ import (
 	"time"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/download"
+	"video-archiver/internal/util/statistics"
 )
 
 type DownloadRequest struct {
@@ -22,11 +23,13 @@ type Response struct {
 
 type Handler struct {
 	downloadService *download.Service
+	downloadPath    string
 }
 
-func NewHandler(downloadService *download.Service) *Handler {
+func NewHandler(downloadService *download.Service, downloadPath string) *Handler {
 	return &Handler{
 		downloadService: downloadService,
+		downloadPath:    downloadPath,
 	}
 }
 
@@ -36,6 +39,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Post("/download", h.HandleDownload)
 	r.Get("/recent", h.HandleRecent)
 	r.Get("/job/:id", h.HandleGetJob)
+	r.Get("/statistics", h.HandleGetStatistics)
 }
 
 func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
@@ -139,6 +143,19 @@ func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{Message: jobWithMetadata}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) HandleGetStatistics(w http.ResponseWriter, r *http.Request) {
+	stats, err := statistics.GetStatistics(h.downloadService.GetRepository(), h.downloadPath)
+	if err != nil {
+		log.WithError(err).Error("Failed to get statistics")
+		http.Error(w, "Failed to get statistics", http.StatusInternalServerError)
+		return
+	}
+
+	resp := Response{Message: stats}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
