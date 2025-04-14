@@ -4,8 +4,10 @@ set -e
 
 export CURRENT_UID=$(id -u)
 export CURRENT_GID=$(id -g)
-DEBUG=""
 export COMPOSE_BAKE=true
+
+DEBUG=""
+SERVICES=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -22,13 +24,18 @@ while [[ $# -gt 0 ]]; do
       BUILD="--build"
       shift
       ;;
+    --backend-only)
+      SERVICES="backend"
+      shift
+      ;;
     --help|-h)
       echo "This script is used to run the application in a docker container."
       echo "Available flags:"
-      echo "  --clear    Clear the database and downloads"
-      echo "  --build    Rebuild the containers"
-      echo "  --debug    Enable debug logging in backend"
-      echo "  --help|-h  Show this help message"
+      echo "  --clear         Clear the database and downloads"
+      echo "  --build         Rebuild the containers"
+      echo "  --debug         Enable debug logging in backend"
+      echo "  --backend-only  Start only the backend service"
+      echo "  --help|-h       Show this help message"
       exit 0
       ;;
     *)
@@ -54,7 +61,7 @@ if [ -n "$BUILD" ]; then
    mkdir -p ../../web/types
    cp generated/types/index.ts ../../web/types/index.ts
    cd ../..
-   docker-compose up --build --remove-orphans
+   docker-compose up --build --remove-orphans $SERVICES
 else
-   docker-compose up --remove-orphans
+   docker-compose up --remove-orphans $SERVICES
 fi
