@@ -1,5 +1,5 @@
 onlyBuiltDependencies:
-  - sharp
+    - sharp
 
 packages:
-  - "packages/**"
+    - 'packages/**'

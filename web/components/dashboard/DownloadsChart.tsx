@@ -152,7 +152,7 @@ export const DownloadsChart: React.FC<DownloadsChartProps> = ({
                     </PieChart>
                 </ChartContainer>
             </CardContent>
-            <CardFooter className="flex justify-center gap-4 text-sm h-5">
+            <CardFooter className="flex h-5 justify-center gap-4 text-sm">
                 <div className="text-muted-foreground flex items-center gap-2 leading-none">
                     <div
                         className={

@@ -159,10 +159,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                 )}
                             </div>
                         </div>
-                        <Progress
-                            value={getJobProgress()}
-                            className="mt-2"
-                        />
+                        <Progress value={getJobProgress()} className="mt-2" />
                     </CardContent>
                 </div>
             </div>

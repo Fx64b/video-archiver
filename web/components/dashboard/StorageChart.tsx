@@ -23,9 +23,9 @@ import {
 } from '@/components/ui/chart'
 
 interface StorageChartData {
-    name: string;
-    storage: number;
-    fill: string;
+    name: string
+    storage: number
+    fill: string
 }
 
 interface StorageChartProps {
@@ -43,15 +43,17 @@ const VIDEO_COLORS = [
     'hsl(16, 80%, 60%)',
     'hsl(54, 70%, 50%)',
     'hsl(96, 60%, 40%)',
-    'hsl(150, 60%, 40%)'
-];
+    'hsl(150, 60%, 40%)',
+]
 
 export const StorageChart: React.FC<StorageChartProps> = ({ statistics }) => {
-    const [storageChartData, setStorageChartData] = useState<StorageChartData[] | null>(null)
+    const [storageChartData, setStorageChartData] = useState<
+        StorageChartData[] | null
+    >(null)
 
     useEffect(() => {
         if (statistics) {
-            const chartData: StorageChartData[] = [];
+            const chartData: StorageChartData[] = []
 
             // Add top videos
             if (statistics.top_videos && statistics.top_videos.length > 0) {
@@ -59,9 +61,9 @@ export const StorageChart: React.FC<StorageChartProps> = ({ statistics }) => {
                     chartData.push({
                         name: `${video.channel}: ${video.title}`,
                         storage: video.size,
-                        fill: VIDEO_COLORS[index % VIDEO_COLORS.length]
-                    });
-                });
+                        fill: VIDEO_COLORS[index % VIDEO_COLORS.length],
+                    })
+                })
             }
 
             // Add "Other" category
@@ -69,28 +71,28 @@ export const StorageChart: React.FC<StorageChartProps> = ({ statistics }) => {
                 chartData.push({
                     name: 'Other Files',
                     storage: statistics.other_storage,
-                    fill: 'hsl(var(--muted))'
-                });
+                    fill: 'hsl(var(--muted))',
+                })
             }
 
-            setStorageChartData(chartData);
+            setStorageChartData(chartData)
         }
     }, [statistics])
 
     const chartConfig: ChartConfig = {
         storage: {
             label: 'Storage',
-        }
-    };
+        },
+    }
 
     // Add each video to the chart config
     if (storageChartData) {
         storageChartData.forEach((item, index) => {
             chartConfig[`video-${index}`] = {
                 label: item.name,
-                color: item.fill
-            };
-        });
+                color: item.fill,
+            }
+        })
     }
 
     const totalStorage = React.useMemo(() => {
@@ -115,11 +117,16 @@ export const StorageChart: React.FC<StorageChartProps> = ({ statistics }) => {
                     <PieChart>
                         <ChartTooltip
                             cursor={false}
-                            content={<ChartTooltipContent
-                                formatter={(value, name) => {
-                                    return [formatBytes(value as number), " - "+name];
-                                }}
-                            />}
+                            content={
+                                <ChartTooltipContent
+                                    formatter={(value, name) => {
+                                        return [
+                                            formatBytes(value as number),
+                                            ' - ' + name,
+                                        ]
+                                    }}
+                                />
+                            }
                         />
                         <Pie
                             data={storageChartData || []}
@@ -172,7 +179,7 @@ export const StorageChart: React.FC<StorageChartProps> = ({ statistics }) => {
                     </PieChart>
                 </ChartContainer>
             </CardContent>
-            <CardFooter className="flex justify-center gap-2 text-sm text-muted-foreground">
+            <CardFooter className="text-muted-foreground flex justify-center gap-2 text-sm">
                 <div className="text-center italic">
                     Hover over chart segments to see details
                 </div>
