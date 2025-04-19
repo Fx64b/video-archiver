@@ -86,3 +86,22 @@ export interface MetadataUpdate {
   metadata: Metadata;
 }
 export type Metadata = any;
+
+//////////
+// source: statistics.go
+
+export interface Statistics {
+  total_jobs: number /* int */;
+  total_videos: number /* int */;
+  total_playlists: number /* int */;
+  total_channels: number /* int */;
+  total_storage: number /* int */;
+  top_videos: VideoStorageInfo[];
+  other_storage: number /* int */;
+  last_update: string /* RFC3339 */;
+}
+export interface VideoStorageInfo {
+  title: string;
+  size: number /* int */;
+  channel: string;
+}

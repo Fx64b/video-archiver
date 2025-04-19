@@ -1,0 +1,5 @@
+onlyBuiltDependencies:
+    - sharp
+
+packages:
+    - 'packages/**'

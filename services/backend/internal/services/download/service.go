@@ -78,6 +78,10 @@ func (s *Service) Submit(job domain.Job) error {
 	return nil
 }
 
+func (s *Service) GetRepository() domain.JobRepository {
+	return s.jobs
+}
+
 func (s *Service) GetRecent(limit int) ([]*domain.Job, error) {
 	return s.jobs.GetRecent(limit)
 }

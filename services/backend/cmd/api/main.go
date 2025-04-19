@@ -52,8 +52,9 @@ __     _____ ____  _____ ___
 	downloadService := download.NewService(&download.Config{
 		JobRepository: jobRepo,
 		DownloadPath:  os.Getenv("DOWNLOAD_PATH"),
-		Concurrency:   8,
-		MaxQuality:    1080,
+		// TODO: load these values from environment variables
+		Concurrency: 2,
+		MaxQuality:  1080,
 	})
 
 	if err := downloadService.Start(); err != nil {
@@ -61,7 +62,7 @@ __     _____ ____  _____ ___
 	}
 	defer downloadService.Stop()
 
-	handler := handlers.NewHandler(downloadService)
+	handler := handlers.NewHandler(downloadService, os.Getenv("DOWNLOAD_PATH"))
 
 	apiRouter := chi.NewRouter()
 	handler.RegisterRoutes(apiRouter)

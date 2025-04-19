@@ -24,11 +24,11 @@ export type Metadata = PlaylistMetadata | VideoMetadata | ChannelMetadata
 export const isVideoMetadata = (
     metadata: Metadata
 ): metadata is VideoMetadata => {
-    return metadata._type === 'video'
+    return metadata?._type === 'video'
 }
 
 export const isChannel = (metadata: Metadata) => {
-    return metadata._type === 'channel'
+    return metadata?._type === 'channel'
 }
 
 export function getThumbnailUrl(metadata: Metadata): string | null {
@@ -51,10 +51,10 @@ export function getThumbnailUrl(metadata: Metadata): string | null {
         }
     }
 
-    return metadata.thumbnails[0]?.url || null
+    return metadata?.thumbnails[0]?.url || null
 }
 
-export function formatNumber(num: number): string {
+export function formatSubscriberNumber(num: number): string {
     if (num < 1000) {
         return num.toString()
     }
@@ -64,4 +64,17 @@ export function formatNumber(num: number): string {
     }
 
     return (num / 1000000).toFixed(2).replace(/\.?0+$/, '') + 'M'
+}
+
+export function formatBytes(bytes: number, decimals: number = 1): string {
+    if (bytes === 0) return '0 Bytes'
+
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+    return (
+        parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i]
+    )
 }

@@ -99,7 +99,9 @@ export function UrlInput() {
             </div>
 
             {!isConnected && (
-                <div className={`text-destructive mt-2 flex items-center ${isConnected ? 'display-none' : 'fade-in'}`}>
+                <div
+                    className={`text-destructive mt-2 flex items-center ${isConnected ? 'display-none' : 'fade-in'}`}
+                >
                     <AlertCircle className="mr-2 h-4 w-4" />
                     <span>Connection lost. Reconnecting...</span>
                 </div>
