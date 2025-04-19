@@ -1,3 +1,20 @@
+# [1.2.0](https://github.com/Fx64b/video-archiver/compare/0.1.1.0-BETA...0.1.2.0-BETA) (2025-04-19)
+
+
+### Bug Fixes
+
+* **deps:** attempt to fix pnpm-workspace.yaml ([b9d4a23](https://github.com/Fx64b/video-archiver/commit/b9d4a235854da0285bba6d2d6f8c2cd39a2e33b6))
+* **docker:** update port mapping from 3001 to 3000 ([3c80f06](https://github.com/Fx64b/video-archiver/commit/3c80f0659cd8978dd54a2c0b7ef5c2ac3caa5e13))
+
+
+### Features
+
+* **backend/statistics:** Add statistics service ([2becb68](https://github.com/Fx64b/video-archiver/commit/2becb68df845d3075d19d725c99feb276b796c24))
+* **backend/statistics:** enhance statistics with top videos and other storage metrics ([64540e7](https://github.com/Fx64b/video-archiver/commit/64540e7beca1853adf70a18ee6cc3102e21c8852))
+* **scripts:** add `--backend-only` flag ([a6a627a](https://github.com/Fx64b/video-archiver/commit/a6a627a166b6490e253a8ba1bf914ac9fc661759))
+* **web/statistics:** add DownloadsChart and StorageChart components for statistics visualization ([02f9df3](https://github.com/Fx64b/video-archiver/commit/02f9df352889fd8fec60de166a19e4bdc7c108a8))
+* **web/statistics:** load and display basic download statistics ([b2b8c63](https://github.com/Fx64b/video-archiver/commit/b2b8c63e262ddba227cde7d767cc0d411d5cc43d))
+
 # [1.1.0](https://github.com/Fx64b/video-archiver/compare/0.1.0.0-BETA...0.1.1.0-BETA) (2025-03-09)
 
 
