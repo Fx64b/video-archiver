@@ -1,4 +1,4 @@
-import { Job, JobTypeMetadata, Metadata } from '@/types'
+import { Job, JobTypeMetadata, JobTypeVideo, Metadata } from '@/types'
 import { CircleCheck, Clock, User } from 'lucide-react'
 
 import React from 'react'
@@ -6,8 +6,8 @@ import React from 'react'
 import Image from 'next/image'
 
 import {
-    formatNumber,
     formatSeconds,
+    formatSubscriberNumber,
     getThumbnailUrl,
     isChannel,
 } from '@/lib/utils'
@@ -41,9 +41,18 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
 
     // Hacky and unreliable way to determine if the metadata is a playlists because all playlists will have a follower count of 0
     // Currently, there seems to be no other way to determine if the metadata is a channel or playlists by the metadata itself
-    const isPlaylist = metadata.channel_follower_count === 0
+    const isPlaylist = metadata?.channel_follower_count === 0
 
     if (!job) return null
+
+    const getJobProgress = () => {
+        if ('jobType' in job) {
+            if (job.jobType === JobTypeVideo) {
+                return job.currentVideoProgress
+            }
+        }
+        return job.progress > 100 ? 100 : job.progress
+    }
 
     return (
         <Card className="w-full">
@@ -79,7 +88,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                 <div className="flex-1 p-4">
                     <CardHeader>
                         <CardTitle>
-                            {metadata.title ?? metadata.channel}
+                            {metadata?.title ?? metadata?.channel}
                         </CardTitle>
                     </CardHeader>
 
@@ -103,7 +112,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                             {isChannel(metadata) && (
                                 <div className="flex items-center gap-2">
                                     <span>
-                                        {formatNumber(
+                                        {formatSubscriberNumber(
                                             metadata.channel_follower_count
                                         )}{' '}
                                         subscribers
@@ -151,7 +160,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                             </div>
                         </div>
                         <Progress
-                            value={job.progress > 100 ? 100 : job.progress}
+                            value={getJobProgress()}
                             className="mt-2"
                         />
                     </CardContent>
