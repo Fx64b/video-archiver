@@ -25,6 +25,13 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          STORE_PATH=$(pnpm store path --silent || echo "/home/runner/.pnpm-store")
+          echo "STORE_PATH=$STORE_PATH" >> $GITHUB_ENV
+          echo "Resolved STORE_PATH: $STORE_PATH"
+
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
