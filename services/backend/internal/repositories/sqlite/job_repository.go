@@ -179,6 +179,33 @@ func (r *JobRepository) GetRecentWithMetadata(limit int) ([]*domain.JobWithMetad
 	return result, nil
 }
 
+func (r *JobRepository) GetAllJobsWithMetadata() ([]*domain.JobWithMetadata, error) {
+	jobs, err := r.GetJobs()
+	if err != nil {
+		return nil, fmt.Errorf("get jobs: %w", err)
+	}
+
+	result := make([]*domain.JobWithMetadata, 0, len(jobs))
+	for _, job := range jobs {
+		metadata, err := r.getMetadataForJob(job.ID)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to get metadata for job %s", job.ID)
+			// Continue without metadata
+			result = append(result, &domain.JobWithMetadata{
+				Job: job,
+			})
+			continue
+		}
+
+		result = append(result, &domain.JobWithMetadata{
+			Job:      job,
+			Metadata: metadata,
+		})
+	}
+
+	return result, nil
+}
+
 func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 	rows, err := r.db.Query(`
 		SELECT job_id, url, status, progress, created_at, updated_at 

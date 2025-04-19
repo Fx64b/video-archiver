@@ -29,6 +29,7 @@ type JobRepository interface {
 	StoreMetadata(jobID string, metadata Metadata) error
 	GetJobWithMetadata(jobID string) (*JobWithMetadata, error)
 	GetRecentWithMetadata(limit int) ([]*JobWithMetadata, error)
+	GetAllJobsWithMetadata() ([]*JobWithMetadata, error)
 	GetJobs() (jobs []*Job, err error)
 	CountVideos() (int, error)
 	CountPlaylists() (int, error)

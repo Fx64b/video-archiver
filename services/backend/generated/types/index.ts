@@ -96,8 +96,12 @@ export interface Statistics {
   total_playlists: number /* int */;
   total_channels: number /* int */;
   total_storage: number /* int */;
-  videos_storage: number /* int */;
-  playlist_storage: number /* int */;
-  channel_storage: number /* int */;
+  top_videos: VideoStorageInfo[];
+  other_storage: number /* int */;
   last_update: string /* RFC3339 */;
+}
+export interface VideoStorageInfo {
+  title: string;
+  size: number /* int */;
+  channel: string;
 }
