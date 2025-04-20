@@ -48,7 +48,7 @@ func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
 }
 
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	log.Info("WebSocket connection attempt received")
+	log.Debug("WebSocket connection attempt received")
 
 	upgrader := download.GetUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -63,7 +63,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	log.Debug("WebSocket connection registered with hub")
 
 	defer func() {
-		log.Info("Cleaning up WebSocket connection")
+		log.Debug("Cleaning up WebSocket connection")
 		hub.Unregister(conn)
 		conn.Close()
 	}()
@@ -76,7 +76,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.WithError(err).Error("WebSocket unexpected close error")
 			} else {
-				log.WithError(err).Info("WebSocket connection closed")
+				log.WithError(err).Debug("WebSocket connection closed")
 			}
 			return
 		}
