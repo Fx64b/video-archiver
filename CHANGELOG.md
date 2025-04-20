@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/Fx64b/video-archiver/compare/0.1.2.0-BETA...0.1.3.0-BETA) (2025-04-20)
+
+
+### Features
+
+* **backend:** add yt-dlp version checker and update logging levels ([616e679](https://github.com/Fx64b/video-archiver/commit/616e6793fecdb3c56eab9856de0247e2f2acece1))
+
 # [1.2.0](https://github.com/Fx64b/video-archiver/compare/0.1.1.0-BETA...0.1.2.0-BETA) (2025-04-19)
 
 
