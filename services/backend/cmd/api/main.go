@@ -9,6 +9,7 @@ import (
 	"video-archiver/internal/api/handlers"
 	"video-archiver/internal/repositories/sqlite"
 	"video-archiver/internal/services/download"
+	"video-archiver/internal/util/version"
 )
 
 func main() {
@@ -33,6 +34,8 @@ __     _____ ____  _____ ___
 /_/   \_\_| \_\\____|_| |_|___|  \_/  |_____|_| \_\
 
 `)
+
+	version.StartVersionChecker()
 
 	fmt.Println("Initializing database...")
 	dbPath := os.Getenv("DATABASE_PATH")

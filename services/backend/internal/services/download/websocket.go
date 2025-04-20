@@ -44,7 +44,7 @@ func (h *WebSocketHub) Run() {
 				client.Close()
 			}
 			h.mu.Unlock()
-			log.Info("Client disconnected")
+			log.Debug("Client disconnected")
 
 		case update := <-h.broadcast:
 			h.mu.RLock()

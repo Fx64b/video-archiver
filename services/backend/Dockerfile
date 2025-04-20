@@ -11,7 +11,7 @@ FROM alpine:latest
 
 # Install runtime dependencies
 RUN apk add --no-cache ffmpeg python3 curl \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/download/2025.03.31/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp
 
 # Create non-root user and setup directories
