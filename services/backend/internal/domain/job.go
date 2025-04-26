@@ -34,6 +34,7 @@ type JobRepository interface {
 	CountVideos() (int, error)
 	CountPlaylists() (int, error)
 	CountChannels() (int, error)
+	GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*JobWithMetadata, int, error)
 }
 
 type JobType string

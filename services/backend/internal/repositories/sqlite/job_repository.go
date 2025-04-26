@@ -298,3 +298,133 @@ func (r *JobRepository) getMetadataForJob(jobID string) (domain.Metadata, error)
 		return nil, fmt.Errorf("unknown metadata type: %s", metadataType)
 	}
 }
+
+func (r *JobRepository) GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*domain.JobWithMetadata, int, error) {
+	// Validate and sanitize parameters
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 { // 100 for now. TODO: Later this can be a config
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	// Validate sort parameters
+	validSortFields := map[string]bool{
+		"created_at": true, // Default sort field
+		"updated_at": true,
+		"title":      true,
+	}
+
+	if !validSortFields[sortBy] {
+		sortBy = "created_at" // Default if invalid
+	}
+
+	if order != "asc" && order != "desc" {
+		order = "desc" // Default to descending order
+	}
+
+	// Map content type to table name
+	var tableName string
+	var sortField string
+
+	switch contentType {
+	case "videos":
+		tableName = "videos"
+		if sortBy == "title" {
+			sortField = "videos.title"
+		} else {
+			sortField = "jobs." + sortBy
+		}
+	case "playlists":
+		tableName = "playlists"
+		if sortBy == "title" {
+			sortField = "playlists.title"
+		} else {
+			sortField = "jobs." + sortBy
+		}
+	case "channels":
+		tableName = "channels"
+		if sortBy == "title" {
+			sortField = "channels.name"
+		} else {
+			sortField = "jobs." + sortBy
+		}
+	default:
+		return nil, 0, fmt.Errorf("invalid content type: %s", contentType)
+	}
+
+	// Get total count first
+	var totalCount int
+	countQuery := fmt.Sprintf(`
+        SELECT COUNT(*) FROM %s
+        JOIN jobs ON %s.job_id = jobs.job_id
+    `, tableName, tableName)
+
+	err := r.db.QueryRow(countQuery).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count %s: %w", contentType, err)
+	}
+
+	// Query for paginated items
+	query := fmt.Sprintf(`
+        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.created_at, jobs.updated_at, %s.metadata_json
+        FROM %s
+        JOIN jobs ON %s.job_id = jobs.job_id
+        ORDER BY %s %s
+        LIMIT ? OFFSET ?
+    `, tableName, tableName, tableName, sortField, order)
+
+	rows, err := r.db.Query(query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query %s: %w", contentType, err)
+	}
+	defer rows.Close()
+
+	var result []*domain.JobWithMetadata
+	for rows.Next() {
+		job := &domain.Job{}
+		var metadataJSON string
+
+		err := rows.Scan(
+			&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("scan job row: %w", err)
+		}
+
+		// Unmarshal metadata based on content type
+		var metadata domain.Metadata
+		switch contentType {
+		case "videos":
+			var videoMetadata domain.VideoMetadata
+			if err := json.Unmarshal([]byte(metadataJSON), &videoMetadata); err != nil {
+				log.WithError(err).Warnf("Could not unmarshal video metadata for job %s", job.ID)
+				continue
+			}
+			metadata = &videoMetadata
+		case "playlists":
+			var playlistMetadata domain.PlaylistMetadata
+			if err := json.Unmarshal([]byte(metadataJSON), &playlistMetadata); err != nil {
+				log.WithError(err).Warnf("Could not unmarshal playlist metadata for job %s", job.ID)
+				continue
+			}
+			metadata = &playlistMetadata
+		case "channels":
+			var channelMetadata domain.ChannelMetadata
+			if err := json.Unmarshal([]byte(metadataJSON), &channelMetadata); err != nil {
+				log.WithError(err).Warnf("Could not unmarshal channel metadata for job %s", job.ID)
+				continue
+			}
+			metadata = &channelMetadata
+		}
+
+		result = append(result, &domain.JobWithMetadata{
+			Job:      job,
+			Metadata: metadata,
+		})
+	}
+
+	return result, totalCount, nil
+}
