@@ -61,6 +61,10 @@ if [ -n "$BUILD" ]; then
    mkdir -p ../../web/types
    cp generated/types/index.ts ../../web/types/index.ts
    cd ../..
+
+  # The prune is optional, but during development it is likely that you will end up with several GB of cache
+   docker builder prune -f --filter 'until=48h'
+
    docker-compose up --build --remove-orphans $SERVICES
 else
    docker-compose up --remove-orphans $SERVICES
