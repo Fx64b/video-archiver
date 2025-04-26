@@ -2,7 +2,6 @@
 
 // INFO: this component is way to big and has too many responsibilities and api calls to be a single component
 // TODO: This was a quick and dirty fix to work around a hydration error and should be addressed in the future
-
 import {
     ChannelMetadata,
     JobWithMetadata,
@@ -11,9 +10,11 @@ import {
 } from '@/types'
 import { format } from 'date-fns'
 import { AlertCircle, ChevronDown, List, SortAsc, SortDesc } from 'lucide-react'
+
 import { useEffect, useState } from 'react'
+
 import Image from 'next/image'
-import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import {
     formatBytes,
@@ -97,7 +98,7 @@ export default function DownloadsContent() {
             { label: 'Date Added', value: 'created_at' },
             { label: 'Last Updated', value: 'updated_at' },
             { label: 'Name', value: 'title' },
-        ]
+        ],
     }
 
     // Update URL query params
@@ -140,13 +141,15 @@ export default function DownloadsContent() {
             setError(null)
 
             try {
-                const url = new URL(`${process.env.NEXT_PUBLIC_SERVER_URL}/downloads/${activeTab}`)
+                const url = new URL(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/downloads/${activeTab}`
+                )
                 url.searchParams.append('page', String(currentPage))
                 url.searchParams.append('limit', String(pageSize))
                 url.searchParams.append('sort_by', sortBy)
                 url.searchParams.append('order', order)
 
-                console.log(`Fetching from: ${url.toString()}`);  // Log the full URL for debugging
+                console.log(`Fetching from: ${url.toString()}`) // Log the full URL for debugging
 
                 const response = await fetch(url.toString())
 
@@ -157,17 +160,21 @@ export default function DownloadsContent() {
                         total_count: 0,
                         page: 1,
                         limit: pageSize,
-                        total_pages: 1
+                        total_pages: 1,
                     })
                     setLoading(false)
                     return
                 }
 
                 if (!response.ok) {
-                    console.error(`Server returned ${response.status}: ${response.statusText}`);
-                    const errorText = await response.text();
-                    console.error(`Error details: ${errorText}`);
-                    throw new Error(`Failed to fetch ${activeTab}: ${response.statusText}`)
+                    console.error(
+                        `Server returned ${response.status}: ${response.statusText}`
+                    )
+                    const errorText = await response.text()
+                    console.error(`Error details: ${errorText}`)
+                    throw new Error(
+                        `Failed to fetch ${activeTab}: ${response.statusText}`
+                    )
                 }
 
                 const responseData = await response.json()
@@ -183,7 +190,7 @@ export default function DownloadsContent() {
                         total_count: 0,
                         page: 1,
                         limit: pageSize,
-                        total_pages: 1
+                        total_pages: 1,
                     })
                 }
             } catch (error) {
@@ -195,7 +202,7 @@ export default function DownloadsContent() {
                     total_count: 0,
                     page: 1,
                     limit: pageSize,
-                    total_pages: 1
+                    total_pages: 1,
                 })
             } finally {
                 setLoading(false)
@@ -208,7 +215,7 @@ export default function DownloadsContent() {
     // Get current sort option label
     const getCurrentSortLabel = () => {
         const options = sortOptions[activeTab] || []
-        const option = options.find(opt => opt.value === sortBy)
+        const option = options.find((opt) => opt.value === sortBy)
         return option?.label || 'Sort by'
     }
 
@@ -217,8 +224,14 @@ export default function DownloadsContent() {
         if (!data || data.total_pages <= 1) return null
 
         const maxPagesToShow = 5
-        const startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2))
-        const endPage = Math.min(data.total_pages, startPage + maxPagesToShow - 1)
+        const startPage = Math.max(
+            1,
+            currentPage - Math.floor(maxPagesToShow / 2)
+        )
+        const endPage = Math.min(
+            data.total_pages,
+            startPage + maxPagesToShow - 1
+        )
 
         const pages = []
 
@@ -226,7 +239,9 @@ export default function DownloadsContent() {
         if (startPage > 1) {
             pages.push(
                 <PaginationItem key="first">
-                    <PaginationLink onClick={() => handlePageChange(1)}>1</PaginationLink>
+                    <PaginationLink onClick={() => handlePageChange(1)}>
+                        1
+                    </PaginationLink>
                 </PaginationItem>
             )
 
@@ -265,7 +280,9 @@ export default function DownloadsContent() {
 
             pages.push(
                 <PaginationItem key="last">
-                    <PaginationLink onClick={() => handlePageChange(data.total_pages)}>
+                    <PaginationLink
+                        onClick={() => handlePageChange(data.total_pages)}
+                    >
                         {data.total_pages}
                     </PaginationLink>
                 </PaginationItem>
@@ -277,8 +294,15 @@ export default function DownloadsContent() {
                 <PaginationContent>
                     <PaginationItem>
                         <PaginationPrevious
-                            onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
-                            className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                            onClick={() =>
+                                currentPage > 1 &&
+                                handlePageChange(currentPage - 1)
+                            }
+                            className={
+                                currentPage === 1
+                                    ? 'pointer-events-none opacity-50'
+                                    : ''
+                            }
                         />
                     </PaginationItem>
 
@@ -286,8 +310,15 @@ export default function DownloadsContent() {
 
                     <PaginationItem>
                         <PaginationNext
-                            onClick={() => currentPage < data.total_pages && handlePageChange(currentPage + 1)}
-                            className={currentPage === data.total_pages ? "pointer-events-none opacity-50" : ""}
+                            onClick={() =>
+                                currentPage < data.total_pages &&
+                                handlePageChange(currentPage + 1)
+                            }
+                            className={
+                                currentPage === data.total_pages
+                                    ? 'pointer-events-none opacity-50'
+                                    : ''
+                            }
                         />
                     </PaginationItem>
                 </PaginationContent>
@@ -297,10 +328,13 @@ export default function DownloadsContent() {
 
     const renderSortControls = () => {
         return (
-            <div className="flex items-center gap-2 mb-4">
+            <div className="mb-4 flex items-center gap-2">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="flex gap-2 items-center">
+                        <Button
+                            variant="outline"
+                            className="flex items-center gap-2"
+                        >
                             <span>{getCurrentSortLabel()}</span>
                             <ChevronDown className="h-4 w-4" />
                         </Button>
@@ -311,7 +345,9 @@ export default function DownloadsContent() {
                         {sortOptions[activeTab]?.map((option) => (
                             <DropdownMenuItem
                                 key={option.value}
-                                className={sortBy === option.value ? "bg-accent" : ""}
+                                className={
+                                    sortBy === option.value ? 'bg-accent' : ''
+                                }
                                 onClick={() => handleSortChange(option.value)}
                             >
                                 {option.label}
@@ -324,9 +360,17 @@ export default function DownloadsContent() {
                     variant="outline"
                     size="icon"
                     onClick={handleOrderChange}
-                    title={order === 'desc' ? "Descending order" : "Ascending order"}
+                    title={
+                        order === 'desc'
+                            ? 'Descending order'
+                            : 'Ascending order'
+                    }
                 >
-                    {order === 'desc' ? <SortDesc className="h-4 w-4" /> : <SortAsc className="h-4 w-4" />}
+                    {order === 'desc' ? (
+                        <SortDesc className="h-4 w-4" />
+                    ) : (
+                        <SortAsc className="h-4 w-4" />
+                    )}
                 </Button>
             </div>
         )
@@ -347,10 +391,10 @@ export default function DownloadsContent() {
                     const duration = metadata?.duration
                         ? formatSeconds(metadata.duration)
                         : `${Math.floor(Math.random() * 20) + 1}:${Math.floor(
-                            Math.random() * 60
-                        )
-                            .toString()
-                            .padStart(2, '0')}`
+                              Math.random() * 60
+                          )
+                              .toString()
+                              .padStart(2, '0')}`
                     const fileSize = metadata?.filesize_approx
                         ? formatBytes(metadata.filesize_approx)
                         : `${Math.floor(Math.random() * 500) + 100} MB`
@@ -487,8 +531,8 @@ export default function DownloadsContent() {
                     const channelName = metadata?.channel
                     const subscribers = metadata?.channel_follower_count
                         ? formatSubscriberNumber(
-                        metadata.channel_follower_count
-                    ) + ' subscribers'
+                              metadata.channel_follower_count
+                          ) + ' subscribers'
                         : `unknown subscribers`
                     const updateDate = item.job
                         ? new Date(item.job.updated_at)
@@ -559,16 +603,25 @@ export default function DownloadsContent() {
                 defaultValue={activeTab}
                 value={activeTab}
                 onValueChange={handleTabChange}
-                className="w-full flex flex-col"
+                className="flex w-full flex-col"
             >
-                <div className="flex justify-between items-center mb-8">
+                <div className="mb-8 flex items-center justify-between">
                     <TabsList className="grid w-full max-w-md grid-cols-3">
-                        <TabsTrigger value="videos">Videos</TabsTrigger>
-                        <TabsTrigger value="playlists">Playlists</TabsTrigger>
-                        <TabsTrigger value="channels">Channels</TabsTrigger>
+                        <TabsTrigger className="tabs-trigger" value="videos">
+                            Videos
+                        </TabsTrigger>
+                        <TabsTrigger className="tabs-trigger" value="playlists">
+                            Playlists
+                        </TabsTrigger>
+                        <TabsTrigger className="tabs-trigger" value="channels">
+                            Channels
+                        </TabsTrigger>
                     </TabsList>
 
-                    {!loading && data && data.items.length > 0 && renderSortControls()}
+                    {!loading &&
+                        data &&
+                        data.items.length > 0 &&
+                        renderSortControls()}
                 </div>
 
                 {error && (

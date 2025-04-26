@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+
 import DownloadsContent from '@/components/downloads/DownloadsContent'
 
 export default function Downloads() {
