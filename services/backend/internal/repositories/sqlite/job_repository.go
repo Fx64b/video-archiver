@@ -356,10 +356,11 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 
 	// Get total count first
 	var totalCount int
-	countQuery := fmt.Sprintf(`
-        SELECT COUNT(*) FROM %s
-        JOIN jobs ON %s.job_id = jobs.job_id
-    `, tableName, tableName)
+	countQuery := `
+        SELECT COUNT(*) 
+        FROM ` + tableName + `
+        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id
+    `
 
 	err := r.db.QueryRow(countQuery).Scan(&totalCount)
 	if err != nil {
