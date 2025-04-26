@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"time"
 	"video-archiver/internal/domain"
 )
@@ -304,84 +305,95 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 	if page < 1 {
 		page = 1
 	}
-	if limit < 1 || limit > 100 { // 100 for now. TODO: Later this can be a config
+	if limit < 1 || limit > 100 {
 		limit = 20
 	}
 	offset := (page - 1) * limit
 
-	// Validate sort parameters
-	validSortFields := map[string]bool{
-		"created_at": true, // Default sort field
-		"updated_at": true,
-		"title":      true,
-	}
-
-	if !validSortFields[sortBy] {
-		sortBy = "created_at" // Default if invalid
-	}
-
-	if order != "asc" && order != "desc" {
-		order = "desc" // Default to descending order
-	}
-
-	// Map content type to table name
+	// Validate content type using a strict whitelist
 	var tableName string
-	var sortField string
-
 	switch contentType {
 	case "videos":
 		tableName = "videos"
-		if sortBy == "title" {
-			sortField = "videos.title"
-		} else {
-			sortField = "jobs." + sortBy
-		}
 	case "playlists":
 		tableName = "playlists"
-		if sortBy == "title" {
-			sortField = "playlists.title"
-		} else {
-			sortField = "jobs." + sortBy
-		}
 	case "channels":
 		tableName = "channels"
-		if sortBy == "title" {
-			sortField = "channels.name"
-		} else {
-			sortField = "jobs." + sortBy
-		}
 	default:
 		return nil, 0, fmt.Errorf("invalid content type: %s", contentType)
 	}
 
-	// Get total count first
+	// Validate order with a strict whitelist
+	var orderDirection string
+	switch strings.ToLower(order) {
+	case "asc":
+		orderDirection = "ASC"
+	default:
+		orderDirection = "DESC"
+	}
+
+	// Create a whitelist mapping of allowed sort fields to their actual SQL counterparts
+	var sortFieldMapping = map[string]map[string]string{
+		"videos": {
+			"created_at": "jobs.created_at",
+			"updated_at": "jobs.updated_at",
+			"title":      "videos.title",
+		},
+		"playlists": {
+			"created_at": "jobs.created_at",
+			"updated_at": "jobs.updated_at",
+			"title":      "playlists.title",
+		},
+		"channels": {
+			"created_at": "jobs.created_at",
+			"updated_at": "jobs.updated_at",
+			"title":      "channels.name",
+		},
+	}
+
+	// Validate sort field - only allow predefined values
+	validSortFields, exists := sortFieldMapping[contentType]
+	if !exists {
+		return nil, 0, fmt.Errorf("invalid content type for sort: %s", contentType)
+	}
+
+	sortField, valid := validSortFields[sortBy]
+	if !valid {
+		// Default to created_at if invalid
+		sortField = "jobs.created_at"
+	}
+
+	// Get total count first using specific validated table name
 	var totalCount int
-	countQuery := `
-        SELECT COUNT(*) 
-        FROM ` + tableName + `
-        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id
-    `
+	countQuery := "SELECT COUNT(*) FROM " + tableName + " JOIN jobs ON " + tableName + ".job_id = jobs.job_id"
 
 	err := r.db.QueryRow(countQuery).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count %s: %w", contentType, err)
 	}
 
-	// Query for paginated items
+	// Build the query using only validated table names and sort fields
 	query := `
-    SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.created_at, jobs.updated_at, ` + tableName + `.metadata_json 
-    FROM ` + tableName + ` JOIN jobs ON ` + tableName + `.job_id = jobs.job_id 
-    ORDER BY ` + sortField + ` ` + order + `
-    LIMIT ? OFFSET ?`
+        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.created_at, jobs.updated_at, ` +
+		tableName + `.metadata_json 
+        FROM ` + tableName + ` 
+        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id 
+        ORDER BY ` + sortField + ` ` + orderDirection + ` 
+        LIMIT ? OFFSET ?`
 
 	log.Debugf("Executing download query with limit=%d offset=%d", limit, offset)
-
 	rows, err := r.db.Query(query, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query %s: %w", contentType, err)
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			log.WithError(err).Error("Failed to close rows")
+		}
+	}(rows)
 
+	// The rest of the function to process rows remains unchanged
 	var result []*domain.JobWithMetadata
 	for rows.Next() {
 		job := &domain.Job{}
