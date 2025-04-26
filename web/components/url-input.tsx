@@ -5,7 +5,7 @@ import useAppState from '@/store/appState'
 import { AlertCircle, LoaderCircle, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { AlertDestructive } from '@/components/alert-destructive'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 export function UrlInput() {
     const [url, setUrl] = useState('')
     const [error, setError] = useState('')
+    const [dotIndex, setDotIndex] = useState(0) // for reconnecting dots . .. ...
 
     const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL
     const setIsDownloading = useAppState((state) => state.setIsDownloading)
@@ -64,6 +65,21 @@ export function UrlInput() {
         console.log('Settings')
     }
 
+    useEffect(() => {
+        if (!isConnected) {
+            const interval = setInterval(() => {
+                setDotIndex((prev) => (prev + 1) % 3)
+            }, 500)
+
+            return () => clearInterval(interval)
+        }
+    }, [isConnected])
+
+    const getReconnectingText = () => {
+        const dots = ['.', '..', '...'][dotIndex]
+        return `Connection lost. Reconnecting ${dots}`
+    }
+
     return (
         <div className="flex w-full max-w-(--breakpoint-md) flex-col">
             <div className="flex items-center justify-between gap-2">
@@ -103,7 +119,7 @@ export function UrlInput() {
                     className={`text-destructive mt-2 flex items-center ${isConnected ? 'display-none' : 'fade-in'}`}
                 >
                     <AlertCircle className="mr-2 h-4 w-4" />
-                    <span>Connection lost. Reconnecting...</span>
+                    <span>{getReconnectingText()}</span>
                 </div>
             )}
 

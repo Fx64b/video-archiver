@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { create } from 'zustand'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -6,6 +7,7 @@ interface WebSocketState {
     socket: WebSocket | null
     isConnected: boolean
     reconnectTimer: NodeJS.Timeout | null
+    isReconnecting: boolean
     listeners: Map<string, Set<(data: any) => void>>
 
     connect: () => void
@@ -17,6 +19,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
     socket: null,
     isConnected: false,
     reconnectTimer: null,
+    isReconnecting: false,
     listeners: new Map(),
 
     connect: () => {
@@ -32,6 +35,8 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
 
         newSocket.onopen = () => {
             console.log('WebSocket connected')
+
+            const { isReconnecting } = get()
             set({ isConnected: true })
 
             // Clear any reconnect timer
@@ -39,6 +44,11 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
             if (reconnectTimer) {
                 clearTimeout(reconnectTimer)
                 set({ reconnectTimer: null })
+            }
+
+            if (isReconnecting) {
+                toast('Reconnected to server successfully.')
+                set({ isReconnecting: false })
             }
         }
 
@@ -73,7 +83,10 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
             if (!reconnectTimer) {
                 const timer = setTimeout(() => {
                     console.log('Attempting to reconnect WebSocket...')
-                    set({ reconnectTimer: null })
+                    set({
+                        reconnectTimer: null,
+                        isReconnecting: true,
+                    })
                     get().connect()
                 }, 5000)
 
