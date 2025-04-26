@@ -316,7 +316,7 @@ export default function Downloads() {
                 <Tabs
                     defaultValue="videos"
                     onValueChange={handleTabChange}
-                    className="w-full flex"
+                    className="flex w-full"
                 >
                     <TabsList className="mb-8 grid w-full max-w-md grid-cols-3 self-end">
                         <TabsTrigger value="videos">Videos</TabsTrigger>
