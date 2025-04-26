@@ -368,15 +368,15 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 	}
 
 	// Query for paginated items
-	query := fmt.Sprintf(`
-        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.created_at, jobs.updated_at, %s.metadata_json
-        FROM %s
-        JOIN jobs ON %s.job_id = jobs.job_id
-        ORDER BY %s %s
+	query := `
+        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.created_at, jobs.updated_at, metadata.metadata_json
+        FROM ` + tableName + `
+        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id
+        ORDER BY ? ?
         LIMIT ? OFFSET ?
-    `, tableName, tableName, tableName, sortField, order)
+    `
 
-	rows, err := r.db.Query(query, limit, offset)
+	rows, err := r.db.Query(query, sortField, order, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query %s: %w", contentType, err)
 	}
