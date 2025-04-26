@@ -7,11 +7,12 @@ import {
     VideoMetadata,
 } from '@/types'
 import { format } from 'date-fns'
-import { AlertCircle, List } from 'lucide-react'
+import { AlertCircle, ChevronDown, List, SortAsc, SortDesc } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
 import Image from 'next/image'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import {
     formatBytes,
@@ -30,6 +31,23 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -41,11 +59,75 @@ interface PaginatedResponse {
     total_pages: number
 }
 
+interface SortOption {
+    label: string
+    value: string
+}
+
 export default function Downloads() {
-    const [activeTab, setActiveTab] = useState('videos')
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+
+    // Parse query params with defaults
+    const activeTab = searchParams.get('type') || 'videos'
+    const currentPage = Number(searchParams.get('page')) || 1
+    const pageSize = Number(searchParams.get('limit')) || 20
+    const sortBy = searchParams.get('sort_by') || 'created_at'
+    const order = searchParams.get('order') || 'desc'
+
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [data, setData] = useState<PaginatedResponse | null>(null)
+
+    // Sort options - can be expanded later
+    const sortOptions: Record<string, SortOption[]> = {
+        videos: [
+            { label: 'Date Added', value: 'created_at' },
+            { label: 'Last Updated', value: 'updated_at' },
+            { label: 'Title', value: 'title' },
+        ],
+        playlists: [
+            { label: 'Date Added', value: 'created_at' },
+            { label: 'Last Updated', value: 'updated_at' },
+            { label: 'Title', value: 'title' },
+        ],
+        channels: [
+            { label: 'Date Added', value: 'created_at' },
+            { label: 'Last Updated', value: 'updated_at' },
+            { label: 'Name', value: 'title' },
+        ],
+    }
+
+    // Update URL query params
+    const updateUrlParams = (params: Record<string, string | number>) => {
+        const newParams = new URLSearchParams(searchParams.toString())
+
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+                newParams.set(key, String(value))
+            }
+        })
+
+        router.push(`${pathname}?${newParams.toString()}`)
+    }
+
+    const handleTabChange = (value: string) => {
+        updateUrlParams({ type: value, page: 1 }) // Reset to page 1 when switching tabs
+    }
+
+    const handleSortChange = (value: string) => {
+        updateUrlParams({ sort_by: value, page: 1 })
+    }
+
+    const handleOrderChange = () => {
+        const newOrder = order === 'desc' ? 'asc' : 'desc'
+        updateUrlParams({ order: newOrder, page: 1 })
+    }
+
+    const handlePageChange = (page: number) => {
+        updateUrlParams({ page })
+    }
 
     useEffect(() => {
         const fetchDownloads = async () => {
@@ -53,10 +135,15 @@ export default function Downloads() {
             setError(null)
 
             try {
-                // TODO: query params should be configurable in the future
-                const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_SERVER_URL}/downloads/${activeTab}?page=1&limit=20&sort_by=created_at&order=desc`
+                const url = new URL(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/downloads/${activeTab}`
                 )
+                url.searchParams.append('page', String(currentPage))
+                url.searchParams.append('limit', String(pageSize))
+                url.searchParams.append('sort_by', sortBy)
+                url.searchParams.append('order', order)
+
+                const response = await fetch(url.toString())
 
                 if (response.status === 404) {
                     console.log(`No ${activeTab} found`)
@@ -83,10 +170,170 @@ export default function Downloads() {
         }
 
         fetchDownloads()
-    }, [activeTab])
+    }, [activeTab, currentPage, pageSize, sortBy, order])
 
-    const handleTabChange = (value: string) => {
-        setActiveTab(value)
+    // Get current sort option label
+    const getCurrentSortLabel = () => {
+        const options = sortOptions[activeTab] || []
+        const option = options.find((opt) => opt.value === sortBy)
+        return option?.label || 'Sort by'
+    }
+
+    // Render pagination controls
+    const renderPagination = () => {
+        if (!data || data.total_pages <= 1) return null
+
+        const maxPagesToShow = 5
+        const startPage = Math.max(
+            1,
+            currentPage - Math.floor(maxPagesToShow / 2)
+        )
+        const endPage = Math.min(
+            data.total_pages,
+            startPage + maxPagesToShow - 1
+        )
+
+        const pages = []
+
+        // Add first page if not included in the range
+        if (startPage > 1) {
+            pages.push(
+                <PaginationItem key="first">
+                    <PaginationLink onClick={() => handlePageChange(1)}>
+                        1
+                    </PaginationLink>
+                </PaginationItem>
+            )
+
+            if (startPage > 2) {
+                pages.push(
+                    <PaginationItem key="ellipsis-start">
+                        <PaginationEllipsis />
+                    </PaginationItem>
+                )
+            }
+        }
+
+        // Add pages in the calculated range
+        for (let i = startPage; i <= endPage; i++) {
+            pages.push(
+                <PaginationItem key={i}>
+                    <PaginationLink
+                        isActive={currentPage === i}
+                        onClick={() => handlePageChange(i)}
+                    >
+                        {i}
+                    </PaginationLink>
+                </PaginationItem>
+            )
+        }
+
+        // Add last page if not included in the range
+        if (endPage < data.total_pages) {
+            if (endPage < data.total_pages - 1) {
+                pages.push(
+                    <PaginationItem key="ellipsis-end">
+                        <PaginationEllipsis />
+                    </PaginationItem>
+                )
+            }
+
+            pages.push(
+                <PaginationItem key="last">
+                    <PaginationLink
+                        onClick={() => handlePageChange(data.total_pages)}
+                    >
+                        {data.total_pages}
+                    </PaginationLink>
+                </PaginationItem>
+            )
+        }
+
+        return (
+            <Pagination className="mt-8">
+                <PaginationContent>
+                    <PaginationItem>
+                        <PaginationPrevious
+                            onClick={() =>
+                                currentPage > 1 &&
+                                handlePageChange(currentPage - 1)
+                            }
+                            className={
+                                currentPage === 1
+                                    ? 'pointer-events-none opacity-50'
+                                    : ''
+                            }
+                        />
+                    </PaginationItem>
+
+                    {pages}
+
+                    <PaginationItem>
+                        <PaginationNext
+                            onClick={() =>
+                                currentPage < data.total_pages &&
+                                handlePageChange(currentPage + 1)
+                            }
+                            className={
+                                currentPage === data.total_pages
+                                    ? 'pointer-events-none opacity-50'
+                                    : ''
+                            }
+                        />
+                    </PaginationItem>
+                </PaginationContent>
+            </Pagination>
+        )
+    }
+
+    const renderSortControls = () => {
+        return (
+            <div className="mb-4 flex items-center gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="outline"
+                            className="flex items-center gap-2"
+                        >
+                            <span>{getCurrentSortLabel()}</span>
+                            <ChevronDown className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {sortOptions[activeTab]?.map((option) => (
+                            <DropdownMenuItem
+                                key={option.value}
+                                className={
+                                    sortBy === option.value ? 'bg-accent' : ''
+                                }
+                                onClick={() => handleSortChange(option.value)}
+                            >
+                                {option.label}
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleOrderChange}
+                    title={
+                        order === 'desc'
+                            ? 'Descending order'
+                            : 'Ascending order'
+                    }
+                >
+                    {order === 'desc' ? (
+                        <SortDesc className="h-4 w-4" />
+                    ) : (
+                        <SortAsc className="h-4 w-4" />
+                    )}
+                </Button>
+            </div>
+        )
     }
 
     const renderVideos = () => {
@@ -314,15 +561,25 @@ export default function Downloads() {
         <div className="flex min-h-screen w-full flex-col gap-8 p-8 pb-20 font-[family-name:var(--font-geist-sans)] sm:p-20">
             <main className="flex w-full flex-col">
                 <Tabs
-                    defaultValue="videos"
+                    defaultValue={activeTab}
+                    value={activeTab}
                     onValueChange={handleTabChange}
-                    className="flex w-full"
+                    className="flex w-full flex-col"
                 >
-                    <TabsList className="mb-8 grid w-full max-w-md grid-cols-3 self-end">
-                        <TabsTrigger value="videos">Videos</TabsTrigger>
-                        <TabsTrigger value="playlists">Playlists</TabsTrigger>
-                        <TabsTrigger value="channels">Channels</TabsTrigger>
-                    </TabsList>
+                    <div className="mb-8 flex items-center justify-between">
+                        <TabsList className="grid w-full max-w-md grid-cols-3">
+                            <TabsTrigger value="videos">Videos</TabsTrigger>
+                            <TabsTrigger value="playlists">
+                                Playlists
+                            </TabsTrigger>
+                            <TabsTrigger value="channels">Channels</TabsTrigger>
+                        </TabsList>
+
+                        {!loading &&
+                            data &&
+                            data.items.length > 0 &&
+                            renderSortControls()}
+                    </div>
 
                     {error && (
                         <Alert variant="destructive" className="mb-6">
@@ -362,6 +619,8 @@ export default function Downloads() {
                             <TabsContent value="channels">
                                 {renderChannels()}
                             </TabsContent>
+
+                            {renderPagination()}
                         </>
                     )}
                 </Tabs>
