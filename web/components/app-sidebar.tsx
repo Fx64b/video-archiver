@@ -4,10 +4,9 @@ import {
     ChartArea,
     GitBranch,
     Home,
-    ListVideo,
+    MonitorDown,
     MonitorPlay,
     Settings,
-    Users,
     Wrench,
 } from 'lucide-react'
 
@@ -40,20 +39,20 @@ const items = [
         icon: ChartArea,
     },
     {
-        title: 'Videos',
-        url: '/videos',
+        title: 'Downloads',
+        url: '/downloads',
+        icon: MonitorDown,
+    },
+    {
+        title: 'Stream',
+        url: '/stream',
         icon: MonitorPlay,
     },
-    {
-        title: 'Playlists',
-        url: '/playlists',
-        icon: ListVideo,
-    },
-    {
+    /*    {
         title: 'Channels',
         url: '/channels',
         icon: Users,
-    },
+    },*/
     {
         title: 'Tools',
         url: '/tools',

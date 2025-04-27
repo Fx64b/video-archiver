@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"time"
 	"video-archiver/internal/domain"
 )
@@ -297,4 +298,159 @@ func (r *JobRepository) getMetadataForJob(jobID string) (domain.Metadata, error)
 	default:
 		return nil, fmt.Errorf("unknown metadata type: %s", metadataType)
 	}
+}
+
+func (r *JobRepository) GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*domain.JobWithMetadata, int, error) {
+	log.WithFields(log.Fields{
+		"contentType": contentType,
+		"page":        page,
+		"limit":       limit,
+		"sortBy":      sortBy,
+		"order":       order,
+	}).Debug("Getting metadata by type")
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	// Validate content type using a strict whitelist
+	var tableName string
+	switch contentType {
+	case "videos":
+		tableName = "videos"
+	case "playlists":
+		tableName = "playlists"
+	case "channels":
+		tableName = "channels"
+	default:
+		return nil, 0, fmt.Errorf("invalid content type: %s", contentType)
+	}
+
+	// Validate order with a strict whitelist
+	var orderDirection string
+	switch strings.ToLower(order) {
+	case "asc":
+		orderDirection = "ASC"
+	default:
+		orderDirection = "DESC"
+	}
+
+	// Create a whitelist mapping of allowed sort fields to their actual SQL counterparts
+	var sortFieldMapping = map[string]map[string]string{
+		"videos": {
+			"created_at": "jobs.created_at",
+			"updated_at": "jobs.updated_at",
+			"title":      "videos.title",
+		},
+		"playlists": {
+			"created_at": "jobs.created_at",
+			"updated_at": "jobs.updated_at",
+			"title":      "playlists.title",
+		},
+		"channels": {
+			"created_at": "jobs.created_at",
+			"updated_at": "jobs.updated_at",
+			"title":      "channels.name",
+		},
+	}
+
+	// Validate sort field - only allow predefined values
+	validSortFields, exists := sortFieldMapping[contentType]
+	if !exists {
+		return nil, 0, fmt.Errorf("invalid content type for sort: %s", contentType)
+	}
+
+	sortField, valid := validSortFields[sortBy]
+	if !valid {
+		// Default to created_at if invalid
+		sortField = "jobs.created_at"
+	}
+
+	// Get total count first using specific validated table name
+	var totalCount int
+	countQuery := "SELECT COUNT(*) FROM " + tableName + " JOIN jobs ON " + tableName + ".job_id = jobs.job_id"
+
+	err := r.db.QueryRow(countQuery).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count %s: %w", contentType, err)
+	}
+
+	// Build the query using only validated table names and sort fields
+	query := `
+        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.created_at, jobs.updated_at, ` +
+		tableName + `.metadata_json 
+        FROM ` + tableName + ` 
+        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id 
+        ORDER BY ` + sortField + ` ` + orderDirection + ` 
+        LIMIT ? OFFSET ?`
+
+	log.Debugf("Executing download query with limit=%d offset=%d", limit, offset)
+	rows, err := r.db.Query(query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query %s: %w", contentType, err)
+	}
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			log.WithError(err).Error("Failed to close rows")
+		}
+	}(rows)
+
+	// The rest of the function to process rows remains unchanged
+	var result []*domain.JobWithMetadata
+	for rows.Next() {
+		job := &domain.Job{}
+		var metadataJSON string
+
+		err := rows.Scan(
+			&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("scan job row: %w", err)
+		}
+
+		// Unmarshal metadata based on content type
+		var metadata domain.Metadata
+		switch contentType {
+		case "videos":
+			var videoMetadata domain.VideoMetadata
+			if err := json.Unmarshal([]byte(metadataJSON), &videoMetadata); err != nil {
+				log.WithError(err).Warnf("Could not unmarshal video metadata for job %s", job.ID)
+				continue
+			}
+			metadata = &videoMetadata
+		case "playlists":
+			var playlistMetadata domain.PlaylistMetadata
+			if err := json.Unmarshal([]byte(metadataJSON), &playlistMetadata); err != nil {
+				log.WithError(err).Warnf("Could not unmarshal playlist metadata for job %s", job.ID)
+				continue
+			}
+			metadata = &playlistMetadata
+		case "channels":
+			var channelMetadata domain.ChannelMetadata
+			if err := json.Unmarshal([]byte(metadataJSON), &channelMetadata); err != nil {
+				log.WithError(err).Warnf("Could not unmarshal channel metadata for job %s", job.ID)
+				continue
+			}
+			metadata = &channelMetadata
+		}
+
+		result = append(result, &domain.JobWithMetadata{
+			Job:      job,
+			Metadata: metadata,
+		})
+	}
+
+	log.WithFields(log.Fields{
+		"contentType": contentType,
+		"resultCount": len(result),
+		"totalCount":  totalCount,
+	}).Debug("Fetched metadata by type")
+
+	return result, totalCount, nil
 }

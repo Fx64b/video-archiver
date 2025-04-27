@@ -21,39 +21,6 @@ export function formatSeconds(seconds: string | number | null): string {
 
 export type Metadata = PlaylistMetadata | VideoMetadata | ChannelMetadata
 
-export const isVideoMetadata = (
-    metadata: Metadata
-): metadata is VideoMetadata => {
-    return metadata?._type === 'video'
-}
-
-export const isChannel = (metadata: Metadata) => {
-    return metadata?._type === 'channel'
-}
-
-export function getThumbnailUrl(metadata: Metadata): string | null {
-    if (isVideoMetadata(metadata)) {
-        return metadata.thumbnail
-    }
-
-    if (isChannel(metadata)) {
-        // Attempt to find a 1:1 ratio thumbnail because it is most likely the channel's profile picture
-        const thumbnail = metadata.thumbnails.find((thumbnail) => {
-            return (
-                thumbnail.height === thumbnail.width &&
-                thumbnail.height !== 0 &&
-                thumbnail.width !== 0
-            )
-        })
-
-        if (thumbnail) {
-            return thumbnail.url
-        }
-    }
-
-    return metadata?.thumbnails[0]?.url || null
-}
-
 export function formatSubscriberNumber(num: number): string {
     if (num < 1000) {
         return num.toString()
@@ -77,4 +44,24 @@ export function formatBytes(bytes: number, decimals: number = 1): string {
     return (
         parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i]
     )
+}
+
+export function formatResolution(resolutionStr: string): string {
+    const [width, height] = resolutionStr.toLowerCase().split('x').map(Number)
+    if (!width || !height) {
+        throw new Error(
+            'Invalid resolution format. Expected format: "WidthxHeight"'
+        )
+    }
+
+    if (width >= 7680 && height >= 4320) return '8K'
+    if (width >= 3840 && height >= 2160) return '4K'
+    if (width >= 2560 && height >= 1440) return '1440p'
+    if (width >= 1920 && height >= 1080) return '1080p'
+    if (width >= 1280 && height >= 720) return '720p'
+    if (width >= 720 && height >= 480) return '480p'
+    if (width >= 640 && height >= 360) return '360p'
+    if (width >= 426 && height >= 240) return '240p'
+
+    return `${width}x${height}`
 }
