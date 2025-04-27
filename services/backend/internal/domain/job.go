@@ -60,21 +60,44 @@ type ProgressUpdate struct {
 }
 
 type VideoMetadata struct {
-	ID               string   `json:"id"`
-	Title            string   `json:"title"`
-	Description      string   `json:"description"`
-	Thumbnail        string   `json:"thumbnail"`
-	Duration         int      `json:"duration"`
-	ViewCount        int      `json:"view_count"`
-	Channel          string   `json:"channel"`
-	ChannelID        string   `json:"channel_id"`
-	ChannelURL       string   `json:"channel_url"`
-	ChannelFollowers int      `json:"channel_follower_count"`
-	Tags             []string `json:"tags"`
-	Categories       []string `json:"categories"`
-	UploadDate       string   `json:"upload_date"`
-	FileSize         int64    `json:"filesize_approx"`
-	Type             string   `json:"_type"`
+	ID                string   `json:"id"`
+	Title             string   `json:"title"`
+	Description       string   `json:"description"`
+	Thumbnail         string   `json:"thumbnail"`
+	Duration          int      `json:"duration"`
+	DurationString    string   `json:"duration_string"`
+	ViewCount         int      `json:"view_count"`
+	LikeCount         int      `json:"like_count"`
+	CommentCount      int      `json:"comment_count"`
+	Channel           string   `json:"channel"`
+	ChannelID         string   `json:"channel_id"`
+	ChannelURL        string   `json:"channel_url"`
+	ChannelFollowers  int      `json:"channel_follower_count"`
+	ChannelIsVerified bool     `json:"channel_is_verified"`
+	Uploader          string   `json:"uploader"`
+	UploaderID        string   `json:"uploader_id"`
+	UploaderURL       string   `json:"uploader_url"`
+	Tags              []string `json:"tags"`
+	Categories        []string `json:"categories"`
+	UploadDate        string   `json:"upload_date"`
+	FileSize          int64    `json:"filesize_approx"`
+	Format            string   `json:"format"`
+	Extension         string   `json:"ext"`
+	Language          string   `json:"language"`
+	Width             int      `json:"width"`
+	Height            int      `json:"height"`
+	Resolution        string   `json:"resolution"`
+	FPS               float64  `json:"fps"`
+	DynamicRange      string   `json:"dynamic_range"`
+	VideoCodec        string   `json:"vcodec"`
+	AspectRatio       float64  `json:"aspect_ratio"`
+	AudioCodec        string   `json:"acodec"`
+	AudioChannels     int      `json:"audio_channels"`
+	WasLive           bool     `json:"was_live"`
+	WebpageURLDomain  string   `json:"webpage_url_domain"`
+	Extractor         string   `json:"extractor"`
+	FullTitle         string   `json:"fulltitle"`
+	Type              string   `json:"_type"`
 }
 
 type Thumbnail struct {
@@ -84,19 +107,34 @@ type Thumbnail struct {
 	ID     string `json:"id"`
 }
 
+type PlaylistItem struct {
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	Description    string `json:"description,omitempty"`
+	Thumbnail      string `json:"thumbnail,omitempty"`
+	Duration       int    `json:"duration,omitempty"`
+	DurationString string `json:"duration_string,omitempty"`
+	UploadDate     string `json:"upload_date,omitempty"`
+	ViewCount      int    `json:"view_count,omitempty"`
+	LikeCount      int    `json:"like_count,omitempty"`
+	VideoFile      string `json:"video_file,omitempty"`
+}
+
 type PlaylistMetadata struct {
-	ID               string      `json:"id"`
-	Title            string      `json:"title"`
-	Description      string      `json:"description"`
-	Thumbnails       []Thumbnail `json:"thumbnails"`
-	UploaderID       string      `json:"uploader_id"`
-	UploaderURL      string      `json:"uploader_url"`
-	ChannelID        string      `json:"channel_id"`
-	Channel          string      `json:"channel"`
-	ChannelURL       string      `json:"channel_url"`
-	ChannelFollowers int         `json:"channel_follower_count"`
-	ItemCount        int         `json:"playlist_count"`
-	Type             string      `json:"_type"`
+	ID               string         `json:"id"`
+	Title            string         `json:"title"`
+	Description      string         `json:"description"`
+	Thumbnails       []Thumbnail    `json:"thumbnails"`
+	UploaderID       string         `json:"uploader_id"`
+	UploaderURL      string         `json:"uploader_url"`
+	ChannelID        string         `json:"channel_id"`
+	Channel          string         `json:"channel"`
+	ChannelURL       string         `json:"channel_url"`
+	ChannelFollowers int            `json:"channel_follower_count"`
+	ItemCount        int            `json:"playlist_count"`
+	ViewCount        int            `json:"view_count,omitempty"`
+	Items            []PlaylistItem `json:"items,omitempty"`
+	Type             string         `json:"_type"`
 }
 
 type ChannelMetadata struct {
@@ -108,6 +146,8 @@ type ChannelMetadata struct {
 	ChannelFollowers int         `json:"channel_follower_count"`
 	PlaylistCount    int         `json:"playlist_count"`
 	Type             string      `json:"_type"`
+	VideoCount       int         `json:"video_count,omitempty"`
+	TotalStorage     int64       `json:"total_storage,omitempty"`
 }
 
 type MetadataUpdate struct {

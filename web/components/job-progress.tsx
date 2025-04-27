@@ -73,7 +73,7 @@ const JobProgress: React.FC = () => {
                     metadata[jobID] ? (
                         <MetadataCard
                             key={jobID}
-                            metadata={metadata[jobID]}
+                            metadata={metadata[jobID] || null}
                             job={job}
                         />
                     ) : null

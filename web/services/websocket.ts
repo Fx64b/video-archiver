@@ -57,18 +57,23 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
                 const data = JSON.parse(event.data)
                 const { listeners } = get()
 
-                // Determine message type - either 'metadata' or 'progress'
-                // TODO: make this more generic if we add more message types
-                const type = 'metadata' in data ? 'metadata' : 'progress'
+                // Determine message type with a more robust check
+                const type = data && 'metadata' in data
+                    ? 'metadata'
+                    : data && 'progress' in data
+                        ? 'progress'
+                        : 'unknown'
 
-                const typeListeners = listeners.get(type)
-                if (typeListeners) {
-                    typeListeners.forEach((callback) => callback(data))
-                }
+                if (type !== 'unknown') {
+                    const typeListeners = listeners.get(type)
+                    if (typeListeners) {
+                        typeListeners.forEach((callback) => callback(data))
+                    }
 
-                const allListeners = listeners.get('all')
-                if (allListeners) {
-                    allListeners.forEach((callback) => callback(data))
+                    const allListeners = listeners.get('all')
+                    if (allListeners) {
+                        allListeners.forEach((callback) => callback(data))
+                    }
                 }
             } catch (error) {
                 console.error('Error processing WebSocket message:', error)

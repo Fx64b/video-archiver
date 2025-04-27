@@ -301,7 +301,14 @@ func (r *JobRepository) getMetadataForJob(jobID string) (domain.Metadata, error)
 }
 
 func (r *JobRepository) GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*domain.JobWithMetadata, int, error) {
-	// Validate and sanitize parameters
+	log.WithFields(log.Fields{
+		"contentType": contentType,
+		"page":        page,
+		"limit":       limit,
+		"sortBy":      sortBy,
+		"order":       order,
+	}).Debug("Getting metadata by type")
+
 	if page < 1 {
 		page = 1
 	}
@@ -438,6 +445,12 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 			Metadata: metadata,
 		})
 	}
+
+	log.WithFields(log.Fields{
+		"contentType": contentType,
+		"resultCount": len(result),
+		"totalCount":  totalCount,
+	}).Debug("Fetched metadata by type")
 
 	return result, totalCount, nil
 }

@@ -15,6 +15,7 @@ import (
 	"video-archiver/internal/domain"
 )
 
+// TODO: what the fuck is this ... improve
 func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
 	reader := bufio.NewReader(pipe)
 	var line bytes.Buffer

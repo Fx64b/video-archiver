@@ -3,6 +3,7 @@ package download
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -132,11 +133,17 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 
 	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s", s.config.DownloadPath)
 
-	// Extract metadata first
-	if err := s.extractMetadata(ctx, job, basePath); err != nil {
-		log.WithError(err).Error("Failed to extract metadata: %w", err)
+	// PHASE 1: Fetch complete metadata without downloading
+	playlistData, err := s.fetchPlaylistMetadata(ctx, job.URL)
+	if err != nil {
+		log.WithError(err).Warn("Failed to fetch complete playlist metadata, continuing with limited info")
+	} else {
+		if err := s.processPlaylistStructure(job.ID, playlistData); err != nil {
+			log.WithError(err).Warn("Failed to process playlist structure")
+		}
 	}
 
+	// PHASE 2: Download the actual content
 	if err := s.downloadVideo(ctx, job, basePath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
@@ -145,6 +152,129 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	job.Progress = 100.0
 
 	return s.jobs.Update(&job)
+}
+
+// Fetch complete playlist structure without downloading
+func (s *Service) fetchPlaylistMetadata(ctx context.Context, url string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "yt-dlp",
+		"--dump-single-json",
+		"--no-download",
+		"--no-simulate",
+		url,
+	)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to fetch playlist metadata: %w, stderr: %s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
+}
+
+// Process the complete playlist structure
+func (s *Service) processPlaylistStructure(jobID string, data []byte) error {
+	// Parse the JSON data
+	var rawData map[string]interface{}
+	if err := json.Unmarshal(data, &rawData); err != nil {
+		return fmt.Errorf("failed to parse playlist data: %w", err)
+	}
+
+	// Check if it's a playlist
+	typeStr, _ := rawData["_type"].(string)
+	if typeStr != "playlist" {
+		// Not a playlist, nothing to process
+		return nil
+	}
+
+	// Extract playlist information
+	playlistID, _ := rawData["id"].(string)
+	playlistTitle, _ := rawData["title"].(string)
+
+	// Process entries (videos in the playlist)
+	entries, ok := rawData["entries"].([]interface{})
+	if !ok {
+		return fmt.Errorf("playlist has no entries")
+	}
+
+	// Create a complete playlist metadata object
+	playlistMetadata := &domain.PlaylistMetadata{
+		ID:          playlistID,
+		Title:       playlistTitle,
+		Description: getString(rawData, "description"),
+		Channel:     getString(rawData, "channel"),
+		ChannelID:   getString(rawData, "channel_id"),
+		ChannelURL:  getString(rawData, "channel_url"),
+		ItemCount:   len(entries),
+		// Add other fields from rawData
+	}
+
+	// Process thumbnails if available
+	if thumbs, ok := rawData["thumbnails"].([]interface{}); ok {
+		for _, t := range thumbs {
+			if thumbMap, ok := t.(map[string]interface{}); ok {
+				thumb := domain.Thumbnail{
+					URL:    getString(thumbMap, "url"),
+					Height: getInt(thumbMap, "height"),
+					Width:  getInt(thumbMap, "width"),
+					ID:     getString(thumbMap, "id"),
+				}
+				playlistMetadata.Thumbnails = append(playlistMetadata.Thumbnails, thumb)
+			}
+		}
+	}
+
+	// Process each video entry
+	for _, e := range entries {
+		entry, ok := e.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		item := domain.PlaylistItem{
+			ID:             getString(entry, "id"),
+			Title:          getString(entry, "title"),
+			Description:    getString(entry, "description"),
+			Duration:       getInt(entry, "duration"),
+			DurationString: getString(entry, "duration_string"),
+			UploadDate:     getString(entry, "upload_date"),
+			ViewCount:      getInt(entry, "view_count"),
+			LikeCount:      getInt(entry, "like_count"),
+		}
+
+		if thumbs, ok := entry["thumbnails"].([]interface{}); ok && len(thumbs) > 0 {
+			if thumbMap, ok := thumbs[0].(map[string]interface{}); ok {
+				item.Thumbnail = getString(thumbMap, "url")
+			}
+		}
+
+		playlistMetadata.Items = append(playlistMetadata.Items, item)
+	}
+
+	return s.jobs.StoreMetadata(jobID, playlistMetadata)
+}
+
+func getString(data map[string]interface{}, key string) string {
+	if val, ok := data[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+func getInt(data map[string]interface{}, key string) int {
+	switch v := data[key].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case int64:
+		return int(v)
+	default:
+		return 0
+	}
 }
 
 func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath string) error {
@@ -188,7 +318,6 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		"--skip-download",
 		"--write-info-json",
 		"--no-progress",
-		"--flat-playlist",
 		"--output", outputPath,
 		job.URL,
 	)

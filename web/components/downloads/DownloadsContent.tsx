@@ -9,7 +9,14 @@ import {
     VideoMetadata,
 } from '@/types'
 import { format } from 'date-fns'
-import { AlertCircle, ChevronDown, List, SortAsc, SortDesc } from 'lucide-react'
+import {
+    AlertCircle,
+    ChevronDown,
+    Film,
+    List,
+    SortAsc,
+    SortDesc,
+} from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
@@ -18,9 +25,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import {
     formatBytes,
+    formatResolution,
     formatSeconds,
     formatSubscriberNumber,
-    getThumbnailUrl,
 } from '@/lib/utils'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -52,6 +59,13 @@ import {
 } from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { getThumbnailUrl } from '@/lib/metadata'
 
 interface PaginatedResponse {
     items: JobWithMetadata[]
@@ -385,19 +399,10 @@ export default function DownloadsContent() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {data?.items.map((item, i) => {
                     const metadata = item.metadata as VideoMetadata | undefined
-                    const thumbnailUrl = metadata
-                        ? getThumbnailUrl(metadata)
-                        : null
+                    const thumbnailUrl = metadata ? getThumbnailUrl(metadata) : null
                     const duration = metadata?.duration
                         ? formatSeconds(metadata.duration)
-                        : `${Math.floor(Math.random() * 20) + 1}:${Math.floor(
-                              Math.random() * 60
-                          )
-                              .toString()
-                              .padStart(2, '0')}`
-                    const fileSize = metadata?.filesize_approx
-                        ? formatBytes(metadata.filesize_approx)
-                        : `${Math.floor(Math.random() * 500) + 100} MB`
+                        : `?:??`
 
                     return (
                         <Card key={i} className="overflow-hidden pt-0">
@@ -427,23 +432,48 @@ export default function DownloadsContent() {
                                     </span>
                                 </div>
                                 <div className="mt-6 flex items-center gap-2">
+                                    {metadata?.resolution && (
+                                        <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                        >
+                                            {formatResolution(
+                                                metadata.resolution
+                                            )}
+                                        </Badge>
+                                    )}
+                                    {metadata?.format && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="text-xs"
+                                                    >
+                                                        {metadata?.ext?.toUpperCase() ||
+                                                            'Unknown'}
+                                                    </Badge>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>
+                                                        This is the original
+                                                        video format. However,
+                                                        it was downloaded and
+                                                        converted to MP4.
+                                                    </p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    )}
                                     <Badge
                                         variant="outline"
                                         className="text-xs"
                                     >
-                                        720p-x
-                                    </Badge>
-                                    <Badge
-                                        variant="outline"
-                                        className="text-xs"
-                                    >
-                                        MP4-x
-                                    </Badge>
-                                    <Badge
-                                        variant="outline"
-                                        className="text-xs"
-                                    >
-                                        {fileSize}
+                                        {metadata?.filesize_approx
+                                            ? formatBytes(
+                                                  metadata.filesize_approx
+                                              )
+                                            : 'Unknown size'}
                                     </Badge>
                                 </div>
                             </CardContent>
@@ -455,23 +485,25 @@ export default function DownloadsContent() {
     }
 
     const renderPlaylists = () => {
-        if (!data?.items?.length) {
+        if (!data?.items?.length && !loading) {
             return <p className="py-8 text-center">No playlists found</p>
         }
 
         return (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {data.items.map((item, i) => {
+                {data?.items.map((item, i) => {
                     const metadata = item.metadata as
                         | PlaylistMetadata
                         | undefined
-                    const thumbnails = metadata?.thumbnails || []
-                    const videoCount = metadata?.playlist_count
-                    const title = metadata?.title
-                    const channel = metadata?.channel
+
+                    // Use actual playlist items when available
+                    const playlistItems = metadata?.items || []
+                    const videoCount = metadata?.playlist_count || 0
+                    const title = metadata?.title || `Playlist ${i + 1}`
+                    const channel = metadata?.channel || 'Unknown Channel'
                     const updateDate = item.job
                         ? new Date(item.job.updated_at)
-                        : '?'
+                        : new Date()
 
                     return (
                         <Card key={i}>
@@ -486,25 +518,82 @@ export default function DownloadsContent() {
                             </CardHeader>
                             <CardContent>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {[0, 1, 2, 3].map((j) => (
-                                        <div
-                                            key={j}
-                                            className="relative aspect-video overflow-hidden rounded-md"
-                                        >
-                                            <Image
-                                                src={
-                                                    thumbnails[j]?.url ||
-                                                    `https://picsum.photos/160/90?random=${i}${j}`
-                                                }
-                                                alt={`Video ${j + 1}`}
-                                                fill
-                                                className="object-cover"
-                                            />
-                                        </div>
-                                    ))}
+                                    {playlistItems.length > 0
+                                        ? // Use actual video thumbnails
+                                          playlistItems
+                                              .slice(0, 4)
+                                              .map((video, j) => (
+                                                  <div
+                                                      key={j}
+                                                      className="relative aspect-video overflow-hidden rounded-md"
+                                                  >
+                                                      <Image
+                                                          src={
+                                                              video.thumbnail ||
+                                                              `https://picsum.photos/160/90?random=${i}${j}`
+                                                          }
+                                                          alt={
+                                                              video.title ||
+                                                              `Video ${j + 1}`
+                                                          }
+                                                          fill
+                                                          className="object-cover"
+                                                      />
+                                                      {video.duration_string && (
+                                                          <div className="absolute right-1 bottom-1 rounded bg-black/80 px-1 text-xs text-white">
+                                                              {
+                                                                  video.duration_string
+                                                              }
+                                                          </div>
+                                                      )}
+                                                  </div>
+                                              ))
+                                        : metadata?.thumbnails?.length
+                                          ? // Fall back to playlist thumbnails if no items available
+                                            [0, 1, 2, 3].map((j) => (
+                                                <div
+                                                    key={j}
+                                                    className="relative aspect-video overflow-hidden rounded-md"
+                                                >
+                                                    <Image
+                                                        src={
+                                                            metadata
+                                                                .thumbnails[0]
+                                                                ?.url ||
+                                                            `https://picsum.photos/160/90?random=${i}${j}`
+                                                        }
+                                                        alt={`Video thumbnail`}
+                                                        fill
+                                                        className="object-cover"
+                                                    />
+                                                </div>
+                                            ))
+                                          : // Placeholders as a last resort
+                                            [0, 1, 2, 3].map((j) => (
+                                                <div
+                                                    key={j}
+                                                    className="bg-muted relative aspect-video overflow-hidden rounded-md"
+                                                >
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        {/*find proper placeholder*/}
+                                                        <Film className="text-muted-foreground h-8 w-8" />
+                                                    </div>
+                                                </div>
+                                            ))}
                                 </div>
-                                <div className="text-muted-foreground mt-3 text-sm">
-                                    Last updated: {format(updateDate, 'PPP')}
+                                <div className="text-muted-foreground mt-3 flex justify-between text-sm">
+                                    <span>
+                                        Last updated:{' '}
+                                        {format(updateDate, 'PPP')}
+                                    </span>
+                                    {metadata?.view_count && (
+                                        <span>
+                                            {formatSubscriberNumber(
+                                                metadata.view_count
+                                            )}{' '}
+                                            views
+                                        </span>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
@@ -525,15 +614,12 @@ export default function DownloadsContent() {
                     const metadata = item.metadata as
                         | ChannelMetadata
                         | undefined
-                    const thumbnailUrl = metadata
-                        ? getThumbnailUrl(metadata)
-                        : null
+                    const thumbnailUrl = metadata ? getThumbnailUrl(metadata) : null
                     const channelName = metadata?.channel
                     const subscribers = metadata?.channel_follower_count
-                        ? formatSubscriberNumber(
-                              metadata.channel_follower_count
-                          ) + ' subscribers'
+                        ? formatSubscriberNumber(metadata.channel_follower_count) + ' subscribers'
                         : `unknown subscribers`
+
                     const updateDate = item.job
                         ? new Date(item.job.updated_at)
                         : '?'
@@ -567,14 +653,17 @@ export default function DownloadsContent() {
                                 <div className="mb-2 flex justify-between text-sm">
                                     <span>Videos downloaded:</span>
                                     <span className="font-medium">
-                                        {Math.floor(Math.random() * 50) + 10}-x
+                                        {metadata?.video_count || 'Unknown'}
                                     </span>
                                 </div>
                                 <div className="mb-2 flex justify-between text-sm">
                                     <span>Storage used:</span>
                                     <span className="font-medium">
-                                        {Math.floor(Math.random() * 10) + 1}.
-                                        {Math.floor(Math.random() * 10)}GB-x
+                                        {metadata?.total_storage
+                                            ? formatBytes(
+                                                  metadata.total_storage
+                                              )
+                                            : 'Unknown size'}
                                     </span>
                                 </div>
                                 <div className="flex justify-between text-sm">

@@ -5,13 +5,8 @@ import React from 'react'
 
 import Image from 'next/image'
 
-import {
-    formatSeconds,
-    formatSubscriberNumber,
-    getThumbnailUrl,
-    isChannel,
-} from '@/lib/utils'
-import { isVideoMetadata } from '@/lib/utils'
+import { formatSeconds, formatSubscriberNumber } from '@/lib/utils'
+import { getTitle, getThumbnailUrl, isChannelMetadata, isVideoMetadata } from '@/lib/metadata'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -27,21 +22,16 @@ interface JobProgress {
 }
 
 interface MetadataCardProps {
-    metadata: Metadata
+    metadata: Metadata | null
     job: JobProgress | Job | undefined
 }
 
-// TODO: This component need serious refactoring and improvement but will do for now
-
 export const MetadataCard: React.FC<MetadataCardProps> = ({
-    metadata,
-    job,
-}) => {
+                                                              metadata,
+                                                              job,
+                                                          }) => {
     const thumbnailUrl = getThumbnailUrl(metadata)
-
-    // Hacky and unreliable way to determine if the metadata is a playlists because all playlists will have a follower count of 0
-    // Currently, there seems to be no other way to determine if the metadata is a channel or playlists by the metadata itself
-    const isPlaylist = metadata?.channel_follower_count === 0
+    const title = getTitle(metadata)
 
     if (!job) return null
 
@@ -54,32 +44,23 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
         return job.progress > 100 ? 100 : job.progress
     }
 
+    const isChannel = isChannelMetadata(metadata)
+    const isVideo = isVideoMetadata(metadata)
+
     return (
         <Card className="w-full">
             <div className="flex items-center">
                 <div className="flex w-64 justify-center">
                     {thumbnailUrl ? (
-                        isVideoMetadata(metadata) || isPlaylist ? (
-                            <div className={'relative h-36 w-64'}>
-                                <Image
-                                    src={thumbnailUrl}
-                                    alt={metadata.title}
-                                    fill
-                                    className="ml-4 rounded-lg object-cover"
-                                    sizes="(max-width: 768px) 100vw, 192px"
-                                />
-                            </div>
-                        ) : (
-                            <div className={'relative h-36 w-36'}>
-                                <Image
-                                    src={thumbnailUrl}
-                                    alt={metadata.channel}
-                                    fill
-                                    className="ml-4 w-1/2 rounded-full object-cover"
-                                    sizes="(max-width: 768px) 100vw, 192px"
-                                />
-                            </div>
-                        )
+                        <div className={`relative ${isChannel ? 'h-36 w-36' : 'h-36 w-64'}`}>
+                            <Image
+                                src={thumbnailUrl}
+                                alt={title}
+                                fill
+                                className={`ml-4 ${isChannel ? 'rounded-full' : 'rounded-lg'} object-cover`}
+                                sizes="(max-width: 768px) 100vw, 192px"
+                            />
+                        </div>
                     ) : (
                         <Skeleton className="ml-4 h-36 w-64 object-cover" />
                     )}
@@ -88,38 +69,45 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                 <div className="flex-1 p-4">
                     <CardHeader>
                         <CardTitle>
-                            {metadata?.title ?? metadata?.channel}
+                            {title}
                         </CardTitle>
                     </CardHeader>
 
                     <CardContent>
-                        <div className="mb-2 flex items-center gap-8">
-                            {isVideoMetadata(metadata) && (
-                                <div className="flex items-center gap-2">
-                                    <Clock className="h-4 w-4" />
-                                    <span>
-                                        {formatSeconds(metadata.duration)}
-                                    </span>
-                                </div>
-                            )}
-                            {!isChannel(metadata) && (
-                                <div className="flex items-center gap-2">
-                                    <User className="h-4 w-4" />
-                                    <span>{metadata.channel}</span>
-                                </div>
-                            )}
+                        {metadata ? (
+                            <div className="mb-2 flex items-center gap-8">
+                                {isVideo && 'duration' in metadata && (
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span>
+                                            {formatSeconds(metadata.duration)}
+                                        </span>
+                                    </div>
+                                )}
+                                {!isChannel && 'channel' in metadata && (
+                                    <div className="flex items-center gap-2">
+                                        <User className="h-4 w-4" />
+                                        <span>{metadata.channel}</span>
+                                    </div>
+                                )}
 
-                            {isChannel(metadata) && (
-                                <div className="flex items-center gap-2">
-                                    <span>
-                                        {formatSubscriberNumber(
-                                            metadata.channel_follower_count
-                                        )}{' '}
-                                        subscribers
-                                    </span>
-                                </div>
-                            )}
-                        </div>
+                                {isChannel && 'channel_follower_count' in metadata && (
+                                    <div className="flex items-center gap-2">
+                                        <span>
+                                            {formatSubscriberNumber(
+                                                metadata.channel_follower_count
+                                            )}{' '}
+                                            subscribers
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="mb-2">
+                                <Skeleton className="mb-2 h-4 w-1/2" />
+                                <Skeleton className="h-4 w-1/3" />
+                            </div>
+                        )}
 
                         <div className="flex items-center justify-between">
                             <p>
@@ -142,7 +130,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                         />
                                     </div>
                                 ) : 'currentVideoProgress' in job &&
-                                  job.currentVideoProgress > 100 ? (
+                                job.currentVideoProgress > 100 ? (
                                     <span>Video already downloaded</span>
                                 ) : (
                                     <span>
