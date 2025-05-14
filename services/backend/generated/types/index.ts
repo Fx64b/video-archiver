@@ -91,6 +91,16 @@ export interface PlaylistItem {
   view_count?: number /* int */;
   like_count?: number /* int */;
   video_file?: string;
+  channel?: string;
+  channel_id?: string;
+  channel_url?: string;
+  width?: number /* int */;
+  height?: number /* int */;
+  resolution?: string;
+  filesize_approx?: number /* int64 */;
+  format?: string;
+  ext?: string;
+  tags?: string[];
 }
 export interface PlaylistMetadata {
   id: string;
@@ -119,6 +129,8 @@ export interface ChannelMetadata {
   _type: string;
   video_count?: number /* int */;
   total_storage?: number /* int64 */;
+  total_views?: number /* int */;
+  recent_videos?: PlaylistItem[];
 }
 export interface MetadataUpdate {
   jobID: string;

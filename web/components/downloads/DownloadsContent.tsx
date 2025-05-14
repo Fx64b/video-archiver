@@ -207,6 +207,8 @@ export default function DownloadsContent() {
                         total_pages: 1,
                     })
                 }
+
+                console.debug('Fetching downloads with URL:', url.toString());
             } catch (error) {
                 console.error(`Error fetching ${activeTab}:`, error)
                 setError(`Failed to load ${activeTab}. Please try again later.`)

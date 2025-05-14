@@ -99,12 +99,35 @@ func (r *JobRepository) storeVideoMetadata(jobID string, metadata *domain.VideoM
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = r.db.Exec(`
-        INSERT INTO videos (job_id, title, metadata_json)
-        VALUES (?, ?, ?)`,
-		jobID, metadata.Title, string(metadataJSON))
+	// Check if the record already exists
+	var count int
+	err = r.db.QueryRow("SELECT COUNT(*) FROM videos WHERE job_id = ?", jobID).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check existing video: %w", err)
+	}
 
-	return err
+	if count > 0 {
+		// Update existing record
+		_, err = r.db.Exec(`
+            UPDATE videos 
+            SET title = ?, metadata_json = ? 
+            WHERE job_id = ?`,
+			metadata.Title, string(metadataJSON), jobID)
+		if err != nil {
+			return fmt.Errorf("update video metadata: %w", err)
+		}
+	} else {
+		// Insert new record
+		_, err = r.db.Exec(`
+            INSERT INTO videos (job_id, title, metadata_json)
+            VALUES (?, ?, ?)`,
+			jobID, metadata.Title, string(metadataJSON))
+		if err != nil {
+			return fmt.Errorf("insert video metadata: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *JobRepository) storePlaylistMetadata(jobID string, metadata *domain.PlaylistMetadata) error {
@@ -113,12 +136,40 @@ func (r *JobRepository) storePlaylistMetadata(jobID string, metadata *domain.Pla
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = r.db.Exec(`
-        INSERT INTO playlists (job_id, title, metadata_json)
-        VALUES ( ?, ?, ?)`,
-		jobID, metadata.Title, string(metadataJSON))
+	// Check if the record already exists
+	var count int
+	err = r.db.QueryRow("SELECT COUNT(*) FROM playlists WHERE job_id = ?", jobID).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check existing playlist: %w", err)
+	}
 
-	return err
+	if count > 0 {
+		// Update existing record only if items are not empty
+		if len(metadata.Items) == 0 {
+			log.Info("No items in playlist metadata, skipping update")
+			return nil
+		}
+
+		_, err = r.db.Exec(`
+            UPDATE playlists 
+            SET title = ?, metadata_json = ? 
+            WHERE job_id = ?`,
+			metadata.Title, string(metadataJSON), jobID)
+		if err != nil {
+			return fmt.Errorf("update playlist metadata: %w", err)
+		}
+	} else {
+		// Insert new record
+		_, err = r.db.Exec(`
+            INSERT INTO playlists (job_id, title, metadata_json)
+            VALUES (?, ?, ?)`,
+			jobID, metadata.Title, string(metadataJSON))
+		if err != nil {
+			return fmt.Errorf("insert playlist metadata: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *JobRepository) storeChannelMetadata(jobID string, metadata *domain.ChannelMetadata) error {
@@ -127,12 +178,35 @@ func (r *JobRepository) storeChannelMetadata(jobID string, metadata *domain.Chan
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = r.db.Exec(`
-        INSERT INTO channels (job_id, name, metadata_json)
-        VALUES (?, ?, ?)`,
-		jobID, metadata.Channel, string(metadataJSON))
+	// Check if the record already exists
+	var count int
+	err = r.db.QueryRow("SELECT COUNT(*) FROM channels WHERE job_id = ?", jobID).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check existing channel: %w", err)
+	}
 
-	return err
+	if count > 0 {
+		// Update existing record
+		_, err = r.db.Exec(`
+            UPDATE channels 
+            SET name = ?, metadata_json = ? 
+            WHERE job_id = ?`,
+			metadata.Channel, string(metadataJSON), jobID)
+		if err != nil {
+			return fmt.Errorf("update channel metadata: %w", err)
+		}
+	} else {
+		// Insert new record
+		_, err = r.db.Exec(`
+            INSERT INTO channels (job_id, name, metadata_json)
+            VALUES (?, ?, ?)`,
+			jobID, metadata.Channel, string(metadataJSON))
+		if err != nil {
+			return fmt.Errorf("insert channel metadata: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *JobRepository) GetJobWithMetadata(jobID string) (*domain.JobWithMetadata, error) {
@@ -453,4 +527,148 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 	}).Debug("Fetched metadata by type")
 
 	return result, totalCount, nil
+}
+
+func (r *JobRepository) AddVideoToParent(videoJobID, parentJobID, membershipType string) error {
+	// Check if the relationship already exists
+	var count int
+	err := r.db.QueryRow(`
+        SELECT COUNT(*) FROM video_memberships 
+        WHERE video_job_id = ? AND parent_job_id = ?`,
+		videoJobID, parentJobID).Scan(&count)
+
+	if err != nil {
+		return fmt.Errorf("check existing membership: %w", err)
+	}
+
+	if count > 0 {
+		// Relationship already exists
+		return nil
+	}
+
+	// Insert the new relationship
+	_, err = r.db.Exec(`
+        INSERT INTO video_memberships (video_job_id, parent_job_id, membership_type)
+        VALUES (?, ?, ?)`,
+		videoJobID, parentJobID, membershipType)
+
+	if err != nil {
+		return fmt.Errorf("insert video membership: %w", err)
+	}
+
+	return nil
+}
+func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWithMetadata, error) {
+	rows, err := r.db.Query(`
+        WITH parent_types AS (
+            SELECT parent_job_id, membership_type
+            FROM video_memberships
+            WHERE video_job_id = ?
+        )
+        SELECT j.job_id, j.url, j.status, j.progress, j.created_at, j.updated_at, 
+               pt.membership_type,
+               CASE 
+                   WHEN pt.membership_type = 'playlist' THEN p.metadata_json
+                   WHEN pt.membership_type = 'channel' THEN c.metadata_json
+                   ELSE NULL
+               END as metadata_json
+        FROM jobs j
+        JOIN parent_types pt ON j.job_id = pt.parent_job_id
+        LEFT JOIN playlists p ON j.job_id = p.job_id AND pt.membership_type = 'playlist'
+        LEFT JOIN channels c ON j.job_id = c.job_id AND pt.membership_type = 'channel'`,
+		videoJobID)
+
+	if err != nil {
+		return nil, fmt.Errorf("query parents for video: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*domain.JobWithMetadata
+
+	for rows.Next() {
+		job := &domain.Job{}
+		var membershipType string
+		var metadataJSON sql.NullString
+
+		err := rows.Scan(
+			&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.CreatedAt, &job.UpdatedAt, &membershipType, &metadataJSON,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("scan job row: %w", err)
+		}
+
+		jobWithMetadata := &domain.JobWithMetadata{
+			Job: job,
+		}
+
+		if metadataJSON.Valid {
+			var metadata domain.Metadata
+
+			switch membershipType {
+			case "playlist":
+				var playlistMetadata domain.PlaylistMetadata
+				if err := json.Unmarshal([]byte(metadataJSON.String), &playlistMetadata); err == nil {
+					metadata = &playlistMetadata
+				}
+			case "channel":
+				var channelMetadata domain.ChannelMetadata
+				if err := json.Unmarshal([]byte(metadataJSON.String), &channelMetadata); err == nil {
+					metadata = &channelMetadata
+				}
+			}
+
+			jobWithMetadata.Metadata = metadata
+		}
+
+		result = append(result, jobWithMetadata)
+	}
+
+	return result, nil
+}
+
+func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWithMetadata, error) {
+	rows, err := r.db.Query(`
+        SELECT j.job_id, j.url, j.status, j.progress, j.created_at, j.updated_at, 
+               v.metadata_json
+        FROM jobs j
+        JOIN video_memberships vm ON j.job_id = vm.video_job_id
+        JOIN videos v ON j.job_id = v.job_id
+        WHERE vm.parent_job_id = ?`,
+		parentJobID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []*domain.JobWithMetadata
+
+	for rows.Next() {
+		job := &domain.Job{}
+		var metadataJSON string
+
+		err := rows.Scan(
+			&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		var videoMetadata domain.VideoMetadata
+		if err := json.Unmarshal([]byte(metadataJSON), &videoMetadata); err != nil {
+			log.WithError(err).Warn("Failed to unmarshal video metadata")
+			continue
+		}
+
+		result = append(result, &domain.JobWithMetadata{
+			Job:      job,
+			Metadata: &videoMetadata,
+		})
+	}
+
+	return result, nil
 }

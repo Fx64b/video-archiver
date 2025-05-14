@@ -35,6 +35,9 @@ type JobRepository interface {
 	CountPlaylists() (int, error)
 	CountChannels() (int, error)
 	GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*JobWithMetadata, int, error)
+	AddVideoToParent(videoJobID, parentJobID, membershipType string) error
+	GetVideosForParent(parentJobID string) ([]*JobWithMetadata, error)
+	GetParentsForVideo(videoJobID string) ([]*JobWithMetadata, error)
 }
 
 type JobType string
@@ -108,16 +111,26 @@ type Thumbnail struct {
 }
 
 type PlaylistItem struct {
-	ID             string `json:"id"`
-	Title          string `json:"title"`
-	Description    string `json:"description,omitempty"`
-	Thumbnail      string `json:"thumbnail,omitempty"`
-	Duration       int    `json:"duration,omitempty"`
-	DurationString string `json:"duration_string,omitempty"`
-	UploadDate     string `json:"upload_date,omitempty"`
-	ViewCount      int    `json:"view_count,omitempty"`
-	LikeCount      int    `json:"like_count,omitempty"`
-	VideoFile      string `json:"video_file,omitempty"`
+	ID             string   `json:"id"`
+	Title          string   `json:"title"`
+	Description    string   `json:"description,omitempty"`
+	Thumbnail      string   `json:"thumbnail,omitempty"`
+	Duration       int      `json:"duration,omitempty"`
+	DurationString string   `json:"duration_string,omitempty"`
+	UploadDate     string   `json:"upload_date,omitempty"`
+	ViewCount      int      `json:"view_count,omitempty"`
+	LikeCount      int      `json:"like_count,omitempty"`
+	VideoFile      string   `json:"video_file,omitempty"`
+	Channel        string   `json:"channel,omitempty"`
+	ChannelID      string   `json:"channel_id,omitempty"`
+	ChannelURL     string   `json:"channel_url,omitempty"`
+	Width          int      `json:"width,omitempty"`
+	Height         int      `json:"height,omitempty"`
+	Resolution     string   `json:"resolution,omitempty"`
+	FileSize       int64    `json:"filesize_approx,omitempty"`
+	Format         string   `json:"format,omitempty"`
+	Extension      string   `json:"ext,omitempty"`
+	Tags           []string `json:"tags,omitempty"`
 }
 
 type PlaylistMetadata struct {
@@ -138,16 +151,18 @@ type PlaylistMetadata struct {
 }
 
 type ChannelMetadata struct {
-	ID               string      `json:"id"`
-	Channel          string      `json:"channel"`
-	URL              string      `json:"channel_url"`
-	Description      string      `json:"description"`
-	Thumbnails       []Thumbnail `json:"thumbnails"`
-	ChannelFollowers int         `json:"channel_follower_count"`
-	PlaylistCount    int         `json:"playlist_count"`
-	Type             string      `json:"_type"`
-	VideoCount       int         `json:"video_count,omitempty"`
-	TotalStorage     int64       `json:"total_storage,omitempty"`
+	ID               string         `json:"id"`
+	Channel          string         `json:"channel"`
+	URL              string         `json:"channel_url"`
+	Description      string         `json:"description"`
+	Thumbnails       []Thumbnail    `json:"thumbnails"`
+	ChannelFollowers int            `json:"channel_follower_count"`
+	PlaylistCount    int            `json:"playlist_count"`
+	Type             string         `json:"_type"`
+	VideoCount       int            `json:"video_count,omitempty"`
+	TotalStorage     int64          `json:"total_storage,omitempty"`
+	TotalViews       int            `json:"total_views,omitempty"`
+	RecentVideos     []PlaylistItem `json:"recent_videos,omitempty"`
 }
 
 type MetadataUpdate struct {

@@ -60,7 +60,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
                 // Determine message type with a more robust check
                 const type = data && 'metadata' in data
                     ? 'metadata'
-                    : data && 'progress' in data
+                    : data && 'jobID' in data && ('progress' in data || 'currentVideoProgress' in data)
                         ? 'progress'
                         : 'unknown'
 

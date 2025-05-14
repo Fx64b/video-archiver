@@ -69,15 +69,13 @@ const JobProgress: React.FC = () => {
         <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
             {Object.entries(jobs)
                 .reverse()
-                .map(([jobID, job]) =>
-                    metadata[jobID] ? (
-                        <MetadataCard
-                            key={jobID}
-                            metadata={metadata[jobID] || null}
-                            job={job}
-                        />
-                    ) : null
-                )}
+                .map(([jobID, job]) => (
+                    <MetadataCard
+                        key={jobID}
+                        metadata={metadata[jobID] || null}
+                        job={job}
+                    />
+                ))}
         </div>
     )
 }

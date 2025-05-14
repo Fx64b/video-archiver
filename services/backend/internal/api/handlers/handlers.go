@@ -206,9 +206,24 @@ func (h *Handler) HandleGetDownloads(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(items) == 0 && page == 1 {
-		// Only return 404 for the first page with no results
-		log.WithError(err).Errorf("No %s found", contentType)
-		http.Error(w, fmt.Sprintf("No %s found", contentType), http.StatusNotFound)
+		log.Infof("No %s found", contentType)
+
+		resp := struct {
+			Items      []*domain.JobWithMetadata `json:"items"`
+			TotalCount int                       `json:"total_count"`
+			Page       int                       `json:"page"`
+			Limit      int                       `json:"limit"`
+			TotalPages int                       `json:"total_pages"`
+		}{
+			Items:      []*domain.JobWithMetadata{},
+			TotalCount: 0,
+			Page:       page,
+			Limit:      limit,
+			TotalPages: 0,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(Response{Message: resp})
 		return
 	}
 

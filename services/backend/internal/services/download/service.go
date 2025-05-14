@@ -9,8 +9,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
+	"time"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/metadata"
 )
@@ -133,18 +136,37 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 
 	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s", s.config.DownloadPath)
 
-	// PHASE 1: Fetch complete metadata without downloading
-	playlistData, err := s.fetchPlaylistMetadata(ctx, job.URL)
+	log.Infof("Download Path: %s", basePath)
+
+	// TODO: start metadata extraction in a separate goroutine and then do the downloading
+	// Extract metadata first
+	extractedMetadata, err := s.extractMetadata(ctx, job, basePath)
 	if err != nil {
-		log.WithError(err).Warn("Failed to fetch complete playlist metadata, continuing with limited info")
-	} else {
-		if err := s.processPlaylistStructure(job.ID, playlistData); err != nil {
-			log.WithError(err).Warn("Failed to process playlist structure")
+		log.WithError(err).Error("Failed to extract metadata")
+	}
+
+	isPlaylist := false
+	isChannel := false
+
+	if extractedMetadata != nil {
+		switch extractedMetadata.(type) {
+		case *domain.PlaylistMetadata:
+			isPlaylist = true
+		case *domain.ChannelMetadata:
+			isChannel = true
 		}
 	}
 
-	// PHASE 2: Download the actual content
-	if err := s.downloadVideo(ctx, job, basePath); err != nil {
+	if isPlaylist || isChannel {
+		// For playlists and channels, we may want to modify the download command
+		// to better track the individual videos
+		err = s.downloadPlaylistOrChannel(ctx, job, extractedMetadata, basePath)
+	} else {
+		// For single videos, use the existing download method
+		err = s.downloadVideo(ctx, job, basePath)
+	}
+
+	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
 
@@ -154,127 +176,208 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	return s.jobs.Update(&job)
 }
 
-// Fetch complete playlist structure without downloading
-func (s *Service) fetchPlaylistMetadata(ctx context.Context, url string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "yt-dlp",
-		"--dump-single-json",
-		"--no-download",
-		"--no-simulate",
-		url,
+func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job, metadataModel domain.Metadata, outputPath string) error {
+	// Create a temporary directory for archiving downloaded video IDs
+	tempDir, err := os.MkdirTemp("", "archive-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+
+	archiveFile := filepath.Join(tempDir, "archive.txt")
+
+	// Build a command that will:
+	// 1. Download the videos
+	// 2. Archive the video IDs
+	// 3. Output detailed metadata
+	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
+		"-N", fmt.Sprintf("%d", s.config.Concurrency),
+		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
+		"--merge-output-format", "mp4",
+		"--retries", "3",
+		"--continue",
+		"--ignore-errors",
+		"--add-metadata",
+		"--write-info-json",               // Write metadata for each video
+		"--download-archive", archiveFile, // Track downloaded videos
+		"--output", outputPath,
+		job.URL,
 	)
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to fetch playlist metadata: %w, stderr: %s", err, stderr.String())
+	stdout, err := downloadCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
-	return stdout.Bytes(), nil
-}
-
-// Process the complete playlist structure
-func (s *Service) processPlaylistStructure(jobID string, data []byte) error {
-	// Parse the JSON data
-	var rawData map[string]interface{}
-	if err := json.Unmarshal(data, &rawData); err != nil {
-		return fmt.Errorf("failed to parse playlist data: %w", err)
+	stderr, err := downloadCmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 
-	// Check if it's a playlist
-	typeStr, _ := rawData["_type"].(string)
-	if typeStr != "playlist" {
-		// Not a playlist, nothing to process
-		return nil
+	if err := downloadCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start download: %w", err)
 	}
 
-	// Extract playlist information
-	playlistID, _ := rawData["id"].(string)
-	playlistTitle, _ := rawData["title"].(string)
+	// Track progress in separate goroutines
+	go s.trackProgress(stdout, job.ID, string(domain.JobTypeVideo))
+	go s.trackProgress(stderr, job.ID, string(domain.JobTypeVideo))
 
-	// Process entries (videos in the playlist)
-	entries, ok := rawData["entries"].([]interface{})
-	if !ok {
-		return fmt.Errorf("playlist has no entries")
+	// Wait for command to complete
+	if err := downloadCmd.Wait(); err != nil {
+		return fmt.Errorf("download command failed: %w", err)
 	}
 
-	// Create a complete playlist metadata object
-	playlistMetadata := &domain.PlaylistMetadata{
-		ID:          playlistID,
-		Title:       playlistTitle,
-		Description: getString(rawData, "description"),
-		Channel:     getString(rawData, "channel"),
-		ChannelID:   getString(rawData, "channel_id"),
-		ChannelURL:  getString(rawData, "channel_url"),
-		ItemCount:   len(entries),
-		// Add other fields from rawData
+	// Process the archive file to get the downloaded video IDs
+	downloadedIDs, err := s.processArchiveFile(archiveFile)
+	if err != nil {
+		log.WithError(err).Warn("Failed to process archive file")
 	}
 
-	// Process thumbnails if available
-	if thumbs, ok := rawData["thumbnails"].([]interface{}); ok {
-		for _, t := range thumbs {
-			if thumbMap, ok := t.(map[string]interface{}); ok {
-				thumb := domain.Thumbnail{
-					URL:    getString(thumbMap, "url"),
-					Height: getInt(thumbMap, "height"),
-					Width:  getInt(thumbMap, "width"),
-					ID:     getString(thumbMap, "id"),
+	// Determine the membership type based on metadata type
+	var membershipType string
+	switch metadataModel.(type) {
+	case *domain.PlaylistMetadata:
+		membershipType = "playlist"
+	case *domain.ChannelMetadata:
+		membershipType = "channel"
+	default:
+		membershipType = "unknown"
+	}
+
+	// Scan for downloaded video metadata files in the output directory
+	baseDir := filepath.Dir(outputPath)
+
+	// For each downloaded video, create a virtual job and link it to the playlist/channel
+	for extractor, ids := range downloadedIDs {
+		for _, id := range ids {
+			// First, try to find the exact metadata file
+			pattern := filepath.Join(baseDir, "*", fmt.Sprintf("%s-%s.info.json", extractor, id))
+			matches, err := filepath.Glob(pattern)
+
+			if err != nil || len(matches) == 0 {
+				// Try a less specific pattern if the exact one doesn't work
+				pattern = filepath.Join(baseDir, "*", "*.info.json")
+				matches, err = filepath.Glob(pattern)
+
+				if err != nil || len(matches) == 0 {
+					log.Warnf("Could not find metadata file for video %s-%s", extractor, id)
+					continue
 				}
-				playlistMetadata.Thumbnails = append(playlistMetadata.Thumbnails, thumb)
+			}
+
+			// Process each found metadata file
+			for _, metadataFilePath := range matches {
+				videoData, err := os.ReadFile(metadataFilePath)
+				if err != nil {
+					log.WithError(err).Warnf("Failed to read video metadata file: %s", metadataFilePath)
+					continue
+				}
+
+				// Check if this is the video we're looking for
+				var videoInfo map[string]interface{}
+				if err := json.Unmarshal(videoData, &videoInfo); err != nil {
+					log.WithError(err).Warn("Failed to parse video metadata JSON")
+					continue
+				}
+
+				videoID, ok := videoInfo["id"].(string)
+				if !ok || videoID != id {
+					// This is not the video we're looking for
+					continue
+				}
+
+				// Create a virtual job for this video
+				videoJobID := fmt.Sprintf("%s-%s", extractor, id)
+
+				// Check if a job already exists for this video
+				existingJob, err := s.jobs.GetByID(videoJobID)
+				if err == nil && existingJob != nil {
+					// Job exists, create membership relationship
+					if err := s.linkVideoToParent(videoJobID, job.ID, membershipType); err != nil {
+						log.WithError(err).Warnf("Failed to link video %s to %s %s", videoJobID, membershipType, job.ID)
+					}
+					continue
+				}
+
+				// Create a new virtual job for this video
+				videoJob := domain.Job{
+					ID:        videoJobID,
+					URL:       fmt.Sprintf("https://%s.com/watch?v=%s", extractor, id),
+					Status:    domain.JobStatusComplete,
+					Progress:  100.0,
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+
+				// Create the job and store its metadata
+				if err := s.jobs.Create(&videoJob); err != nil {
+					log.WithError(err).Warnf("Failed to create virtual job for video %s", videoJobID)
+					continue
+				}
+
+				// Extract and store the video metadata
+				videoMetadata, err := metadata.ExtractMetadata(metadataFilePath)
+
+				if err != nil {
+					log.WithError(err).Warnf("Failed to extract metadata for video %s", videoJobID)
+					continue
+				}
+
+				if err := s.jobs.StoreMetadata(videoJobID, videoMetadata); err != nil {
+					log.WithError(err).Warnf("Failed to store metadata for video %s", videoJobID)
+					continue
+				}
+
+				// Link the video to the playlist/channel
+				if err := s.linkVideoToParent(videoJobID, job.ID, membershipType); err != nil {
+					log.WithError(err).Warnf("Failed to link video %s to %s %s", videoJobID, membershipType, job.ID)
+				}
 			}
 		}
 	}
 
-	// Process each video entry
-	for _, e := range entries {
-		entry, ok := e.(map[string]interface{})
-		if !ok {
+	return nil
+}
+
+func (s *Service) linkVideoToParent(videoJobID, parentJobID, membershipType string) error {
+	// Ideally, this would call a repository method
+	// But for now, we'll implement a basic version in the service
+
+	// TODO: This should be implemented in the repository
+	log.Infof("Linking video %s to %s %s", videoJobID, membershipType, parentJobID)
+
+	// Placeholder for actual database operation
+	// This would be implemented in the repository layer
+	return nil
+}
+
+func (s *Service) processArchiveFile(archiveFile string) (map[string][]string, error) {
+	// Read the archive file to get the IDs of downloaded videos
+	data, err := os.ReadFile(archiveFile)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	result := make(map[string][]string)
+
+	for _, line := range lines {
+		if line == "" {
 			continue
 		}
 
-		item := domain.PlaylistItem{
-			ID:             getString(entry, "id"),
-			Title:          getString(entry, "title"),
-			Description:    getString(entry, "description"),
-			Duration:       getInt(entry, "duration"),
-			DurationString: getString(entry, "duration_string"),
-			UploadDate:     getString(entry, "upload_date"),
-			ViewCount:      getInt(entry, "view_count"),
-			LikeCount:      getInt(entry, "like_count"),
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) != 2 {
+			continue
 		}
 
-		if thumbs, ok := entry["thumbnails"].([]interface{}); ok && len(thumbs) > 0 {
-			if thumbMap, ok := thumbs[0].(map[string]interface{}); ok {
-				item.Thumbnail = getString(thumbMap, "url")
-			}
-		}
+		extractor := parts[0]
+		id := parts[1]
 
-		playlistMetadata.Items = append(playlistMetadata.Items, item)
+		result[extractor] = append(result[extractor], id)
 	}
 
-	return s.jobs.StoreMetadata(jobID, playlistMetadata)
-}
-
-func getString(data map[string]interface{}, key string) string {
-	if val, ok := data[key].(string); ok {
-		return val
-	}
-	return ""
-}
-
-func getInt(data map[string]interface{}, key string) int {
-	switch v := data[key].(type) {
-	case float64:
-		return int(v)
-	case int:
-		return v
-	case int64:
-		return int(v)
-	default:
-		return 0
-	}
+	return result, nil
 }
 
 func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath string) error {
@@ -312,24 +415,25 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 	return downloadCmd.Wait()
 }
 
-func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPath string) error {
+func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPath string) (domain.Metadata, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	metadataCmd := exec.CommandContext(ctx, "yt-dlp",
 		"--skip-download",
 		"--write-info-json",
 		"--no-progress",
+		"--flat-playlist",
 		"--output", outputPath,
 		job.URL,
 	)
 
 	stdoutPipe, err := metadataCmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
 	stderrPipe, err := metadataCmd.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("failed to create stderr pipe: %w", err)
+		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 
 	stdoutWriter := io.MultiWriter(&stdoutBuf, os.Stdout)
@@ -346,11 +450,11 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 	s.hub.broadcast <- update
 
 	if err := metadataCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start metadata extraction: %w", err)
+		return nil, fmt.Errorf("failed to start metadata extraction: %w", err)
 	}
 
 	if err := metadataCmd.Wait(); err != nil {
-		return fmt.Errorf("metadata extraction failed: %w", err)
+		return nil, fmt.Errorf("metadata extraction failed: %w", err)
 	}
 
 	// New regex pattern to match both video and playlist/channel info JSON paths
@@ -365,16 +469,24 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 	}
 
 	if metadataPath == "" {
-		return fmt.Errorf("could not find metadata file path in command output")
+		return nil, fmt.Errorf("could not find metadata file path in command output")
 	}
 
 	extractedMetadata, err := metadata.ExtractMetadata(metadataPath)
 	if err != nil {
-		return fmt.Errorf("failed to extract metadata from file: %w", err)
+		return nil, fmt.Errorf("failed to extract metadata from file: %w", err)
+	}
+
+	// Phase 2: Enhance metadata for playlists and channels with detailed info
+	if isPlaylistOrChannel(extractedMetadata) {
+		err = s.enhanceMetadata(ctx, job, extractedMetadata)
+		if err != nil {
+			log.WithError(err).Warn("Failed to enhance metadata, continuing with basic metadata")
+		}
 	}
 
 	if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
-		return fmt.Errorf("failed to store metadata: %w", err)
+		return nil, fmt.Errorf("failed to store metadata: %w", err)
 	}
 
 	metadataUpdate := domain.MetadataUpdate{
@@ -386,6 +498,174 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 	update.Progress = 1
 	s.hub.broadcast <- update
 
+	return extractedMetadata, nil
+}
+
+func (s *Service) enhanceMetadata(ctx context.Context, job domain.Job, basicMetadata domain.Metadata) error {
+	// Create a temporary output path for the detailed extraction
+	tempDir, err := os.MkdirTemp("", "detailed-metadata-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Run yt-dlp with --dump-single-json to get comprehensive info
+	cmd := exec.CommandContext(ctx, "yt-dlp",
+		"--skip-download",
+		"--dump-single-json",
+		"--no-flat-playlist", // Get full information about playlist items
+		"--write-playlist-metafiles",
+		job.URL,
+	)
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("detailed metadata extraction failed: %w", err)
+	}
+
+	// Parse the JSON output
+	var detailedData map[string]interface{}
+	if err := json.Unmarshal(stdout.Bytes(), &detailedData); err != nil {
+		return fmt.Errorf("failed to parse detailed metadata: %w", err)
+	}
+
+	// Enhance the basic metadata with detailed information
+	switch m := basicMetadata.(type) {
+	case *domain.PlaylistMetadata:
+		return s.enhancePlaylistMetadata(m, detailedData)
+	case *domain.ChannelMetadata:
+		return s.enhanceChannelMetadata(m, detailedData)
+	default:
+		return fmt.Errorf("unknown metadata type: %T", basicMetadata)
+	}
+}
+
+func (s *Service) enhancePlaylistMetadata(playlist *domain.PlaylistMetadata, detailedData map[string]interface{}) error {
+	// Extract the entries/videos from the detailed JSON
+	entries, ok := detailedData["entries"].([]interface{})
+	if !ok {
+		return fmt.Errorf("no entries found in detailed playlist data")
+	}
+
+	// Create enhanced playlist items
+	playlist.Items = make([]domain.PlaylistItem, 0, len(entries))
+
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Create a full PlaylistItem with more metadata
+		item := domain.PlaylistItem{
+			ID:             getString(entryMap, "id"),
+			Title:          getString(entryMap, "title"),
+			Description:    getString(entryMap, "description"),
+			Thumbnail:      extractThumbnailURL(entryMap),
+			Duration:       getInt(entryMap, "duration"),
+			DurationString: formatDuration(getInt(entryMap, "duration")),
+			UploadDate:     getString(entryMap, "upload_date"),
+			ViewCount:      getInt(entryMap, "view_count"),
+			LikeCount:      getInt(entryMap, "like_count"),
+			Channel:        getString(entryMap, "channel"),
+			ChannelID:      getString(entryMap, "channel_id"),
+			ChannelURL:     getString(entryMap, "channel_url"),
+			Width:          getInt(entryMap, "width"),
+			Height:         getInt(entryMap, "height"),
+			Resolution:     getString(entryMap, "resolution"),
+			FileSize:       getInt64(entryMap, "filesize_approx"),
+			Format:         getString(entryMap, "format"),
+			Extension:      getString(entryMap, "ext"),
+		}
+
+		// Extract tags if present
+		if tagsArray, ok := entryMap["tags"].([]interface{}); ok {
+			tags := make([]string, 0, len(tagsArray))
+			for _, tag := range tagsArray {
+				if tagStr, ok := tag.(string); ok {
+					tags = append(tags, tagStr)
+				}
+			}
+			item.Tags = tags
+		}
+
+		playlist.Items = append(playlist.Items, item)
+	}
+
+	// Update playlist metadata with more accurate counts
+	playlist.ItemCount = len(playlist.Items)
+
+	// Sum up view counts from items if playlist view count is missing
+	if playlist.ViewCount == 0 && len(playlist.Items) > 0 {
+		totalViews := 0
+		for _, item := range playlist.Items {
+			totalViews += item.ViewCount
+		}
+		playlist.ViewCount = totalViews
+	}
+
+	return nil
+}
+
+func (s *Service) enhanceChannelMetadata(channel *domain.ChannelMetadata, detailedData map[string]interface{}) error {
+	// Extract the entries/videos from the detailed JSON
+	entries, ok := detailedData["entries"].([]interface{})
+	if !ok {
+		return fmt.Errorf("no entries found in detailed channel data")
+	}
+
+	// Update channel video count
+	channel.VideoCount = len(entries)
+
+	// Add most recent videos to channel metadata (up to 10)
+	recentVideos := make([]domain.PlaylistItem, 0, min(10, len(entries)))
+	totalViews := 0
+	totalStorage := int64(0)
+
+	for i, entry := range entries {
+		if i >= 10 {
+			break // Only process the first 10 videos for recent videos list
+		}
+
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Extract view count for total channel views calculation
+		viewCount := getInt(entryMap, "view_count")
+		totalViews += viewCount
+
+		// Extract file size for total storage calculation
+		fileSize := getInt64(entryMap, "filesize_approx")
+		totalStorage += fileSize
+
+		// Create PlaylistItem for recent videos
+		item := domain.PlaylistItem{
+			ID:             getString(entryMap, "id"),
+			Title:          getString(entryMap, "title"),
+			Description:    getString(entryMap, "description"),
+			Thumbnail:      extractThumbnailURL(entryMap),
+			Duration:       getInt(entryMap, "duration"),
+			DurationString: formatDuration(getInt(entryMap, "duration")),
+			UploadDate:     getString(entryMap, "upload_date"),
+			ViewCount:      viewCount,
+			LikeCount:      getInt(entryMap, "like_count"),
+			Channel:        getString(entryMap, "channel"),
+			ChannelID:      getString(entryMap, "channel_id"),
+			ChannelURL:     getString(entryMap, "channel_url"),
+		}
+
+		recentVideos = append(recentVideos, item)
+	}
+
+	// Update channel metadata with calculated statistics
+	channel.TotalViews = totalViews
+	channel.TotalStorage = totalStorage
+	channel.RecentVideos = recentVideos
+
 	return nil
 }
 
@@ -395,4 +675,77 @@ func (s *Service) GetJobWithMetadata(jobID string) (*domain.JobWithMetadata, err
 
 func (s *Service) GetRecentWithMetadata(limit int) ([]*domain.JobWithMetadata, error) {
 	return s.jobs.GetRecentWithMetadata(limit)
+}
+
+func getString(data map[string]interface{}, key string) string {
+	if val, ok := data[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+func isPlaylistOrChannel(metadata domain.Metadata) bool {
+	switch metadata.(type) {
+	case *domain.PlaylistMetadata, *domain.ChannelMetadata:
+		return true
+	default:
+		return false
+	}
+}
+
+func getInt(data map[string]interface{}, key string) int {
+	switch v := data[key].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func getInt64(data map[string]interface{}, key string) int64 {
+	switch v := data[key].(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	default:
+		return 0
+	}
+}
+
+func extractThumbnailURL(data map[string]interface{}) string {
+	thumbnails, ok := data["thumbnails"].([]interface{})
+	if !ok || len(thumbnails) == 0 {
+		return ""
+	}
+
+	// Get the best quality thumbnail (usually the last one)
+	thumbnail, ok := thumbnails[len(thumbnails)-1].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	if url, ok := thumbnail["url"].(string); ok {
+		return url
+	}
+	return ""
+}
+
+func formatDuration(seconds int) string {
+	if seconds <= 0 {
+		return ""
+	}
+
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
+	s := seconds % 60
+
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
 }
