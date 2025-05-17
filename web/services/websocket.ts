@@ -58,11 +58,15 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
                 const { listeners } = get()
 
                 // Determine message type with a more robust check
-                const type = data && 'metadata' in data
-                    ? 'metadata'
-                    : data && 'jobID' in data && ('progress' in data || 'currentVideoProgress' in data)
-                        ? 'progress'
-                        : 'unknown'
+                const type =
+                    data && 'metadata' in data
+                        ? 'metadata'
+                        : data &&
+                            'jobID' in data &&
+                            ('progress' in data ||
+                                'currentVideoProgress' in data)
+                          ? 'progress'
+                          : 'unknown'
 
                 if (type !== 'unknown') {
                     const typeListeners = listeners.get(type)

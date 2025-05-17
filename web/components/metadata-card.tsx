@@ -1,26 +1,21 @@
-import { Job, JobTypeMetadata, JobTypeVideo, Metadata, ProgressUpdate } from '@/types'
+import { Job, JobTypeMetadata, Metadata, ProgressUpdate } from '@/types'
 import { CircleCheck, Clock, User } from 'lucide-react'
 
 import React from 'react'
 
 import Image from 'next/image'
 
+import {
+    getThumbnailUrl,
+    getTitle,
+    isChannelMetadata,
+    isVideoMetadata,
+} from '@/lib/metadata'
 import { formatSeconds, formatSubscriberNumber } from '@/lib/utils'
-import { getTitle, getThumbnailUrl, isChannelMetadata, isVideoMetadata } from '@/lib/metadata'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-
-/*interface JobProgress {
-    jobID: string
-    jobType: string
-    currentItem: number
-    totalItems: number
-    progress: number
-    currentVideoProgress: number
-
-}*/
 
 interface MetadataCardProps {
     metadata: Metadata | null
@@ -28,10 +23,10 @@ interface MetadataCardProps {
 }
 
 export const MetadataCard: React.FC<MetadataCardProps> = ({
-                                                              metadata,
-                                                              job,
-                                                          }) => {
-    console.debug('Rendering MetadataCard with:', { metadata, job });
+    metadata,
+    job,
+}) => {
+    console.debug('Rendering MetadataCard with:', { metadata, job })
     const thumbnailUrl = getThumbnailUrl(metadata)
     const title = getTitle(metadata)
 
@@ -49,7 +44,9 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
             <div className="flex items-center">
                 <div className="flex w-64 justify-center">
                     {thumbnailUrl ? (
-                        <div className={`relative ${isChannel ? 'h-36 w-36' : 'h-36 w-64'}`}>
+                        <div
+                            className={`relative ${isChannel ? 'h-36 w-36' : 'h-36 w-64'}`}
+                        >
                             <Image
                                 src={thumbnailUrl}
                                 alt={title}
@@ -65,9 +62,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
 
                 <div className="flex-1 p-4">
                     <CardHeader>
-                        <CardTitle>
-                            {title}
-                        </CardTitle>
+                        <CardTitle>{title}</CardTitle>
                     </CardHeader>
 
                     <CardContent>
@@ -88,16 +83,17 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                     </div>
                                 )}
 
-                                {isChannel && 'channel_follower_count' in metadata && (
-                                    <div className="flex items-center gap-2">
-                                        <span>
-                                            {formatSubscriberNumber(
-                                                metadata.channel_follower_count
-                                            )}{' '}
-                                            subscribers
-                                        </span>
-                                    </div>
-                                )}
+                                {isChannel &&
+                                    'channel_follower_count' in metadata && (
+                                        <div className="flex items-center gap-2">
+                                            <span>
+                                                {formatSubscriberNumber(
+                                                    metadata.channel_follower_count
+                                                )}{' '}
+                                                subscribers
+                                            </span>
+                                        </div>
+                                    )}
                             </div>
                         ) : (
                             <div className="mb-2">
@@ -127,12 +123,12 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                         />
                                     </div>
                                 ) : 'currentVideoProgress' in job &&
-                                job.currentVideoProgress > 100 ? (
+                                  job.currentVideoProgress > 100 ? (
                                     <span>Video already downloaded</span>
                                 ) : (
                                     <span>
                                         Downloading{' '}
-                                        {'jobType' in job
+                                        {'downloadPhase' in job
                                             ? job.downloadPhase
                                             : 'video'}{' '}
                                         (

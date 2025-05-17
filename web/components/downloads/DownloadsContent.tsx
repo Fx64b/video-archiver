@@ -23,6 +23,7 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
+import { getThumbnailUrl } from '@/lib/metadata'
 import {
     formatBytes,
     formatResolution,
@@ -65,7 +66,6 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { getThumbnailUrl } from '@/lib/metadata'
 
 interface PaginatedResponse {
     items: JobWithMetadata[]
@@ -208,7 +208,7 @@ export default function DownloadsContent() {
                     })
                 }
 
-                console.debug('Fetching downloads with URL:', url.toString());
+                console.debug('Fetching downloads with URL:', url.toString())
             } catch (error) {
                 console.error(`Error fetching ${activeTab}:`, error)
                 setError(`Failed to load ${activeTab}. Please try again later.`)
@@ -401,7 +401,9 @@ export default function DownloadsContent() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {data?.items.map((item, i) => {
                     const metadata = item.metadata as VideoMetadata | undefined
-                    const thumbnailUrl = metadata ? getThumbnailUrl(metadata) : null
+                    const thumbnailUrl = metadata
+                        ? getThumbnailUrl(metadata)
+                        : null
                     const duration = metadata?.duration
                         ? formatSeconds(metadata.duration)
                         : `?:??`
@@ -616,10 +618,14 @@ export default function DownloadsContent() {
                     const metadata = item.metadata as
                         | ChannelMetadata
                         | undefined
-                    const thumbnailUrl = metadata ? getThumbnailUrl(metadata) : null
+                    const thumbnailUrl = metadata
+                        ? getThumbnailUrl(metadata)
+                        : null
                     const channelName = metadata?.channel
                     const subscribers = metadata?.channel_follower_count
-                        ? formatSubscriberNumber(metadata.channel_follower_count) + ' subscribers'
+                        ? formatSubscriberNumber(
+                              metadata.channel_follower_count
+                          ) + ' subscribers'
                         : `unknown subscribers`
 
                     const updateDate = item.job
