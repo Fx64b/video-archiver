@@ -48,6 +48,7 @@ const (
 	JobTypeMetadata JobType = "metadata"
 )
 
+// deprecated, remove in the future
 type JobWithMetadata struct {
 	Job      *Job     `json:"job"`
 	Metadata Metadata `json:"metadata,omitempty"`
@@ -60,7 +61,15 @@ type ProgressUpdate struct {
 	TotalItems           int     `json:"totalItems"`
 	Progress             float64 `json:"progress"`
 	CurrentVideoProgress float64 `json:"currentVideoProgress"`
+	DownloadPhase        string  `json:"downloadPhase"`
 }
+
+const (
+	DownloadPhaseMetadata = "metadata"
+	DownloadPhaseVideo    = "video"
+	DownloadPhaseAudio    = "audio"
+	DownloadPhaseMerging  = "merging"
+)
 
 type VideoMetadata struct {
 	ID                string   `json:"id"`

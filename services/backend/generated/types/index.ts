@@ -22,6 +22,9 @@ export type JobType = string;
 export const JobTypeVideo: JobType = "video";
 export const JobTypeAudio: JobType = "audio";
 export const JobTypeMetadata: JobType = "metadata";
+/**
+ * deprecated, remove in the future
+ */
 export interface JobWithMetadata {
   job?: Job;
   metadata?: Metadata;
@@ -33,7 +36,12 @@ export interface ProgressUpdate {
   totalItems: number /* int */;
   progress: number /* float64 */;
   currentVideoProgress: number /* float64 */;
+  downloadPhase: string;
 }
+export const DownloadPhaseMetadata = "metadata";
+export const DownloadPhaseVideo = "video";
+export const DownloadPhaseAudio = "audio";
+export const DownloadPhaseMerging = "merging";
 export interface VideoMetadata {
   id: string;
   title: string;

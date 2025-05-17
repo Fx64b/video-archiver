@@ -186,14 +186,23 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 
 	archiveFile := filepath.Join(tempDir, "archive.txt")
 
-	// Build a command that will:
-	// 1. Download the videos
-	// 2. Archive the video IDs
-	// 3. Output detailed metadata
+	// Get item count for playlists/channels for more accurate progress tracking
+	totalItems := 0
+
+	switch m := metadataModel.(type) {
+	case *domain.PlaylistMetadata:
+		totalItems = m.ItemCount
+	case *domain.ChannelMetadata:
+		totalItems = m.PlaylistCount
+	}
+
+	// Build the command with progress template
 	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
 		"-N", fmt.Sprintf("%d", s.config.Concurrency),
 		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
 		"--merge-output-format", "mp4",
+		"--newline", // Important for progress parsing
+		"--progress-template", fmt.Sprintf("[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]", totalItems),
 		"--retries", "3",
 		"--continue",
 		"--ignore-errors",
@@ -226,7 +235,6 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	if err := downloadCmd.Wait(); err != nil {
 		return fmt.Errorf("download command failed: %w", err)
 	}
-
 	// Process the archive file to get the downloaded video IDs
 	downloadedIDs, err := s.processArchiveFile(archiveFile)
 	if err != nil {
@@ -385,6 +393,8 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		"-N", fmt.Sprintf("%d", s.config.Concurrency),
 		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
 		"--merge-output-format", "mp4",
+		"--newline",
+		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
 		"--retries", "3",
 		"--continue",
 		"--ignore-errors",
