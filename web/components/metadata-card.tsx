@@ -26,7 +26,6 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
     metadata,
     job,
 }) => {
-    console.debug('Rendering MetadataCard with:', { metadata, job })
     const thumbnailUrl = getThumbnailUrl(metadata)
     const title = getTitle(metadata)
 
