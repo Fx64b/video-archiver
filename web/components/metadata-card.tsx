@@ -1,4 +1,4 @@
-import { Job, JobTypeMetadata, JobTypeVideo, Metadata } from '@/types'
+import { Job, JobTypeMetadata, JobTypeVideo, Metadata, ProgressUpdate } from '@/types'
 import { CircleCheck, Clock, User } from 'lucide-react'
 
 import React from 'react'
@@ -12,18 +12,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 
-interface JobProgress {
+/*interface JobProgress {
     jobID: string
     jobType: string
     currentItem: number
     totalItems: number
     progress: number
     currentVideoProgress: number
-}
+
+}*/
 
 interface MetadataCardProps {
     metadata: Metadata | null
-    job: JobProgress | Job | undefined
+    job: ProgressUpdate | Job | undefined
 }
 
 export const MetadataCard: React.FC<MetadataCardProps> = ({
@@ -37,11 +38,6 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
     if (!job) return null
 
     const getJobProgress = () => {
-        if ('jobType' in job) {
-            if (job.jobType === JobTypeVideo) {
-                return job.currentVideoProgress
-            }
-        }
         return job.progress > 100 ? 100 : job.progress
     }
 
@@ -137,7 +133,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                     <span>
                                         Downloading{' '}
                                         {'jobType' in job
-                                            ? job.jobType
+                                            ? job.downloadPhase
                                             : 'video'}{' '}
                                         (
                                         {'currentVideoProgress' in job
