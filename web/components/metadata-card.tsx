@@ -47,7 +47,9 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
 
     const getJobProgress = () => {
         if ('jobType' in job) {
-            if (job.jobType === JobTypeVideo) {
+            // For single videos, use currentVideoProgress
+            // For playlists/channels, use overall progress even if jobType is video
+            if (job.jobType === JobTypeVideo && job.totalItems <= 1) {
                 return job.currentVideoProgress
             }
         }

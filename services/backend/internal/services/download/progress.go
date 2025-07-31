@@ -151,7 +151,7 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
 
 			if match := alreadyDownloadedRegex.FindStringSubmatch(currentLine); match != nil {
 				if !isProcessingAudio {
-					if isPlaylist {
+					if isPlaylist && !currentVideoComplete {
 						currentItem++
 						currentVideoComplete = true
 						overallProgress = (float64(currentItem) / float64(totalItems)) * 100
@@ -238,9 +238,11 @@ func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
 					}
 
 					if currentProgress >= 100 {
-						currentVideoComplete = true
-						if isPlaylist {
-							currentItem++
+						if !currentVideoComplete {
+							currentVideoComplete = true
+							if isPlaylist {
+								currentItem++
+							}
 						}
 					}
 				}
