@@ -4,7 +4,7 @@ import { Metadata, MetadataUpdate, ProgressUpdate } from '@/types'
 
 import React, { useEffect, useState } from 'react'
 
-import { MetadataCard } from '@/components/metadata-card'
+import { MetadataCard, MetadataCardSkeleton } from '@/components/metadata-card'
 
 interface JobProgress {
     jobID: string
@@ -76,7 +76,9 @@ const JobProgress: React.FC = () => {
                             metadata={metadata[jobID]}
                             job={job}
                         />
-                    ) : null
+                    ) : (
+                        <MetadataCardSkeleton key={jobID} job={job} />
+                    )
                 )}
         </div>
     )

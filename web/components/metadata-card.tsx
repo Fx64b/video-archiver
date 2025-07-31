@@ -31,6 +31,63 @@ interface MetadataCardProps {
     job: JobProgress | Job | undefined
 }
 
+// Skeleton component to show while metadata is loading
+export const MetadataCardSkeleton: React.FC<{ job: JobProgress }> = ({ job }) => {
+    const getJobProgress = () => {
+        if (job.jobType === JobTypeVideo) {
+            return job.currentVideoProgress
+        }
+        return job.progress > 100 ? 100 : job.progress
+    }
+
+    return (
+        <Card className="w-full">
+            <div className="flex items-center">
+                <div className="flex w-64 justify-center">
+                    <Skeleton className="ml-4 h-36 w-64 rounded-lg" />
+                </div>
+
+                <div className="flex-1 p-4">
+                    <CardHeader>
+                        <CardTitle>
+                            <Skeleton className="h-6 w-3/4" />
+                        </CardTitle>
+                    </CardHeader>
+
+                    <CardContent>
+                        <div className="mb-2 flex items-center gap-8">
+                            <div className="flex items-center gap-2">
+                                <Skeleton className="h-4 w-4" />
+                                <Skeleton className="h-4 w-16" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Skeleton className="h-4 w-4" />
+                                <Skeleton className="h-4 w-20" />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <p>
+                                {job.totalItems > 1 && (
+                                    <>
+                                        Progress: {job.currentItem}/{job.totalItems}
+                                    </>
+                                )}
+                            </p>
+                            <div>
+                                <span>
+                                    Loading metadata for {job.jobType} ({getJobProgress()}%)
+                                </span>
+                            </div>
+                        </div>
+                        <Progress value={getJobProgress()} className="mt-2" />
+                    </CardContent>
+                </div>
+            </div>
+        </Card>
+    )
+}
+
 // TODO: This component need serious refactoring and improvement but will do for now
 
 export const MetadataCard: React.FC<MetadataCardProps> = ({
