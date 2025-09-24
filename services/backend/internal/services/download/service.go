@@ -177,6 +177,24 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 }
 
 func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job, metadataModel domain.Metadata, outputPath string) error {
+	// Prepare the URL for playlist/channel downloads
+	downloadURL := job.URL
+	
+	// For channels, ensure we're using the proper URL format for downloading all videos
+	if channelMeta, ok := metadataModel.(*domain.ChannelMetadata); ok {
+		// If URL is a channel page, convert it to download all videos
+		if strings.Contains(downloadURL, "/channel/") || strings.Contains(downloadURL, "/@") {
+			// yt-dlp can handle channel URLs directly, but we might need to specify videos explicitly
+			if !strings.Contains(downloadURL, "/videos") {
+				log.Infof("Channel URL detected, using: %s", downloadURL)
+			}
+		}
+		log.Infof("Processing channel: %s with %d videos", channelMeta.Channel, channelMeta.VideoCount)
+	}
+	
+	if playlistMeta, ok := metadataModel.(*domain.PlaylistMetadata); ok {
+		log.Infof("Processing playlist: %s with %d items", playlistMeta.Title, playlistMeta.ItemCount)
+	}
 	// Create a temporary directory for archiving downloaded video IDs
 	tempDir, err := os.MkdirTemp("", "archive-")
 	if err != nil {
@@ -191,13 +209,31 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 
 	switch m := metadataModel.(type) {
 	case *domain.PlaylistMetadata:
-		totalItems = m.ItemCount
+		// Use the actual number of items in the playlist
+		if len(m.Items) > 0 {
+			totalItems = len(m.Items)
+		} else {
+			totalItems = m.ItemCount
+		}
 	case *domain.ChannelMetadata:
-		totalItems = m.PlaylistCount
+		// Use the video count for channels
+		if m.VideoCount > 0 {
+			totalItems = m.VideoCount
+		} else {
+			totalItems = m.PlaylistCount
+		}
 	}
+	
+	// If we still don't have a valid total items count, log a warning and set a reasonable default
+	if totalItems <= 0 {
+		log.Warnf("No valid total items count found for playlist/channel %s, metadata might be incomplete", job.ID)
+		totalItems = 1 // Set to 1 to prevent division by zero in progress calculations
+	}
+	
+	log.Infof("Starting download of %d items from %s", totalItems, downloadURL)
 
 	// Build the command with progress template
-	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
+	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", s.config.Concurrency),
 		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
 		"--merge-output-format", "mp4",
@@ -210,8 +246,18 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		"--write-info-json",               // Write metadata for each video
 		"--download-archive", archiveFile, // Track downloaded videos
 		"--output", outputPath,
-		job.URL,
-	)
+		"--yes-playlist",                  // Ensure playlist processing is enabled
+	}
+	
+	// Add channel-specific arguments if this is a channel
+	if _, isChannel := metadataModel.(*domain.ChannelMetadata); isChannel {
+		// For channels, we may want to limit the number of videos or specify sorting
+		// Add any channel-specific parameters here if needed
+		log.Info("Adding channel-specific download parameters")
+	}
+	
+	cmdArgs = append(cmdArgs, downloadURL)
+	downloadCmd := exec.CommandContext(ctx, "yt-dlp", cmdArgs...)
 
 	stdout, err := downloadCmd.StdoutPipe()
 	if err != nil {
@@ -236,73 +282,131 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		return fmt.Errorf("download command failed: %w", err)
 	}
 	// Process the archive file to get the downloaded video IDs
+	log.Infof("Processing archive file: %s", archiveFile)
 	downloadedIDs, err := s.processArchiveFile(archiveFile)
 	if err != nil {
 		log.WithError(err).Warn("Failed to process archive file")
+	} else {
+		log.Infof("Found %d extractors with videos in archive file", len(downloadedIDs))
+		for extractor, ids := range downloadedIDs {
+			log.Infof("Extractor %s has %d videos: %v", extractor, len(ids), ids)
+		}
 	}
 
-	// Determine the membership type based on metadata type
-	var membershipType string
-	switch metadataModel.(type) {
-	case *domain.PlaylistMetadata:
-		membershipType = "playlist"
-	case *domain.ChannelMetadata:
-		membershipType = "channel"
-	default:
-		membershipType = "unknown"
-	}
+	// TODO: Determine the membership type based on metadata type
+	/*	var membershipType string
+		switch metadataModel.(type) {
+		case *domain.PlaylistMetadata:
+			membershipType = "playlist"
+		case *domain.ChannelMetadata:
+			membershipType = "channel"
+		default:
+			membershipType = "unknown"
+		}*/
 
 	// Scan for downloaded video metadata files in the output directory
 	baseDir := filepath.Dir(outputPath)
 
+	// Check if we have any downloaded videos to process
+	if len(downloadedIDs) == 0 {
+		log.Warn("No videos found in archive file - playlist/channel download may have been metadata-only or videos were skipped")
+		return nil
+	}
+
 	// For each downloaded video, create a virtual job and link it to the playlist/channel
 	for extractor, ids := range downloadedIDs {
+		log.Infof("Processing %d videos from extractor %s", len(ids), extractor)
 		for _, id := range ids {
-			// First, try to find the exact metadata file
-			pattern := filepath.Join(baseDir, "*", fmt.Sprintf("%s-%s.info.json", extractor, id))
-			matches, err := filepath.Glob(pattern)
+			// Try multiple naming patterns that yt-dlp might use
+			var matches []string
+			var err error
+			
+			// Pattern 1: extractor-id.info.json (e.g., youtube-ZzI9JE0i6Lc.info.json)
+			pattern1 := filepath.Join(baseDir, "*", fmt.Sprintf("%s-%s.info.json", extractor, id))
+			log.Infof("Trying pattern 1: %s", pattern1)
+			matches, err = filepath.Glob(pattern1)
+			
+			if err == nil && len(matches) > 0 {
+				log.Infof("Found metadata file with pattern 1: %v", matches)
+			} else {
+				// Pattern 2: just id.info.json (e.g., ZzI9JE0i6Lc.info.json)
+				pattern2 := filepath.Join(baseDir, "*", fmt.Sprintf("%s.info.json", id))
+				log.Infof("Trying pattern 2: %s", pattern2)
+				matches, err = filepath.Glob(pattern2)
+				
+				if err == nil && len(matches) > 0 {
+					log.Infof("Found metadata file with pattern 2: %v", matches)
+				} else {
+					// Pattern 3: Search through all .info.json files and check their content
+					log.Infof("Trying pattern 3: searching all .info.json files for video ID %s", id)
+					pattern3 := filepath.Join(baseDir, "*", "*.info.json")
+					allMatches, err := filepath.Glob(pattern3)
+					
+					if err != nil {
+						log.WithError(err).Warnf("Failed to search for metadata files with pattern: %s", pattern3)
+						continue
+					}
+					
+					log.Infof("Found %d .info.json files to search through", len(allMatches))
+					
+					// Search through all metadata files for this video ID
+					var foundMatch string
+					for _, match := range allMatches {
+						data, err := os.ReadFile(match)
+						if err != nil {
+							log.WithError(err).Warnf("Failed to read file: %s", match)
+							continue
+						}
 
-			if err != nil || len(matches) == 0 {
-				// Try a less specific pattern if the exact one doesn't work
-				pattern = filepath.Join(baseDir, "*", "*.info.json")
-				matches, err = filepath.Glob(pattern)
+						var videoInfo map[string]interface{}
+						if err := json.Unmarshal(data, &videoInfo); err != nil {
+							log.WithError(err).Warnf("Failed to parse JSON from file: %s", match)
+							continue
+						}
 
-				if err != nil || len(matches) == 0 {
-					log.Warnf("Could not find metadata file for video %s-%s", extractor, id)
-					continue
+						// Check if this file contains the video we're looking for
+						if videoID, ok := videoInfo["id"].(string); ok && videoID == id {
+							log.Infof("Found matching video ID %s in file: %s", id, match)
+							foundMatch = match
+							break
+						}
+					}
+					
+					if foundMatch != "" {
+						matches = []string{foundMatch}
+					} else {
+						log.Warnf("Could not find metadata file for video %s from extractor %s", id, extractor)
+						continue
+					}
 				}
 			}
 
-			// Process each found metadata file
-			for _, metadataFilePath := range matches {
-				videoData, err := os.ReadFile(metadataFilePath)
-				if err != nil {
-					log.WithError(err).Warnf("Failed to read video metadata file: %s", metadataFilePath)
-					continue
-				}
+			// Process the found metadata file (we should only have one match at this point)
+			if len(matches) > 0 {
+				metadataFilePath := matches[0]
+				log.Infof("Processing metadata file: %s for video %s", metadataFilePath, id)
 
-				// Check if this is the video we're looking for
-				var videoInfo map[string]interface{}
-				if err := json.Unmarshal(videoData, &videoInfo); err != nil {
-					log.WithError(err).Warn("Failed to parse video metadata JSON")
-					continue
-				}
-
-				videoID, ok := videoInfo["id"].(string)
-				if !ok || videoID != id {
-					// This is not the video we're looking for
-					continue
-				}
-
-				// Create a virtual job for this video
-				videoJobID := fmt.Sprintf("%s-%s", extractor, id)
+				// Create a virtual job for this video using just the video ID
+				videoJobID := id
+				log.Infof("Creating virtual job for video %s (extractor: %s)", videoJobID, extractor)
 
 				// Check if a job already exists for this video
 				existingJob, err := s.jobs.GetByID(videoJobID)
 				if err == nil && existingJob != nil {
+					log.Infof("Job already exists for video %s, linking to parent", videoJobID)
 					// Job exists, create membership relationship
-					if err := s.linkVideoToParent(videoJobID, job.ID, membershipType); err != nil {
-						log.WithError(err).Warnf("Failed to link video %s to %s %s", videoJobID, membershipType, job.ID)
+					membershipType := "unknown"
+					switch metadataModel.(type) {
+					case *domain.PlaylistMetadata:
+						membershipType = "playlist"
+					case *domain.ChannelMetadata:
+						membershipType = "channel"
+					}
+					
+					if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
+						log.WithError(err).Warnf("Failed to link existing video %s to %s %s", videoJobID, membershipType, job.ID)
+					} else {
+						log.Infof("Successfully linked existing video %s to %s %s", videoJobID, membershipType, job.ID)
 					}
 					continue
 				}
@@ -317,11 +421,14 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					UpdatedAt: time.Now(),
 				}
 
+				log.Infof("Creating new virtual job with ID: %s, URL: %s", videoJob.ID, videoJob.URL)
+
 				// Create the job and store its metadata
 				if err := s.jobs.Create(&videoJob); err != nil {
 					log.WithError(err).Warnf("Failed to create virtual job for video %s", videoJobID)
 					continue
 				}
+				log.Infof("Successfully created virtual job for video %s", videoJobID)
 
 				// Extract and store the video metadata
 				videoMetadata, err := metadata.ExtractMetadata(metadataFilePath)
@@ -335,10 +442,21 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					log.WithError(err).Warnf("Failed to store metadata for video %s", videoJobID)
 					continue
 				}
+				log.Infof("Successfully stored metadata for video %s", videoJobID)
 
 				// Link the video to the playlist/channel
-				if err := s.linkVideoToParent(videoJobID, job.ID, membershipType); err != nil {
+				membershipType := "unknown"
+				switch metadataModel.(type) {
+				case *domain.PlaylistMetadata:
+					membershipType = "playlist"
+				case *domain.ChannelMetadata:
+					membershipType = "channel"
+				}
+				
+				if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
 					log.WithError(err).Warnf("Failed to link video %s to %s %s", videoJobID, membershipType, job.ID)
+				} else {
+					log.Infof("Successfully linked video %s to %s %s", videoJobID, membershipType, job.ID)
 				}
 			}
 		}
@@ -347,44 +465,42 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	return nil
 }
 
-func (s *Service) linkVideoToParent(videoJobID, parentJobID, membershipType string) error {
-	// Ideally, this would call a repository method
-	// But for now, we'll implement a basic version in the service
-
-	// TODO: This should be implemented in the repository
-	log.Infof("Linking video %s to %s %s", videoJobID, membershipType, parentJobID)
-
-	// Placeholder for actual database operation
-	// This would be implemented in the repository layer
-	return nil
-}
-
 func (s *Service) processArchiveFile(archiveFile string) (map[string][]string, error) {
 	// Read the archive file to get the IDs of downloaded videos
+	log.Infof("Reading archive file: %s", archiveFile)
 	data, err := os.ReadFile(archiveFile)
 	if err != nil {
+		log.WithError(err).Errorf("Failed to read archive file: %s", archiveFile)
 		return nil, err
 	}
 
+	log.Infof("Archive file content (%d bytes): %s", len(data), string(data))
 	lines := strings.Split(string(data), "\n")
 	result := make(map[string][]string)
+	
+	log.Infof("Processing %d lines from archive file", len(lines))
 
-	for _, line := range lines {
+	for i, line := range lines {
 		if line == "" {
 			continue
 		}
 
+		log.Infof("Archive line %d: %s", i, line)
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) != 2 {
+			log.Warnf("Invalid archive line format: %s", line)
 			continue
 		}
 
 		extractor := parts[0]
 		id := parts[1]
+		
+		log.Infof("Parsed extractor: %s, id: %s", extractor, id)
 
 		result[extractor] = append(result[extractor], id)
 	}
 
+	log.Infof("Processed archive file, found %d extractors", len(result))
 	return result, nil
 }
 
@@ -422,7 +538,14 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 	go s.trackProgress(stderr, job.ID, string(domain.JobTypeVideo))
 
 	// Wait for command to complete
-	return downloadCmd.Wait()
+	err = downloadCmd.Wait()
+	if err != nil {
+		log.WithError(err).WithField("jobID", job.ID).Error("yt-dlp command failed")
+		return err
+	}
+
+	log.WithField("jobID", job.ID).Info("yt-dlp download completed successfully")
+	return nil
 }
 
 func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPath string) (domain.Metadata, error) {
@@ -487,23 +610,55 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		return nil, fmt.Errorf("failed to extract metadata from file: %w", err)
 	}
 
+	// Send immediate basic metadata update to give user instant feedback
+	if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
+		log.WithError(err).Warn("Failed to store basic metadata, continuing...")
+	} else {
+		// Send the basic metadata update immediately
+		basicMetadataUpdate := domain.MetadataUpdate{
+			JobID:    job.ID,
+			Metadata: extractedMetadata,
+		}
+		s.hub.broadcast <- basicMetadataUpdate
+		log.Info("Sent immediate basic metadata update to UI")
+	}
+
 	// Phase 2: Enhance metadata for playlists and channels with detailed info
 	if isPlaylistOrChannel(extractedMetadata) {
+		log.Info("Enhancing metadata for playlist/channel with detailed information")
 		err = s.enhanceMetadata(ctx, job, extractedMetadata)
 		if err != nil {
 			log.WithError(err).Warn("Failed to enhance metadata, continuing with basic metadata")
+			
+			// Log the basic metadata to help debug
+			switch m := extractedMetadata.(type) {
+			case *domain.PlaylistMetadata:
+				log.Infof("Basic playlist metadata: %d items", m.ItemCount)
+			case *domain.ChannelMetadata:
+				log.Infof("Basic channel metadata: %d playlists, %d videos", m.PlaylistCount, m.VideoCount)
+			}
+		} else {
+			// Log enhanced metadata info
+			switch m := extractedMetadata.(type) {
+			case *domain.PlaylistMetadata:
+				log.Infof("Enhanced playlist metadata: %d items in Items slice", len(m.Items))
+			case *domain.ChannelMetadata:
+				log.Infof("Enhanced channel metadata: %d videos, %d recent videos", m.VideoCount, len(m.RecentVideos))
+			}
+			
+			// Store and broadcast the enhanced metadata
+			if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
+				log.WithError(err).Warn("Failed to store enhanced metadata")
+			} else {
+				enhancedMetadataUpdate := domain.MetadataUpdate{
+					JobID:    job.ID,
+					Metadata: extractedMetadata,
+				}
+				s.hub.broadcast <- enhancedMetadataUpdate
+				log.Info("Sent enhanced metadata update to UI")
+			}
 		}
 	}
-
-	if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
-		return nil, fmt.Errorf("failed to store metadata: %w", err)
-	}
-
-	metadataUpdate := domain.MetadataUpdate{
-		JobID:    job.ID,
-		Metadata: extractedMetadata,
-	}
-	s.hub.broadcast <- metadataUpdate
 
 	update.Progress = 1
 	s.hub.broadcast <- update

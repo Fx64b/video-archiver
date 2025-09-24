@@ -3,9 +3,9 @@ services:
     build:
       context: ./services/backend
     volumes:
-      - ./data/downloads:/app/data/downloads
-      - ./data/db:/app/data/db
-      - ./data/cache:/app/cache
+      - ./data/downloads:/app/data/downloads:Z
+      - ./data/db:/app/data/db:Z
+      - ./data/cache:/app/cache:Z
     user: "${CURRENT_UID}:${CURRENT_GID}"
     ports:
       - "8080:8080"

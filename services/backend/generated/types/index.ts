@@ -42,6 +42,7 @@ export const DownloadPhaseMetadata = "metadata";
 export const DownloadPhaseVideo = "video";
 export const DownloadPhaseAudio = "audio";
 export const DownloadPhaseMerging = "merging";
+export const DownloadPhaseComplete = "complete";
 export interface VideoMetadata {
   id: string;
   title: string;

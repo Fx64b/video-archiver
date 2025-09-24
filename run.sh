@@ -57,6 +57,13 @@ echo "./run.sh --help for more information."
 if [ -n "$BUILD" ]; then
    echo "Generating TypeScript types..."
    cd services/backend
+
+   # Check if tygo is installed, install if not
+   if ! command -v tygo &> /dev/null; then
+       echo "tygo not found. Installing..."
+       go install github.com/gzuidhof/tygo@latest
+   fi
+
    tygo generate
    mkdir -p ../../web/types
    cp generated/types/index.ts ../../web/types/index.ts

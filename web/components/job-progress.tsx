@@ -6,17 +6,10 @@ import React, { useEffect, useState } from 'react'
 
 import { MetadataCard } from '@/components/metadata-card'
 
-interface JobProgress {
-    jobID: string
-    jobType: string
-    currentItem: number
-    totalItems: number
-    progress: number
-    currentVideoProgress: number
-}
+// Remove duplicate interface - use ProgressUpdate from types
 
 const JobProgress: React.FC = () => {
-    const [jobs, setJobs] = useState<Record<string, JobProgress>>({})
+    const [jobs, setJobs] = useState<Record<string, ProgressUpdate>>({})
     const [metadata, setMetadata] = useState<Record<string, Metadata>>({})
     const { connect, subscribe } = useWebSocketStore()
     const { addActiveDownload, getRecentMetadata } = useAppState()
@@ -41,7 +34,7 @@ const JobProgress: React.FC = () => {
 
                 setJobs((prev) => ({
                     ...prev,
-                    [data.jobID]: data as JobProgress,
+                    [data.jobID]: data,
                 }))
             }
         )

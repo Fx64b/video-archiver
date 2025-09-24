@@ -34,3 +34,6 @@ data/*
 *.journal
 *.part
 *.json
+
+*.pp
+*.te

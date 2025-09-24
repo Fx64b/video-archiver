@@ -1,5 +1,6 @@
-onlyBuiltDependencies:
-    - sharp
-
 packages:
-    - 'packages/**'
+  - packages/**
+
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver

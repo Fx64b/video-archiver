@@ -1,4 +1,4 @@
-import { Job, JobTypeMetadata, Metadata, ProgressUpdate } from '@/types'
+import { Job, JobTypeMetadata, Metadata, ProgressUpdate, DownloadPhaseVideo, DownloadPhaseAudio, DownloadPhaseMerging, DownloadPhaseMetadata, DownloadPhaseComplete } from '@/types'
 import { CircleCheck, Clock, User } from 'lucide-react'
 
 import React from 'react'
@@ -126,15 +126,25 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                     <span>Video already downloaded</span>
                                 ) : (
                                     <span>
-                                        Downloading{' '}
-                                        {'downloadPhase' in job
-                                            ? job.downloadPhase
-                                            : 'video'}{' '}
-                                        (
-                                        {'currentVideoProgress' in job
-                                            ? job.currentVideoProgress
-                                            : job.progress}
-                                        %)
+                                        {(() => {
+                                            const phase = 'downloadPhase' in job ? job.downloadPhase : 'video'
+                                            const progress = Math.round(job.progress)
+
+                                            switch (phase) {
+                                                case DownloadPhaseMetadata:
+                                                    return `Extracting metadata (${progress}%)`
+                                                case DownloadPhaseVideo:
+                                                    return `Downloading video (${progress}%)`
+                                                case DownloadPhaseAudio:
+                                                    return `Downloading audio (${progress}%)`
+                                                case DownloadPhaseMerging:
+                                                    return `Merging streams (${progress}%)`
+                                                case DownloadPhaseComplete:
+                                                    return `Download complete (${progress}%)`
+                                                default:
+                                                    return `Downloading ${phase} (${progress}%)`
+                                            }
+                                        })()}
                                     </span>
                                 )}
                             </div>

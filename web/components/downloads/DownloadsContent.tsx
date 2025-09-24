@@ -14,6 +14,7 @@ import {
     ChevronDown,
     Film,
     List,
+    Play,
     SortAsc,
     SortDesc,
 } from 'lucide-react'
@@ -409,7 +410,11 @@ export default function DownloadsContent() {
                         : `?:??`
 
                     return (
-                        <Card key={i} className="overflow-hidden pt-0">
+                        <Card 
+                            key={i} 
+                            className="overflow-hidden pt-0 cursor-pointer transition-transform hover:scale-105"
+                            onClick={() => router.push(`/downloads/video/${item.job?.id}`)}
+                        >
                             <div className="relative aspect-video">
                                 <Image
                                     src={
@@ -422,6 +427,15 @@ export default function DownloadsContent() {
                                 />
                                 <div className="absolute right-2 bottom-2 rounded bg-black/70 px-1 text-xs text-white">
                                     {duration}
+                                </div>
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70"
+                                    >
+                                        <Play className="h-6 w-6" />
+                                    </Button>
                                 </div>
                             </div>
                             <CardContent className="px-4 pt-2">
@@ -510,7 +524,11 @@ export default function DownloadsContent() {
                         : new Date()
 
                     return (
-                        <Card key={i}>
+                        <Card 
+                            key={i} 
+                            className="cursor-pointer transition-transform hover:scale-105"
+                            onClick={() => router.push(`/downloads/playlist/${item.job?.id}`)}
+                        >
                             <CardHeader>
                                 <div className="flex items-center gap-2">
                                     <List className="h-5 w-5" />
@@ -633,7 +651,11 @@ export default function DownloadsContent() {
                         : '?'
 
                     return (
-                        <Card key={i}>
+                        <Card 
+                            key={i}
+                            className="cursor-pointer transition-transform hover:scale-105"
+                            onClick={() => router.push(`/downloads/channel/${item.job?.id}`)}
+                        >
                             <CardHeader>
                                 <div className="flex items-center gap-3">
                                     <div className="relative h-10 w-10 overflow-hidden rounded-full">
@@ -680,12 +702,6 @@ export default function DownloadsContent() {
                                         {format(updateDate, 'PP')}
                                     </span>
                                 </div>
-                                <Button
-                                    variant="outline"
-                                    className="mt-4 w-full"
-                                >
-                                    View Channel
-                                </Button>
                             </CardContent>
                         </Card>
                     )

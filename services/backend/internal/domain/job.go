@@ -69,6 +69,7 @@ const (
 	DownloadPhaseVideo    = "video"
 	DownloadPhaseAudio    = "audio"
 	DownloadPhaseMerging  = "merging"
+	DownloadPhaseComplete = "complete"
 )
 
 type VideoMetadata struct {
