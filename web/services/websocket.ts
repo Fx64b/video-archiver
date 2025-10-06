@@ -9,10 +9,12 @@ interface WebSocketState {
     reconnectTimer: NodeJS.Timeout | null
     isReconnecting: boolean
     listeners: Map<string, Set<(data: any) => void>>
+    onReconnectCallbacks: Set<() => void>
 
     connect: () => void
     disconnect: () => void
     subscribe: (type: string, callback: (data: any) => void) => () => void
+    onReconnect: (callback: () => void) => () => void
 }
 
 const useWebSocketStore = create<WebSocketState>((set, get) => ({
@@ -21,6 +23,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
     reconnectTimer: null,
     isReconnecting: false,
     listeners: new Map(),
+    onReconnectCallbacks: new Set(),
 
     connect: () => {
         const { socket, disconnect } = get()
@@ -36,7 +39,8 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
         newSocket.onopen = () => {
             console.log('WebSocket connected')
 
-            const { isReconnecting } = get()
+            const { isReconnecting, onReconnectCallbacks } = get()
+            const wasReconnecting = isReconnecting
             set({ isConnected: true })
 
             // Clear any reconnect timer
@@ -46,9 +50,12 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
                 set({ reconnectTimer: null })
             }
 
-            if (isReconnecting) {
+            if (wasReconnecting) {
                 toast('Reconnected to server successfully.')
                 set({ isReconnecting: false })
+
+                // Call all reconnect callbacks to reload data after reconnection
+                onReconnectCallbacks.forEach((callback) => callback())
             }
         }
 
@@ -140,6 +147,16 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
             if (currentListeners) {
                 currentListeners.delete(callback)
             }
+        }
+    },
+
+    onReconnect: (callback: () => void) => {
+        const { onReconnectCallbacks } = get()
+        onReconnectCallbacks.add(callback)
+
+        return () => {
+            const currentCallbacks = get().onReconnectCallbacks
+            currentCallbacks.delete(callback)
         }
     },
 }))

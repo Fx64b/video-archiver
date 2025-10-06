@@ -21,6 +21,9 @@ services:
   web:
     build:
       context: ./web
+      args:
+        - NEXT_PUBLIC_SERVER_URL=http://localhost:8080
+        - NEXT_PUBLIC_SERVER_URL_WS=ws://localhost:8081
     ports:
       - "3000:3000"
     environment:

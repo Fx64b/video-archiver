@@ -76,8 +76,38 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 	}()
 
-	conn.SetReadDeadline(time.Time{}) // No timeout TODO: currently works, but implement timeout or ping/ping later
+	// Set up ping/pong handlers for connection health
+	const (
+		pongWait   = 60 * time.Second
+		pingPeriod = (pongWait * 9) / 10 // Send pings at 90% of pong deadline
+	)
 
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
+	// Start ping ticker in a goroutine
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(pingPeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+					log.WithError(err).Debug("Failed to send ping")
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer close(done)
+
+	// Read loop - waits for messages or pong responses
 	for {
 		_, _, err := conn.ReadMessage()
 		if err != nil {

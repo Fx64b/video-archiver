@@ -4,8 +4,16 @@ FROM golang:1.24-alpine AS builder
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
 COPY . .
-RUN go build -o main ./cmd/api
+
+# Build the application (CGO required for mattn/go-sqlite3)
+RUN CGO_ENABLED=1 go build -o main ./cmd/api
 
 FROM alpine:latest
 
