@@ -35,3 +35,6 @@ data/*
 *.part
 *.info.json
 .claude/
+
+# Testing
+coverage.*

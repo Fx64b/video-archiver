@@ -28,14 +28,35 @@ while [[ $# -gt 0 ]]; do
       SERVICES="backend"
       shift
       ;;
+    --test)
+      echo "Running backend tests..."
+      cd "$(dirname "$0")/services/backend"
+      make test
+      exit 0
+      ;;
+    --test-verbose)
+      echo "Running backend tests with verbose output..."
+      cd "$(dirname "$0")/services/backend"
+      make test-verbose
+      exit 0
+      ;;
+    --test-coverage)
+      echo "Running backend tests with coverage..."
+      cd "$(dirname "$0")/services/backend"
+      make test-coverage
+      exit 0
+      ;;
     --help|-h)
       echo "This script is used to run the application in a docker container."
       echo "Available flags:"
-      echo "  --clear         Clear the database and downloads"
-      echo "  --build         Rebuild the containers"
-      echo "  --debug         Enable debug logging in backend"
-      echo "  --backend-only  Start only the backend service"
-      echo "  --help|-h       Show this help message"
+      echo "  --clear           Clear the database and downloads"
+      echo "  --build           Rebuild the containers"
+      echo "  --debug           Enable debug logging in backend"
+      echo "  --backend-only    Start only the backend service"
+      echo "  --test            Run backend unit tests"
+      echo "  --test-verbose    Run backend tests with verbose output"
+      echo "  --test-coverage   Run backend tests with coverage report"
+      echo "  --help|-h         Show this help message"
       exit 0
       ;;
     *)
