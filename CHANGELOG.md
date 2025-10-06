@@ -1,3 +1,16 @@
+# [1.5.0](https://github.com/Fx64b/video-archiver/compare/0.1.4.1-BETA...0.1.5.0-BETA) (2025-10-06)
+
+
+### Bug Fixes
+
+* **web:** frozen lockfile issue ([002b64f](https://github.com/Fx64b/video-archiver/commit/002b64ff9b4ddcbc12471bb3e69195773cd6de12))
+
+
+### Features
+
+* **backend:** test setup ([6b6b6f8](https://github.com/Fx64b/video-archiver/commit/6b6b6f85c5648f42e6ae25e53298062cfae02256))
+* Setup frontend testing infrastructure and tests ([e9ea142](https://github.com/Fx64b/video-archiver/commit/e9ea1424a8c0936556ca7de1020f242a0504d161)), closes [#301](https://github.com/Fx64b/video-archiver/issues/301)
+
 ## [1.4.1](https://github.com/Fx64b/video-archiver/compare/0.1.4.0-BETA...0.1.4.1-BETA) (2025-10-06)
 
 
