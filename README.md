@@ -142,6 +142,9 @@ Possible workarounds:
 ### Metadata Issues
 Some metadata might not be properly extracted for certain types of content, particularly channels and playlists.
 
+## Activity
+![Alt](https://repobeats.axiom.co/api/embed/885b61cd30b55fb0b9635c6d9c46421f1bdbb262.svg "Repobeats analytics image")
+
 ## Contributing
 
 We welcome contributions to Video Archiver! Here's how you can help:
