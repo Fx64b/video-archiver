@@ -1,4 +1,14 @@
-import { Job, JobTypeMetadata, Metadata, ProgressUpdate, DownloadPhaseVideo, DownloadPhaseAudio, DownloadPhaseMerging, DownloadPhaseMetadata, DownloadPhaseComplete } from '@/types'
+import {
+    DownloadPhaseAudio,
+    DownloadPhaseComplete,
+    DownloadPhaseMerging,
+    DownloadPhaseMetadata,
+    DownloadPhaseVideo,
+    Job,
+    JobTypeMetadata,
+    Metadata,
+    ProgressUpdate,
+} from '@/types'
 import { CircleCheck, Clock, User } from 'lucide-react'
 
 import React from 'react'
@@ -127,8 +137,13 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                 ) : (
                                     <span>
                                         {(() => {
-                                            const phase = 'downloadPhase' in job ? job.downloadPhase : 'video'
-                                            const progress = Math.round(job.progress)
+                                            const phase =
+                                                'downloadPhase' in job
+                                                    ? job.downloadPhase
+                                                    : 'video'
+                                            const progress = Math.round(
+                                                job.progress
+                                            )
 
                                             switch (phase) {
                                                 case DownloadPhaseMetadata:

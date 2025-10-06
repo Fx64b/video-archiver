@@ -1,13 +1,21 @@
 'use client'
 
 import { VideoMetadata } from '@/types'
-import { Play, Pause, Volume2, VolumeX, Maximize2, RotateCcw } from 'lucide-react'
+import {
+    Maximize2,
+    Pause,
+    Play,
+    RotateCcw,
+    Volume2,
+    VolumeX,
+} from 'lucide-react'
 
 import { useEffect, useRef, useState } from 'react'
 
+import { formatSeconds } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { formatSeconds } from '@/lib/utils'
 
 interface VideoPlayerProps {
     jobId: string
@@ -15,7 +23,11 @@ interface VideoPlayerProps {
     className?: string
 }
 
-export default function VideoPlayer({ jobId, metadata, className = '' }: VideoPlayerProps) {
+export default function VideoPlayer({
+    jobId,
+    metadata,
+    className = '',
+}: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null)
     const [isPlaying, setIsPlaying] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
@@ -36,7 +48,9 @@ export default function VideoPlayer({ jobId, metadata, className = '' }: VideoPl
         const updateDuration = () => setDuration(video.duration)
         const handleEnded = () => setIsPlaying(false)
         const handleError = () => {
-            setError('Failed to load video. The video file might not be available.')
+            setError(
+                'Failed to load video. The video file might not be available.'
+            )
         }
 
         video.addEventListener('timeupdate', updateTime)
@@ -119,7 +133,9 @@ export default function VideoPlayer({ jobId, metadata, className = '' }: VideoPl
 
     if (error) {
         return (
-            <div className={`bg-muted flex aspect-video items-center justify-center rounded-lg ${className}`}>
+            <div
+                className={`bg-muted flex aspect-video items-center justify-center rounded-lg ${className}`}
+            >
                 <div className="text-center">
                     <p className="text-muted-foreground mb-2">{error}</p>
                     <Button variant="outline" onClick={() => setError(null)}>
@@ -131,7 +147,7 @@ export default function VideoPlayer({ jobId, metadata, className = '' }: VideoPl
     }
 
     return (
-        <div 
+        <div
             className={`group relative aspect-video overflow-hidden rounded-lg bg-black ${className}`}
             onMouseEnter={() => setIsControlsVisible(true)}
             onMouseLeave={() => setIsControlsVisible(false)}
@@ -145,7 +161,7 @@ export default function VideoPlayer({ jobId, metadata, className = '' }: VideoPl
             />
 
             {/* Controls overlay */}
-            <div 
+            <div
                 className={`absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent transition-opacity duration-300 ${
                     isControlsVisible ? 'opacity-100' : 'opacity-0'
                 }`}
@@ -167,7 +183,7 @@ export default function VideoPlayer({ jobId, metadata, className = '' }: VideoPl
                 </div>
 
                 {/* Bottom controls */}
-                <div className="absolute bottom-0 left-0 right-0 p-4">
+                <div className="absolute right-0 bottom-0 left-0 p-4">
                     {/* Progress bar */}
                     <div className="mb-3">
                         <Slider
@@ -228,8 +244,9 @@ export default function VideoPlayer({ jobId, metadata, className = '' }: VideoPl
                                 </div>
                             </div>
 
-                            <span className="text-white text-sm">
-                                {formatSeconds(currentTime)} / {formatSeconds(duration)}
+                            <span className="text-sm text-white">
+                                {formatSeconds(currentTime)} /{' '}
+                                {formatSeconds(duration)}
                             </span>
                         </div>
 

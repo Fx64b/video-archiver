@@ -410,10 +410,12 @@ export default function DownloadsContent() {
                         : `?:??`
 
                     return (
-                        <Card 
-                            key={i} 
-                            className="overflow-hidden pt-0 cursor-pointer transition-transform hover:scale-105"
-                            onClick={() => router.push(`/downloads/video/${item.job?.id}`)}
+                        <Card
+                            key={i}
+                            className="cursor-pointer overflow-hidden pt-0 transition-transform hover:scale-105"
+                            onClick={() =>
+                                router.push(`/downloads/video/${item.job?.id}`)
+                            }
                         >
                             <div className="relative aspect-video">
                                 <Image
@@ -524,10 +526,14 @@ export default function DownloadsContent() {
                         : new Date()
 
                     return (
-                        <Card 
-                            key={i} 
+                        <Card
+                            key={i}
                             className="cursor-pointer transition-transform hover:scale-105"
-                            onClick={() => router.push(`/downloads/playlist/${item.job?.id}`)}
+                            onClick={() =>
+                                router.push(
+                                    `/downloads/playlist/${item.job?.id}`
+                                )
+                            }
                         >
                             <CardHeader>
                                 <div className="flex items-center gap-2">
@@ -651,10 +657,14 @@ export default function DownloadsContent() {
                         : '?'
 
                     return (
-                        <Card 
+                        <Card
                             key={i}
                             className="cursor-pointer transition-transform hover:scale-105"
-                            onClick={() => router.push(`/downloads/channel/${item.job?.id}`)}
+                            onClick={() =>
+                                router.push(
+                                    `/downloads/channel/${item.job?.id}`
+                                )
+                            }
                         >
                             <CardHeader>
                                 <div className="flex items-center gap-3">

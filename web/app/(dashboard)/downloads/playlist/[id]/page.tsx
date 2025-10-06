@@ -1,6 +1,6 @@
 'use client'
 
-import { JobWithMetadata, PlaylistMetadata, PlaylistItem } from '@/types'
+import { JobWithMetadata, PlaylistItem, PlaylistMetadata } from '@/types'
 import { ArrowLeft, Eye, List, Play, User } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
@@ -26,7 +26,9 @@ export default function PlaylistDetailPage() {
     useEffect(() => {
         const fetchPlaylist = async () => {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}`)
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}`
+                )
                 if (!response.ok) {
                     throw new Error('Failed to fetch playlist')
                 }
@@ -58,15 +60,15 @@ export default function PlaylistDetailPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <div className="lg:col-span-2">
-                        <Skeleton className="h-8 w-full mb-4" />
+                        <Skeleton className="mb-4 h-8 w-full" />
                         <div className="space-y-4">
-                            {[1, 2, 3, 4, 5].map(i => (
+                            {[1, 2, 3, 4, 5].map((i) => (
                                 <Skeleton key={i} className="h-20 w-full" />
                             ))}
                         </div>
                     </div>
                     <div>
-                        <Skeleton className="aspect-video w-full mb-4" />
+                        <Skeleton className="mb-4 aspect-video w-full" />
                         <Skeleton className="h-40 w-full" />
                     </div>
                 </div>
@@ -113,18 +115,24 @@ export default function PlaylistDetailPage() {
                 {/* Main content - Video list */}
                 <div className="lg:col-span-2">
                     <div className="mb-6">
-                        <h1 className="text-2xl font-bold leading-tight">
+                        <h1 className="text-2xl leading-tight font-bold">
                             {metadata?.title || 'Untitled Playlist'}
                         </h1>
-                        <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="text-muted-foreground mt-2 flex items-center gap-4 text-sm">
                             <div className="flex items-center gap-1">
                                 <List className="h-4 w-4" />
-                                {metadata?.playlist_count || metadata?.items?.length || 0} videos
+                                {metadata?.playlist_count ||
+                                    metadata?.items?.length ||
+                                    0}{' '}
+                                videos
                             </div>
                             {metadata?.view_count && (
                                 <div className="flex items-center gap-1">
                                     <Eye className="h-4 w-4" />
-                                    {formatSubscriberNumber(metadata.view_count)} views
+                                    {formatSubscriberNumber(
+                                        metadata.view_count
+                                    )}{' '}
+                                    views
                                 </div>
                             )}
                         </div>
@@ -133,69 +141,95 @@ export default function PlaylistDetailPage() {
                     {/* Video list */}
                     <div className="space-y-2">
                         {metadata?.items && metadata.items.length > 0 ? (
-                            metadata.items.map((video: PlaylistItem, index: number) => (
-                                <Card 
-                                    key={video.id || index} 
-                                    className="cursor-pointer transition-colors hover:bg-muted/50"
-                                    onClick={() => handleVideoClick(video.id)}
-                                >
-                                    <CardContent className="flex gap-4 p-4">
-                                        <div className="flex-shrink-0">
-                                            <div className="relative h-20 w-36 overflow-hidden rounded-md">
-                                                <Image
-                                                    src={video.thumbnail || `https://picsum.photos/144/80?random=${index}`}
-                                                    alt={video.title || `Video ${index + 1}`}
-                                                    fill
-                                                    className="object-cover"
-                                                />
-                                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
-                                                    <Play className="h-6 w-6 text-white" />
-                                                </div>
-                                                {video.duration_string && (
-                                                    <div className="absolute right-1 bottom-1 rounded bg-black/80 px-1 text-xs text-white">
-                                                        {video.duration_string}
+                            metadata.items.map(
+                                (video: PlaylistItem, index: number) => (
+                                    <Card
+                                        key={video.id || index}
+                                        className="hover:bg-muted/50 cursor-pointer transition-colors"
+                                        onClick={() =>
+                                            handleVideoClick(video.id)
+                                        }
+                                    >
+                                        <CardContent className="flex gap-4 p-4">
+                                            <div className="flex-shrink-0">
+                                                <div className="relative h-20 w-36 overflow-hidden rounded-md">
+                                                    <Image
+                                                        src={
+                                                            video.thumbnail ||
+                                                            `https://picsum.photos/144/80?random=${index}`
+                                                        }
+                                                        alt={
+                                                            video.title ||
+                                                            `Video ${index + 1}`
+                                                        }
+                                                        fill
+                                                        className="object-cover"
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
+                                                        <Play className="h-6 w-6 text-white" />
                                                     </div>
+                                                    {video.duration_string && (
+                                                        <div className="absolute right-1 bottom-1 rounded bg-black/80 px-1 text-xs text-white">
+                                                            {
+                                                                video.duration_string
+                                                            }
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <h3 className="mb-1 line-clamp-2 font-medium">
+                                                    {video.title ||
+                                                        `Video ${index + 1}`}
+                                                </h3>
+                                                <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                    {video.channel && (
+                                                        <span>
+                                                            {video.channel}
+                                                        </span>
+                                                    )}
+                                                    {video.view_count && (
+                                                        <>
+                                                            <span>•</span>
+                                                            <span>
+                                                                {formatSubscriberNumber(
+                                                                    video.view_count
+                                                                )}{' '}
+                                                                views
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                    {video.upload_date && (
+                                                        <>
+                                                            <span>•</span>
+                                                            <span>
+                                                                {new Date(
+                                                                    video.upload_date
+                                                                ).toLocaleDateString()}
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                                {video.description && (
+                                                    <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                                                        {video.description}
+                                                    </p>
                                                 )}
                                             </div>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="font-medium line-clamp-2 mb-1">
-                                                {video.title || `Video ${index + 1}`}
-                                            </h3>
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                {video.channel && (
-                                                    <span>{video.channel}</span>
-                                                )}
-                                                {video.view_count && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <span>{formatSubscriberNumber(video.view_count)} views</span>
-                                                    </>
-                                                )}
-                                                {video.upload_date && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <span>{new Date(video.upload_date).toLocaleDateString()}</span>
-                                                    </>
-                                                )}
+                                            <div className="flex-shrink-0 text-center">
+                                                <div className="text-muted-foreground text-lg font-medium">
+                                                    {index + 1}
+                                                </div>
                                             </div>
-                                            {video.description && (
-                                                <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                                                    {video.description}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex-shrink-0 text-center">
-                                            <div className="text-lg font-medium text-muted-foreground">
-                                                {index + 1}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))
+                                        </CardContent>
+                                    </Card>
+                                )
+                            )
                         ) : (
-                            <div className="text-center py-8">
-                                <p className="text-muted-foreground">No videos found in this playlist</p>
+                            <div className="py-8 text-center">
+                                <p className="text-muted-foreground">
+                                    No videos found in this playlist
+                                </p>
                             </div>
                         )}
                     </div>
@@ -218,28 +252,42 @@ export default function PlaylistDetailPage() {
                     {/* Playlist details */}
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-lg">Playlist Details</CardTitle>
+                            <CardTitle className="text-lg">
+                                Playlist Details
+                            </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Videos</span>
+                                <span className="text-muted-foreground">
+                                    Videos
+                                </span>
                                 <span className="font-medium">
-                                    {metadata?.playlist_count || metadata?.items?.length || 0}
+                                    {metadata?.playlist_count ||
+                                        metadata?.items?.length ||
+                                        0}
                                 </span>
                             </div>
                             {metadata?.view_count && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Total Views</span>
+                                    <span className="text-muted-foreground">
+                                        Total Views
+                                    </span>
                                     <span className="font-medium">
-                                        {formatSubscriberNumber(metadata.view_count)}
+                                        {formatSubscriberNumber(
+                                            metadata.view_count
+                                        )}
                                     </span>
                                 </div>
                             )}
                             {playlist.job?.created_at && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Downloaded</span>
+                                    <span className="text-muted-foreground">
+                                        Downloaded
+                                    </span>
                                     <span className="text-sm">
-                                        {new Date(playlist.job.created_at).toLocaleDateString()}
+                                        {new Date(
+                                            playlist.job.created_at
+                                        ).toLocaleDateString()}
                                     </span>
                                 </div>
                             )}
@@ -250,18 +298,25 @@ export default function PlaylistDetailPage() {
                     {metadata?.channel && (
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-lg">Channel</CardTitle>
+                                <CardTitle className="text-lg">
+                                    Channel
+                                </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                                    <div className="bg-primary text-primary-foreground flex h-10 w-10 items-center justify-center rounded-full">
                                         <User className="h-5 w-5" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-medium">{metadata.channel}</div>
+                                        <div className="font-medium">
+                                            {metadata.channel}
+                                        </div>
                                         {metadata.channel_follower_count && (
-                                            <div className="text-sm text-muted-foreground">
-                                                {formatSubscriberNumber(metadata.channel_follower_count)} subscribers
+                                            <div className="text-muted-foreground text-sm">
+                                                {formatSubscriberNumber(
+                                                    metadata.channel_follower_count
+                                                )}{' '}
+                                                subscribers
                                             </div>
                                         )}
                                     </div>
@@ -274,7 +329,9 @@ export default function PlaylistDetailPage() {
                     {metadata?.description && (
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-lg">Description</CardTitle>
+                                <CardTitle className="text-lg">
+                                    Description
+                                </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <p className="text-sm whitespace-pre-wrap">

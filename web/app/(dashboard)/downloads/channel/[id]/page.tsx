@@ -27,7 +27,9 @@ export default function ChannelDetailPage() {
     useEffect(() => {
         const fetchChannel = async () => {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}`)
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}`
+                )
                 if (!response.ok) {
                     throw new Error('Failed to fetch channel')
                 }
@@ -61,7 +63,7 @@ export default function ChannelDetailPage() {
                     <Skeleton className="h-32 w-full" />
                 </div>
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-                    {[1, 2, 3, 4, 5, 6].map(i => (
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
                         <Skeleton key={i} className="aspect-video w-full" />
                     ))}
                 </div>
@@ -112,7 +114,10 @@ export default function ChannelDetailPage() {
                         <div className="flex-shrink-0">
                             <div className="relative h-32 w-32 overflow-hidden rounded-full">
                                 <Image
-                                    src={thumbnailUrl || `https://picsum.photos/128/128?random=channel`}
+                                    src={
+                                        thumbnailUrl ||
+                                        `https://picsum.photos/128/128?random=channel`
+                                    }
                                     alt={metadata?.channel || 'Channel avatar'}
                                     fill
                                     className="object-cover"
@@ -122,15 +127,18 @@ export default function ChannelDetailPage() {
 
                         {/* Channel info */}
                         <div className="flex-1">
-                            <h1 className="text-3xl font-bold mb-2">
+                            <h1 className="mb-2 text-3xl font-bold">
                                 {metadata?.channel || 'Unknown Channel'}
                             </h1>
-                            
-                            <div className="mb-4 flex flex-wrap items-center gap-4 text-muted-foreground">
+
+                            <div className="text-muted-foreground mb-4 flex flex-wrap items-center gap-4">
                                 {metadata?.channel_follower_count && (
                                     <div className="flex items-center gap-1">
                                         <Users className="h-4 w-4" />
-                                        {formatSubscriberNumber(metadata.channel_follower_count)} subscribers
+                                        {formatSubscriberNumber(
+                                            metadata.channel_follower_count
+                                        )}{' '}
+                                        subscribers
                                     </div>
                                 )}
                                 {metadata?.video_count && (
@@ -142,13 +150,19 @@ export default function ChannelDetailPage() {
                                 {metadata?.total_views && (
                                     <div className="flex items-center gap-1">
                                         <Play className="h-4 w-4" />
-                                        {formatSubscriberNumber(metadata.total_views)} total views
+                                        {formatSubscriberNumber(
+                                            metadata.total_views
+                                        )}{' '}
+                                        total views
                                     </div>
                                 )}
                                 {channel.job?.created_at && (
                                     <div className="flex items-center gap-1">
                                         <Calendar className="h-4 w-4" />
-                                        Downloaded {new Date(channel.job.created_at).toLocaleDateString()}
+                                        Downloaded{' '}
+                                        {new Date(
+                                            channel.job.created_at
+                                        ).toLocaleDateString()}
                                     </div>
                                 )}
                             </div>
@@ -168,14 +182,20 @@ export default function ChannelDetailPage() {
                                     <div className="text-2xl font-bold">
                                         {metadata?.video_count || 0}
                                     </div>
-                                    <div className="text-sm text-muted-foreground">Videos</div>
+                                    <div className="text-muted-foreground text-sm">
+                                        Videos
+                                    </div>
                                 </div>
                                 {metadata?.total_storage && (
                                     <div className="text-center">
                                         <div className="text-2xl font-bold">
-                                            {formatBytes(metadata.total_storage)}
+                                            {formatBytes(
+                                                metadata.total_storage
+                                            )}
                                         </div>
-                                        <div className="text-sm text-muted-foreground">Storage</div>
+                                        <div className="text-muted-foreground text-sm">
+                                            Storage
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -192,50 +212,73 @@ export default function ChannelDetailPage() {
                 </TabsList>
 
                 <TabsContent value="videos">
-                    {metadata?.recent_videos && metadata.recent_videos.length > 0 ? (
+                    {metadata?.recent_videos &&
+                    metadata.recent_videos.length > 0 ? (
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                            {metadata.recent_videos.map((video: PlaylistItem, index: number) => (
-                                <Card 
-                                    key={video.id || index} 
-                                    className="cursor-pointer overflow-hidden transition-transform hover:scale-105"
-                                    onClick={() => handleVideoClick(video.id)}
-                                >
-                                    <div className="relative aspect-video">
-                                        <Image
-                                            src={video.thumbnail || `https://picsum.photos/320/180?random=${index}`}
-                                            alt={video.title || `Video ${index + 1}`}
-                                            fill
-                                            className="object-cover"
-                                        />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
-                                            <Play className="h-8 w-8 text-white" />
-                                        </div>
-                                        {video.duration_string && (
-                                            <div className="absolute right-2 bottom-2 rounded bg-black/80 px-1 text-xs text-white">
-                                                {video.duration_string}
+                            {metadata.recent_videos.map(
+                                (video: PlaylistItem, index: number) => (
+                                    <Card
+                                        key={video.id || index}
+                                        className="cursor-pointer overflow-hidden transition-transform hover:scale-105"
+                                        onClick={() =>
+                                            handleVideoClick(video.id)
+                                        }
+                                    >
+                                        <div className="relative aspect-video">
+                                            <Image
+                                                src={
+                                                    video.thumbnail ||
+                                                    `https://picsum.photos/320/180?random=${index}`
+                                                }
+                                                alt={
+                                                    video.title ||
+                                                    `Video ${index + 1}`
+                                                }
+                                                fill
+                                                className="object-cover"
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
+                                                <Play className="h-8 w-8 text-white" />
                                             </div>
-                                        )}
-                                    </div>
-                                    <CardContent className="p-4">
-                                        <h3 className="font-medium line-clamp-2 mb-2">
-                                            {video.title || `Video ${index + 1}`}
-                                        </h3>
-                                        <div className="text-sm text-muted-foreground">
-                                            {video.view_count && (
-                                                <div>{formatSubscriberNumber(video.view_count)} views</div>
-                                            )}
-                                            {video.upload_date && (
-                                                <div>{new Date(video.upload_date).toLocaleDateString()}</div>
+                                            {video.duration_string && (
+                                                <div className="absolute right-2 bottom-2 rounded bg-black/80 px-1 text-xs text-white">
+                                                    {video.duration_string}
+                                                </div>
                                             )}
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                                        <CardContent className="p-4">
+                                            <h3 className="mb-2 line-clamp-2 font-medium">
+                                                {video.title ||
+                                                    `Video ${index + 1}`}
+                                            </h3>
+                                            <div className="text-muted-foreground text-sm">
+                                                {video.view_count && (
+                                                    <div>
+                                                        {formatSubscriberNumber(
+                                                            video.view_count
+                                                        )}{' '}
+                                                        views
+                                                    </div>
+                                                )}
+                                                {video.upload_date && (
+                                                    <div>
+                                                        {new Date(
+                                                            video.upload_date
+                                                        ).toLocaleDateString()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )
+                            )}
                         </div>
                     ) : (
-                        <div className="text-center py-12">
-                            <Video className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                            <p className="text-muted-foreground">No videos found for this channel</p>
+                        <div className="py-12 text-center">
+                            <Video className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
+                            <p className="text-muted-foreground">
+                                No videos found for this channel
+                            </p>
                         </div>
                     )}
                 </TabsContent>
@@ -249,43 +292,59 @@ export default function ChannelDetailPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Subscribers</span>
+                                    <span className="text-muted-foreground">
+                                        Subscribers
+                                    </span>
                                     <span className="font-medium">
-                                        {metadata?.channel_follower_count 
-                                            ? formatSubscriberNumber(metadata.channel_follower_count)
-                                            : 'Unknown'
-                                        }
+                                        {metadata?.channel_follower_count
+                                            ? formatSubscriberNumber(
+                                                  metadata.channel_follower_count
+                                              )
+                                            : 'Unknown'}
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Videos Downloaded</span>
-                                    <span className="font-medium">{metadata?.video_count || 0}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Total Views</span>
+                                    <span className="text-muted-foreground">
+                                        Videos Downloaded
+                                    </span>
                                     <span className="font-medium">
-                                        {metadata?.total_views 
-                                            ? formatSubscriberNumber(metadata.total_views)
-                                            : 'Unknown'
-                                        }
+                                        {metadata?.video_count || 0}
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Storage Used</span>
+                                    <span className="text-muted-foreground">
+                                        Total Views
+                                    </span>
                                     <span className="font-medium">
-                                        {metadata?.total_storage 
-                                            ? formatBytes(metadata.total_storage)
-                                            : 'Unknown'
-                                        }
+                                        {metadata?.total_views
+                                            ? formatSubscriberNumber(
+                                                  metadata.total_views
+                                              )
+                                            : 'Unknown'}
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Downloaded</span>
+                                    <span className="text-muted-foreground">
+                                        Storage Used
+                                    </span>
                                     <span className="font-medium">
-                                        {channel.job?.created_at 
-                                            ? new Date(channel.job.created_at).toLocaleDateString()
-                                            : 'Unknown'
-                                        }
+                                        {metadata?.total_storage
+                                            ? formatBytes(
+                                                  metadata.total_storage
+                                              )
+                                            : 'Unknown'}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">
+                                        Downloaded
+                                    </span>
+                                    <span className="font-medium">
+                                        {channel.job?.created_at
+                                            ? new Date(
+                                                  channel.job.created_at
+                                              ).toLocaleDateString()
+                                            : 'Unknown'}
                                     </span>
                                 </div>
                             </CardContent>
@@ -298,7 +357,7 @@ export default function ChannelDetailPage() {
                                     <CardTitle>About</CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="whitespace-pre-wrap text-sm">
+                                    <p className="text-sm whitespace-pre-wrap">
                                         {metadata.description}
                                     </p>
                                 </CardContent>

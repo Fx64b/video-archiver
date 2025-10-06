@@ -35,7 +35,9 @@ export default function VideoDetailPage() {
                 if (!response.ok) {
                     const errorText = await response.text()
                     console.error('Video API error:', errorText)
-                    throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`)
+                    throw new Error(
+                        `Failed to fetch video: ${response.status} ${response.statusText}`
+                    )
                 }
 
                 const data = await response.json()
@@ -61,7 +63,9 @@ export default function VideoDetailPage() {
                     console.log('Parents API response:', data)
                     setParents(data.message || [])
                 } else {
-                    console.warn('Failed to fetch parents, continuing without them')
+                    console.warn(
+                        'Failed to fetch parents, continuing without them'
+                    )
                 }
             } catch (err) {
                 console.warn('Failed to fetch parents:', err)
@@ -136,8 +140,8 @@ export default function VideoDetailPage() {
                 {/* Main content */}
                 <div className="lg:col-span-2">
                     {/* Video player */}
-                    <VideoPlayer 
-                        jobId={video.job?.id || ''} 
+                    <VideoPlayer
+                        jobId={video.job?.id || ''}
                         metadata={metadata}
                         className="mb-4"
                     />
@@ -145,26 +149,34 @@ export default function VideoDetailPage() {
                     {/* Video info */}
                     <div className="space-y-4">
                         <div>
-                            <h1 className="text-2xl font-bold leading-tight">
+                            <h1 className="text-2xl leading-tight font-bold">
                                 {metadata?.title || 'Untitled Video'}
                             </h1>
-                            <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                            <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-4 text-sm">
                                 {metadata?.view_count && (
                                     <div className="flex items-center gap-1">
                                         <Eye className="h-4 w-4" />
-                                        {formatSubscriberNumber(metadata.view_count)} views
+                                        {formatSubscriberNumber(
+                                            metadata.view_count
+                                        )}{' '}
+                                        views
                                     </div>
                                 )}
                                 {metadata?.like_count && (
                                     <div className="flex items-center gap-1">
                                         <ThumbsUp className="h-4 w-4" />
-                                        {formatSubscriberNumber(metadata.like_count)} likes
+                                        {formatSubscriberNumber(
+                                            metadata.like_count
+                                        )}{' '}
+                                        likes
                                     </div>
                                 )}
                                 {metadata?.upload_date && (
                                     <div className="flex items-center gap-1">
                                         <Calendar className="h-4 w-4" />
-                                        {new Date(metadata.upload_date).toLocaleDateString()}
+                                        {new Date(
+                                            metadata.upload_date
+                                        ).toLocaleDateString()}
                                     </div>
                                 )}
                             </div>
@@ -172,15 +184,20 @@ export default function VideoDetailPage() {
 
                         {/* Channel info */}
                         {metadata?.channel && (
-                            <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-4">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <div className="bg-muted/50 flex items-center gap-3 rounded-lg p-4">
+                                <div className="bg-primary text-primary-foreground flex h-10 w-10 items-center justify-center rounded-full">
                                     <User className="h-5 w-5" />
                                 </div>
                                 <div className="flex-1">
-                                    <div className="font-medium">{metadata.channel}</div>
+                                    <div className="font-medium">
+                                        {metadata.channel}
+                                    </div>
                                     {metadata.channel_follower_count && (
-                                        <div className="text-sm text-muted-foreground">
-                                            {formatSubscriberNumber(metadata.channel_follower_count)} subscribers
+                                        <div className="text-muted-foreground text-sm">
+                                            {formatSubscriberNumber(
+                                                metadata.channel_follower_count
+                                            )}{' '}
+                                            subscribers
                                         </div>
                                     )}
                                 </div>
@@ -190,11 +207,14 @@ export default function VideoDetailPage() {
                         {/* Description */}
                         {metadata?.description && (
                             <div>
-                                <h3 className="mb-2 font-semibold">Description</h3>
-                                <div className="rounded-lg bg-muted/50 p-4">
-                                    <p className="whitespace-pre-wrap text-sm">
+                                <h3 className="mb-2 font-semibold">
+                                    Description
+                                </h3>
+                                <div className="bg-muted/50 rounded-lg p-4">
+                                    <p className="text-sm whitespace-pre-wrap">
                                         {metadata.description.slice(0, 500)}
-                                        {metadata.description.length > 500 && '...'}
+                                        {metadata.description.length > 500 &&
+                                            '...'}
                                     </p>
                                 </div>
                             </div>
@@ -208,7 +228,7 @@ export default function VideoDetailPage() {
                     {parents.length > 0 && (
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-lg flex items-center gap-2">
+                                <CardTitle className="flex items-center gap-2 text-lg">
                                     <List className="h-5 w-5" />
                                     Found in
                                 </CardTitle>
@@ -220,27 +240,40 @@ export default function VideoDetailPage() {
 
                                     // Type-safe metadata access
                                     let title = 'Unknown'
-                                    if (type === 'playlist' && metadata && 'title' in metadata) {
+                                    if (
+                                        type === 'playlist' &&
+                                        metadata &&
+                                        'title' in metadata
+                                    ) {
                                         title = metadata.title
-                                    } else if (type === 'channel' && metadata && 'channel' in metadata) {
+                                    } else if (
+                                        type === 'channel' &&
+                                        metadata &&
+                                        'channel' in metadata
+                                    ) {
                                         title = metadata.channel
                                     }
 
                                     const detailPath =
-                                        type === 'playlist' ? `/downloads/playlist/${parent.job?.id}` :
-                                        type === 'channel' ? `/downloads/channel/${parent.job?.id}` :
-                                        '#'
+                                        type === 'playlist'
+                                            ? `/downloads/playlist/${parent.job?.id}`
+                                            : type === 'channel'
+                                              ? `/downloads/channel/${parent.job?.id}`
+                                              : '#'
 
                                     return (
                                         <Link
                                             key={parent.job?.id}
                                             href={detailPath}
-                                            className="flex items-center gap-2 rounded-lg p-2 hover:bg-muted/50 transition-colors"
+                                            className="hover:bg-muted/50 flex items-center gap-2 rounded-lg p-2 transition-colors"
                                         >
-                                            <Badge variant="outline" className="capitalize">
+                                            <Badge
+                                                variant="outline"
+                                                className="capitalize"
+                                            >
                                                 {type}
                                             </Badge>
-                                            <span className="text-sm flex-1 truncate">
+                                            <span className="flex-1 truncate text-sm">
                                                 {title}
                                             </span>
                                         </Link>
@@ -253,38 +286,60 @@ export default function VideoDetailPage() {
                     {/* Video details */}
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-lg">Video Details</CardTitle>
+                            <CardTitle className="text-lg">
+                                Video Details
+                            </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
                             {metadata?.duration && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Duration</span>
-                                    <span className="font-mono">{formatSeconds(metadata.duration)}</span>
+                                    <span className="text-muted-foreground">
+                                        Duration
+                                    </span>
+                                    <span className="font-mono">
+                                        {formatSeconds(metadata.duration)}
+                                    </span>
                                 </div>
                             )}
                             {metadata?.resolution && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Resolution</span>
-                                    <Badge variant="outline">{metadata.resolution}</Badge>
+                                    <span className="text-muted-foreground">
+                                        Resolution
+                                    </span>
+                                    <Badge variant="outline">
+                                        {metadata.resolution}
+                                    </Badge>
                                 </div>
                             )}
                             {metadata?.filesize_approx && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">File Size</span>
-                                    <span>{formatBytes(metadata.filesize_approx)}</span>
+                                    <span className="text-muted-foreground">
+                                        File Size
+                                    </span>
+                                    <span>
+                                        {formatBytes(metadata.filesize_approx)}
+                                    </span>
                                 </div>
                             )}
                             {metadata?.format && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Format</span>
-                                    <Badge variant="outline">{metadata.ext?.toUpperCase() || 'MP4'}</Badge>
+                                    <span className="text-muted-foreground">
+                                        Format
+                                    </span>
+                                    <Badge variant="outline">
+                                        {metadata.ext?.toUpperCase() || 'MP4'}
+                                    </Badge>
                                 </div>
                             )}
                             {video.job?.created_at && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Downloaded</span>
+                                    <span className="text-muted-foreground">
+                                        Downloaded
+                                    </span>
                                     <span className="text-sm">
-                                        {new Date(video.job.created_at).toLocaleDateString()}
+                                        {new Date(
+                                            video.job.created_at
+                                        ).toLocaleDateString()}
                                     </span>
                                 </div>
                             )}
@@ -299,13 +354,22 @@ export default function VideoDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="flex flex-wrap gap-2">
-                                    {metadata.tags.slice(0, 10).map((tag, index) => (
-                                        <Badge key={index} variant="secondary" className="text-xs">
-                                            {tag}
-                                        </Badge>
-                                    ))}
+                                    {metadata.tags
+                                        .slice(0, 10)
+                                        .map((tag, index) => (
+                                            <Badge
+                                                key={index}
+                                                variant="secondary"
+                                                className="text-xs"
+                                            >
+                                                {tag}
+                                            </Badge>
+                                        ))}
                                     {metadata.tags.length > 10 && (
-                                        <Badge variant="outline" className="text-xs">
+                                        <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                        >
                                             +{metadata.tags.length - 10} more
                                         </Badge>
                                     )}
@@ -317,31 +381,47 @@ export default function VideoDetailPage() {
                     {/* Technical info */}
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-lg">Technical Details</CardTitle>
+                            <CardTitle className="text-lg">
+                                Technical Details
+                            </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2 text-sm">
                             {metadata?.vcodec && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Video Codec</span>
-                                    <span className="font-mono">{metadata.vcodec}</span>
+                                    <span className="text-muted-foreground">
+                                        Video Codec
+                                    </span>
+                                    <span className="font-mono">
+                                        {metadata.vcodec}
+                                    </span>
                                 </div>
                             )}
                             {metadata?.acodec && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Audio Codec</span>
-                                    <span className="font-mono">{metadata.acodec}</span>
+                                    <span className="text-muted-foreground">
+                                        Audio Codec
+                                    </span>
+                                    <span className="font-mono">
+                                        {metadata.acodec}
+                                    </span>
                                 </div>
                             )}
                             {metadata?.fps && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Frame Rate</span>
+                                    <span className="text-muted-foreground">
+                                        Frame Rate
+                                    </span>
                                     <span>{metadata.fps} fps</span>
                                 </div>
                             )}
                             {metadata?.extractor && (
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Source</span>
-                                    <span className="capitalize">{metadata.extractor}</span>
+                                    <span className="text-muted-foreground">
+                                        Source
+                                    </span>
+                                    <span className="capitalize">
+                                        {metadata.extractor}
+                                    </span>
                                 </div>
                             )}
                         </CardContent>
