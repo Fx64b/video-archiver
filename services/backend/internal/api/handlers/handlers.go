@@ -2,11 +2,16 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/download"
@@ -38,8 +43,11 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 
 	r.Post("/download", h.HandleDownload)
 	r.Get("/recent", h.HandleRecent)
-	r.Get("/job/:id", h.HandleGetJob)
+	r.Get("/job/{id}", h.HandleGetJob)
+	r.Get("/job/{id}/parents", h.HandleGetJobParents)
 	r.Get("/statistics", h.HandleGetStatistics)
+	r.Get("/downloads/{type}", h.HandleGetDownloads)
+	r.Get("/video/{jobID}", h.HandleServeVideo)
 }
 
 func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
@@ -130,7 +138,10 @@ func (h *Handler) HandleRecent(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
+	log.WithField("jobID", jobID).Info("Received request for job")
+
 	if jobID == "" {
+		log.Warn("Missing job ID in request")
 		http.Error(w, "Missing job ID", http.StatusBadRequest)
 		return
 	}
@@ -142,7 +153,41 @@ func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if jobWithMetadata == nil {
+		log.WithField("jobID", jobID).Warn("Job not found")
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+
 	resp := Response{Message: jobWithMetadata}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) HandleGetJobParents(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	log.WithField("jobID", jobID).Info("Received request for job parents")
+
+	if jobID == "" {
+		log.Warn("Missing job ID in request")
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	jobRepo := h.downloadService.GetRepository()
+	parents, err := jobRepo.GetParentsForVideo(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get parents for video")
+		http.Error(w, "Failed to get parents for video", http.StatusInternalServerError)
+		return
+	}
+
+	// Return empty array if no parents found (not an error)
+	if parents == nil {
+		parents = []*domain.JobWithMetadata{}
+	}
+
+	resp := Response{Message: parents}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -159,6 +204,167 @@ func (h *Handler) HandleGetStatistics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
+
+func (h *Handler) HandleGetDownloads(w http.ResponseWriter, r *http.Request) {
+	contentType := chi.URLParam(r, "type")
+
+	// Validate content type
+	if contentType != "videos" && contentType != "playlists" && contentType != "channels" {
+		http.Error(w, "Invalid content type. Must be 'videos', 'playlists', or 'channels'", http.StatusBadRequest)
+		return
+	}
+
+	// Parse query parameters
+	page := 1
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	limit := 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	sortBy := r.URL.Query().Get("sort_by")
+	if sortBy == "" {
+		sortBy = "created_at"
+	}
+
+	order := r.URL.Query().Get("order")
+	if order == "" {
+		order = "desc"
+	}
+
+	jobRepo := h.downloadService.GetRepository()
+	items, totalCount, err := jobRepo.GetMetadataByType(contentType, page, limit, sortBy, order)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to get %s", contentType)
+		http.Error(w, fmt.Sprintf("Failed to get %s", contentType), http.StatusInternalServerError)
+		return
+	}
+
+	if len(items) == 0 && page == 1 {
+		log.Infof("No %s found", contentType)
+
+		resp := struct {
+			Items      []*domain.JobWithMetadata `json:"items"`
+			TotalCount int                       `json:"total_count"`
+			Page       int                       `json:"page"`
+			Limit      int                       `json:"limit"`
+			TotalPages int                       `json:"total_pages"`
+		}{
+			Items:      []*domain.JobWithMetadata{},
+			TotalCount: 0,
+			Page:       page,
+			Limit:      limit,
+			TotalPages: 0,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(Response{Message: resp})
+		return
+	}
+
+	resp := struct {
+		Items      []*domain.JobWithMetadata `json:"items"`
+		TotalCount int                       `json:"total_count"`
+		Page       int                       `json:"page"`
+		Limit      int                       `json:"limit"`
+		TotalPages int                       `json:"total_pages"`
+	}{
+		Items:      items,
+		TotalCount: totalCount,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: (totalCount + limit - 1) / limit, // Ceiling division
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(Response{Message: resp})
+	if err != nil {
+		return
+	}
+}
+
+func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID")
+	if jobID == "" {
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get job metadata to find the video file
+	jobWithMetadata, err := h.downloadService.GetJobWithMetadata(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get job with metadata")
+		http.Error(w, "Video not found", http.StatusNotFound)
+		return
+	}
+
+	if jobWithMetadata == nil || jobWithMetadata.Job == nil {
+		http.Error(w, "Video not found", http.StatusNotFound)
+		return
+	}
+
+	// Try to find the video file based on the metadata
+	var videoPath string
+	
+	switch metadata := jobWithMetadata.Metadata.(type) {
+	case *domain.VideoMetadata:
+		// For videos, construct the expected file path
+		channelDir := metadata.Channel
+		if channelDir == "" {
+			channelDir = metadata.Uploader
+		}
+		if channelDir == "" {
+			channelDir = "Unknown"
+		}
+		
+		title := metadata.Title
+		if title == "" {
+			title = "Unknown"
+		}
+		
+		// Clean the filename
+		title = strings.ReplaceAll(title, "/", "_")
+		title = strings.ReplaceAll(title, "\\", "_")
+		title = strings.ReplaceAll(title, ":", "_")
+		title = strings.ReplaceAll(title, "*", "_")
+		title = strings.ReplaceAll(title, "?", "_")
+		title = strings.ReplaceAll(title, "\"", "_")
+		title = strings.ReplaceAll(title, "<", "_")
+		title = strings.ReplaceAll(title, ">", "_")
+		title = strings.ReplaceAll(title, "|", "_")
+		
+		videoPath = filepath.Join(h.downloadPath, channelDir, title+".mp4")
+		
+	default:
+		http.Error(w, "Unsupported content type for video playback", http.StatusBadRequest)
+		return
+	}
+
+	// Check if the file exists
+	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
+		log.WithField("path", videoPath).Warn("Video file not found")
+		http.Error(w, "Video file not found", http.StatusNotFound)
+		return
+	}
+
+	log.WithField("path", videoPath).Info("Serving video file")
+
+	// Set appropriate headers for video streaming
+	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Cache-Control", "no-cache")
+
+	// Serve the file
+	http.ServeFile(w, r, videoPath)
+}
+
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

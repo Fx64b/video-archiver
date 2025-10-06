@@ -171,3 +171,8 @@
         opacity: 1;
     }
 }
+
+/* Specific styles for tabs to fix a priority issue with some shadcn/ui styles. */
+.dark .tabs-trigger[data-state='active'] {
+    background-color: var(--color-background) !important;
+}

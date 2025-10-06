@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"video-archiver/internal/api/handlers"
+	"video-archiver/internal/config"
 	"video-archiver/internal/repositories/sqlite"
 	"video-archiver/internal/services/download"
 	"video-archiver/internal/util/version"
@@ -37,6 +38,12 @@ __     _____ ____  _____ ___
 
 	version.StartVersionChecker()
 
+	fmt.Println("Loading configs...")
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
 	fmt.Println("Initializing database...")
 	dbPath := os.Getenv("DATABASE_PATH")
 	if dbPath == "" {
@@ -54,10 +61,9 @@ __     _____ ____  _____ ___
 	fmt.Println("Starting Download Service...")
 	downloadService := download.NewService(&download.Config{
 		JobRepository: jobRepo,
-		DownloadPath:  os.Getenv("DOWNLOAD_PATH"),
-		// TODO: load these values from environment variables
-		Concurrency: 2,
-		MaxQuality:  1080,
+		DownloadPath:  cfg.Server.DownloadPath,
+		Concurrency:   cfg.YtDlp.Concurrency,
+		MaxQuality:    cfg.YtDlp.MaxQuality,
 	})
 
 	if err := downloadService.Start(); err != nil {
@@ -74,14 +80,14 @@ __     _____ ____  _____ ___
 	handler.RegisterWSRoutes(wsRouter)
 
 	go func() {
-		fmt.Println("Starting WebSocket server on :8081...")
-		if err := http.ListenAndServe(":8081", wsRouter); err != nil {
+		fmt.Printf("Starting WebSocket server on %s...\n", cfg.Server.WSPort)
+		if err := http.ListenAndServe(cfg.Server.WSPort, wsRouter); err != nil {
 			log.Fatal(err)
 		}
 	}()
 
-	fmt.Println("Starting API server on :8080...")
-	if err := http.ListenAndServe(":8080", apiRouter); err != nil {
+	fmt.Printf("Starting API server on %s...\n", cfg.Server.Port)
+	if err := http.ListenAndServe(cfg.Server.Port, apiRouter); err != nil {
 		log.Fatal(err)
 	}
 }

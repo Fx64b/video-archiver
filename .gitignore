@@ -33,3 +33,7 @@ repomix-output.xml
 data/*
 *.journal
 *.part
+*.json
+
+*.pp
+*.te

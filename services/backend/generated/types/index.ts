@@ -22,6 +22,9 @@ export type JobType = string;
 export const JobTypeVideo: JobType = "video";
 export const JobTypeAudio: JobType = "audio";
 export const JobTypeMetadata: JobType = "metadata";
+/**
+ * deprecated, remove in the future
+ */
 export interface JobWithMetadata {
   job?: Job;
   metadata?: Metadata;
@@ -33,22 +36,51 @@ export interface ProgressUpdate {
   totalItems: number /* int */;
   progress: number /* float64 */;
   currentVideoProgress: number /* float64 */;
+  downloadPhase: string;
 }
+export const DownloadPhaseMetadata = "metadata";
+export const DownloadPhaseVideo = "video";
+export const DownloadPhaseAudio = "audio";
+export const DownloadPhaseMerging = "merging";
+export const DownloadPhaseComplete = "complete";
 export interface VideoMetadata {
   id: string;
   title: string;
   description: string;
   thumbnail: string;
   duration: number /* int */;
+  duration_string: string;
   view_count: number /* int */;
+  like_count: number /* int */;
+  comment_count: number /* int */;
   channel: string;
   channel_id: string;
   channel_url: string;
   channel_follower_count: number /* int */;
+  channel_is_verified: boolean;
+  uploader: string;
+  uploader_id: string;
+  uploader_url: string;
   tags: string[];
   categories: string[];
   upload_date: string;
   filesize_approx: number /* int64 */;
+  format: string;
+  ext: string;
+  language: string;
+  width: number /* int */;
+  height: number /* int */;
+  resolution: string;
+  fps: number /* float64 */;
+  dynamic_range: string;
+  vcodec: string;
+  aspect_ratio: number /* float64 */;
+  acodec: string;
+  audio_channels: number /* int */;
+  was_live: boolean;
+  webpage_url_domain: string;
+  extractor: string;
+  fulltitle: string;
   _type: string;
 }
 export interface Thumbnail {
@@ -56,6 +88,28 @@ export interface Thumbnail {
   height: number /* int */;
   width: number /* int */;
   id: string;
+}
+export interface PlaylistItem {
+  id: string;
+  title: string;
+  description?: string;
+  thumbnail?: string;
+  duration?: number /* int */;
+  duration_string?: string;
+  upload_date?: string;
+  view_count?: number /* int */;
+  like_count?: number /* int */;
+  video_file?: string;
+  channel?: string;
+  channel_id?: string;
+  channel_url?: string;
+  width?: number /* int */;
+  height?: number /* int */;
+  resolution?: string;
+  filesize_approx?: number /* int64 */;
+  format?: string;
+  ext?: string;
+  tags?: string[];
 }
 export interface PlaylistMetadata {
   id: string;
@@ -69,6 +123,8 @@ export interface PlaylistMetadata {
   channel_url: string;
   channel_follower_count: number /* int */;
   playlist_count: number /* int */;
+  view_count?: number /* int */;
+  items?: PlaylistItem[];
   _type: string;
 }
 export interface ChannelMetadata {
@@ -80,6 +136,10 @@ export interface ChannelMetadata {
   channel_follower_count: number /* int */;
   playlist_count: number /* int */;
   _type: string;
+  video_count?: number /* int */;
+  total_storage?: number /* int64 */;
+  total_views?: number /* int */;
+  recent_videos?: PlaylistItem[];
 }
 export interface MetadataUpdate {
   jobID: string;

@@ -34,3 +34,12 @@ CREATE TABLE IF NOT EXISTS channels (
                                         metadata_json TEXT,
                                         FOREIGN KEY (job_id) REFERENCES jobs (job_id)
 );
+
+CREATE TABLE IF NOT EXISTS video_memberships (
+                                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                 video_job_id TEXT,
+                                                 parent_job_id TEXT,
+                                                 membership_type TEXT,
+                                                 FOREIGN KEY (video_job_id) REFERENCES jobs (job_id),
+                                                 FOREIGN KEY (parent_job_id) REFERENCES jobs (job_id)
+);

@@ -57,10 +57,21 @@ echo "./run.sh --help for more information."
 if [ -n "$BUILD" ]; then
    echo "Generating TypeScript types..."
    cd services/backend
+
+   # Check if tygo is installed, install if not
+   if ! command -v tygo &> /dev/null; then
+       echo "tygo not found. Installing..."
+       go install github.com/gzuidhof/tygo@latest
+   fi
+
    tygo generate
    mkdir -p ../../web/types
    cp generated/types/index.ts ../../web/types/index.ts
    cd ../..
+
+  # The prune is optional, but during development it is likely that you will end up with several GB of cache
+   docker builder prune -f --filter 'until=48h'
+
    docker-compose up --build --remove-orphans $SERVICES
 else
    docker-compose up --remove-orphans $SERVICES
