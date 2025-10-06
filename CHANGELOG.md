@@ -1,3 +1,16 @@
+# [1.6.0](https://github.com/Fx64b/video-archiver/compare/0.1.5.0-BETA...0.1.6.0-BETA) (2025-10-06)
+
+
+### Bug Fixes
+
+* **actions:** backend tests workflow was duplicated and frontend tests were ignored ([026438c](https://github.com/Fx64b/video-archiver/commit/026438c82077aed1c52facd30ce47ae5f49ed677))
+* failing tests ([e3ad95a](https://github.com/Fx64b/video-archiver/commit/e3ad95ad6b43865e4c541c4978dae67e4b56b8d2))
+
+
+### Features
+
+* several improvements, including docker performance, websocket reconnecting, frontend refactoring and metadata ([e2b3afe](https://github.com/Fx64b/video-archiver/commit/e2b3afeb18850d6a8f5d3c84000a68aa07532c0a))
+
 # [1.5.0](https://github.com/Fx64b/video-archiver/compare/0.1.4.1-BETA...0.1.5.0-BETA) (2025-10-06)
 
 
