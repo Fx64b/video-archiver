@@ -1,7 +1,8 @@
+import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
 import { JobWithMetadata } from '@/types'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 
 import { MetadataCard } from '@/components/metadata-card'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,8 +13,9 @@ const Recent: React.FC = () => {
     const [loading, setLoading] = useState(true)
     const [message, setMessage] = useState('')
     const { isActiveDownload, setRecentMetadata } = useAppState()
+    const onReconnect = useWebSocketStore((state) => state.onReconnect)
 
-    useEffect(() => {
+    const fetchRecentJobs = useCallback(() => {
         fetch(process.env.NEXT_PUBLIC_SERVER_URL + '/recent')
             .then((res) => {
                 if (!res.ok) {
@@ -41,6 +43,10 @@ const Recent: React.FC = () => {
                 setMessage('Error loading recent jobs.')
                 setLoading(false)
             })
+    }, [setRecentMetadata])
+
+    useEffect(() => {
+        fetchRecentJobs()
 
         const unsubscribe = useAppState.subscribe((state) => {
             if (state.isDownloading) {
@@ -48,7 +54,17 @@ const Recent: React.FC = () => {
                 unsubscribe()
             }
         })
-    }, [setRecentMetadata])
+
+        // Refetch recent jobs on WebSocket reconnection
+        const unsubscribeReconnect = onReconnect(() => {
+            console.log('WebSocket reconnected, fetching recent jobs...')
+            fetchRecentJobs()
+        })
+
+        return () => {
+            unsubscribeReconnect()
+        }
+    }, [fetchRecentJobs, onReconnect])
 
     if (loading) {
         return (

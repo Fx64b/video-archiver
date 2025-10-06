@@ -1,47 +1,43 @@
-# Install dependencies only when needed
-FROM node:24-alpine AS deps
+# Base image with pnpm pre-installed
+FROM node:24-alpine AS base
+RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Only copy package.json and pnpm-lock.yaml to prevent cache busting
+# Install dependencies only when needed
+FROM base AS deps
+# Copy dependency manifests
 COPY package.json pnpm-lock.yaml* ./
+# Install all dependencies (including devDependencies for build)
 RUN pnpm install --frozen-lockfile
 
 # Rebuild the source code only when needed
-FROM node:24-alpine AS builder
-WORKDIR /app
-
-# Install pnpm in the builder stage
-RUN npm install -g pnpm
-
-# Copy all project files
-COPY . .
-
-# Copy installed dependencies
+FROM base AS builder
+# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-
+# Copy all source files
+COPY . .
 # Set environment to production
 ENV NODE_ENV production
-
+# Set build-time environment variables for Next.js
+ARG NEXT_PUBLIC_SERVER_URL=http://backend:8080
+ARG NEXT_PUBLIC_SERVER_URL_WS=ws://backend:8081
+ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
+ENV NEXT_PUBLIC_SERVER_URL_WS=$NEXT_PUBLIC_SERVER_URL_WS
 # Build the application
 RUN pnpm build
 
-# Final image to serve the app
-FROM node:24-alpine AS runner
-WORKDIR /app
+# Production image, copy only necessary files
+FROM base AS runner
+ENV NODE_ENV production
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Copy package.json and lock file
+# Copy package files
 COPY package.json pnpm-lock.yaml* ./
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Install production dependencies + typescript (needed for next.config.ts)
+RUN pnpm install --frozen-lockfile --prod && \
+    pnpm add -D typescript
 
-# Copy necessary files from the builder
+# Copy built application from builder
 COPY --from=builder /app/next.config.ts ./
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
