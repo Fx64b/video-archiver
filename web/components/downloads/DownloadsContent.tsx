@@ -164,7 +164,9 @@ export default function DownloadsContent() {
                 url.searchParams.append('sort_by', sortBy)
                 url.searchParams.append('order', order)
 
-                console.log(`Fetching from: ${url.toString()}`) // Log the full URL for debugging
+                if (process.env.NODE_ENV === 'development') {
+                    console.log(`Fetching from: ${url.toString()}`) // Log the full URL for debugging
+                }
 
                 const response = await fetch(url.toString())
 
