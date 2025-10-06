@@ -13,12 +13,17 @@ Video Archiver allows you to download and organize videos from YouTube for offli
 
 ### Current Features
 - Download videos, playlists, and channels from YouTube URLs
-- Real-time download progress tracking via WebSocket
+- Real-time download progress tracking via WebSocket with automatic reconnection
+- Enhanced progress tracking with multiple phases (video, audio, merging)
 - Queue management for multiple downloads
 - Modern responsive web interface
 - Dark/Light mode support
-- Dashboard with stats about your media collection
-- Basic metadata extraction and display
+- Dashboard with detailed statistics and charts about your media collection
+- Comprehensive metadata extraction and display
+- Downloads page with separate tabs for videos, playlists, and channels
+- Pagination and sorting options for download history
+- Individual video viewing from playlists and channels
+- Robust testing infrastructure for both frontend and backend
 
 ### Planned Features
 - Advanced download options (quality selection, format selection)
@@ -29,6 +34,7 @@ Video Archiver allows you to download and organize videos from YouTube for offli
 - User authentication and multiple user support
 - Download scheduling
 - API for integrations with other applications
+- Content tagging and custom categorization
 
 ## Technology Stack
 
@@ -127,6 +133,25 @@ The application can be configured through environment variables:
 ### Frontend
 - `NEXT_PUBLIC_SERVER_URL`: URL for backend API (default: http://localhost:8080)
 - `NEXT_PUBLIC_SERVER_URL_WS`: URL for WebSocket connection (default: ws://localhost:8081)
+
+## Recent Updates
+
+### Version 1.6.0 (October 2025)
+- **Performance**: Significant Docker performance improvements
+- **WebSocket**: Enhanced automatic reconnection with visual feedback
+- **Frontend**: Major refactoring for better maintainability
+- **Metadata**: Improved metadata handling and extraction
+
+### Version 1.5.0 (October 2025)
+- **Testing**: Comprehensive testing infrastructure for both frontend and backend
+- **Quality**: Automated test workflows in CI/CD pipeline
+
+### Version 1.4.0 (October 2025)
+- **Downloads Page**: New page with separate tabs for videos, playlists, and channels
+- **Progress Tracking**: Enhanced multi-phase progress tracking (video, audio, merging)
+- **Pagination & Sorting**: Added controls for managing large download histories
+- **Metadata**: Improved video and channel metadata handling with new fields and relationships
+- **Individual Videos**: View individual videos from playlists and channels separately
 
 ## Known Issues
 
