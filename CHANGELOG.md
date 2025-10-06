@@ -1,3 +1,24 @@
+# [1.4.0](https://github.com/Fx64b/video-archiver/compare/0.1.3.0-BETA...0.1.4.0-BETA) (2025-10-06)
+
+
+### Bug Fixes
+
+* **scripts:** add docker builder prune command to run.sh ([fd0dadc](https://github.com/Fx64b/video-archiver/commit/fd0dadc076f5e203e09e8fa9bcbc3554630dc2d2))
+
+
+### Features
+
+* add migration so that individual videos from a playlist/channel can be viewed separately ([698d493](https://github.com/Fx64b/video-archiver/commit/698d493af1927f046ac5473f86abe7605452f67a))
+* **backend/handlers:** add downloads endpoint with pagination and sorting options ([0f894a6](https://github.com/Fx64b/video-archiver/commit/0f894a6e37363f165ce063154fea6ffd060dfadc))
+* **metadata:** enhance video and channel metadata handling with new fields and relationships ([85e8b03](https://github.com/Fx64b/video-archiver/commit/85e8b03e7928bd5ffb79b1df3ef4daac08c8ebd0))
+* **progress:** enhance download progress tracking with new phases and metadata handling ([c5f1894](https://github.com/Fx64b/video-archiver/commit/c5f189442ac925376a97ca998029287e37d5582c))
+* **ui/downloads:** create DownloadsContent component for managing downloads with sorting, pagination, and URL parameter handling ([fb5de83](https://github.com/Fx64b/video-archiver/commit/fb5de83cbaf2cae8a81def7beebbe23096ccd752))
+* **ui/downloads:** enhance DownloadsContent component with improved metadata handling and UI elements ([a5f081c](https://github.com/Fx64b/video-archiver/commit/a5f081c483a6113596aba885a24f2552f511eeb6))
+* **ui/downloads:** implement sorting and pagination controls with URL parameter management ([312622f](https://github.com/Fx64b/video-archiver/commit/312622f569e7b1c9611eecdf1e0c8ddec02deafb))
+* **ui/progress:** add download phases and update job progress handling ([0c595b3](https://github.com/Fx64b/video-archiver/commit/0c595b38fa573a3819697862a68e9d3ffd0613ea))
+* **web/downloads:** implement downloads page with video, playlist, and channel tabs ([fc1d810](https://github.com/Fx64b/video-archiver/commit/fc1d8108f928c72b540b26b4eac7107df9f53ca5))
+* **web/url-input, websocket:** enhance reconnection logic with visual feedback ([570b75b](https://github.com/Fx64b/video-archiver/commit/570b75b03b1ed11246e20271e3742be43d79a027))
+
 # [1.3.0](https://github.com/Fx64b/video-archiver/compare/0.1.2.0-BETA...0.1.3.0-BETA) (2025-04-20)
 
 
