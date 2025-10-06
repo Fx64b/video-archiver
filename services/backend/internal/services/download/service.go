@@ -232,13 +232,18 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	
 	log.Infof("Starting download of %d items from %s", totalItems, downloadURL)
 
-	// Build the command with progress template
+	// Build the command with enhanced progress template
+	// Template format: [totalItems][playlist_index][video_id][title][format_id][format_note][vcodec][acodec]prog:[bytes/total][percent][speed][eta]
+	// This provides enough info to distinguish video/audio streams and track progress accurately
 	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", s.config.Concurrency),
 		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
 		"--merge-output-format", "mp4",
 		"--newline", // Important for progress parsing
-		"--progress-template", fmt.Sprintf("[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]", totalItems),
+		"--progress-template", fmt.Sprintf(
+			"[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s][%%(info.format_id)s][%%(info.format_note)s][%%(info.vcodec)s][%%(info.acodec)s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]",
+			totalItems,
+		),
 		"--retries", "3",
 		"--continue",
 		"--ignore-errors",
@@ -510,7 +515,8 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
 		"--merge-output-format", "mp4",
 		"--newline",
-		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
+		// Enhanced progress template with format info to distinguish video/audio streams
+		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s][%(info.format_id)s][%(info.format_note)s][%(info.vcodec)s][%(info.acodec)s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
 		"--retries", "3",
 		"--continue",
 		"--ignore-errors",

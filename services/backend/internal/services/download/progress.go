@@ -29,9 +29,12 @@ var (
 
 	// Phase detection patterns
 	metadataPattern = regexp.MustCompile(`\[youtube\] [^:]+: Downloading (webpage|tv.*API JSON|tv client config)`)
-	videoStreamPattern = regexp.MustCompile(`\[download\] Destination: .+\.f\d+\.mp4`)
-	audioStreamPattern = regexp.MustCompile(`\[download\] Destination: .+\.f\d+\.webm`)
+	streamDownloadPattern = regexp.MustCompile(`\[download\] Destination: (.+) \[([A-Za-z0-9_-]+)\]\.f(\d+)\.(mp4|webm|m4a)`)
 	mergePattern = regexp.MustCompile(`\[Merger\] Merging formats into`)
+
+	// Progress parsing pattern for yt-dlp template output
+	// Format: [totalItems][playlist_index][video_id][title][format_id][format_note][vcodec][acodec]prog:[bytes/total][percent][speed][eta]
+	progressTemplatePattern = regexp.MustCompile(`\[([^\]]*)\]\[([^\]]*)\]\[([^\]]*)\]\[([^\]]*)\]\[([^\]]*)\]\[([^\]]*)\]\[([^\]]*)\]\[([^\]]*)\]prog:\[([^\]]*)/([^\]]*)\]\[\s*([0-9.]+)%\]`)
 
 	// Already downloaded pattern
 	alreadyDownloadedPattern = regexp.MustCompile(`has already been downloaded|already been recorded in archive`)
@@ -49,6 +52,10 @@ type ProgressState struct {
 	CurrentProgress float64 // 0-100 for current item
 	OverallProgress float64 // 0-100 for entire job
 	LastUpdate      time.Time
+	VideoStreams    map[string]int     // Track stream count per video ID (1st = video, 2nd = audio)
+	RawProgress     map[string]float64 // Track raw yt-dlp progress per video ID
+	CurrentStreamType map[string]string // Track current stream type per video ID ("video" or "audio")
+	VideoProgress     map[string]float64 // Track final video progress per video ID
 }
 
 // ProgressTracker handles robust progress tracking
@@ -71,9 +78,13 @@ func NewProgressTracker(service *Service, jobID, jobType string) *ProgressTracke
 			TotalItems:     1,
 			ItemsCompleted: 0,
 			LastUpdate:     time.Now(),
+			VideoStreams:   make(map[string]int),
+			RawProgress:    make(map[string]float64),
+			CurrentStreamType: make(map[string]string),
+			VideoProgress: make(map[string]float64),
 		},
 		service:        service,
-		updateThrottle: 250 * time.Millisecond, // 0.25 seconds max
+		updateThrottle: 100 * time.Millisecond, // 0.1 seconds max for more responsive updates
 	}
 }
 
@@ -116,6 +127,17 @@ func (pt *ProgressTracker) processLine(line string) {
 		log.WithField("line", line).Debug("Processing line")
 	}
 
+	// Check if this line matches our patterns
+	if progressTemplatePattern.MatchString(line) {
+		log.WithField("line", line).Info("Line matches progress template pattern")
+	} else if metadataPattern.MatchString(line) {
+		log.WithField("line", line).Info("Line matches metadata pattern")
+	} else if streamDownloadPattern.MatchString(line) {
+		log.WithField("line", line).Info("Line matches stream download pattern")
+	} else if mergePattern.MatchString(line) {
+		log.WithField("line", line).Info("Line matches merge pattern")
+	}
+
 	// 1. Content type detection (only set once)
 	if pt.state.ContentType == "video" {
 		pt.detectContentType(line)
@@ -125,13 +147,9 @@ func (pt *ProgressTracker) processLine(line string) {
 	pt.updatePlaylistProgress(line)
 
 	// 3. Phase detection and progress simulation
-	previousPhase := pt.state.Phase
 	pt.detectPhase(line)
 
-	// 4. Simulate progress within current phase (only if not transitioning)
-	if previousPhase == pt.state.Phase {
-		pt.simulateProgressInCurrentPhase()
-	}
+	// 4. No need to simulate progress - we get real progress from yt-dlp template
 
 	// 5. Handle special cases
 	pt.handleSpecialCases(line)
@@ -140,37 +158,6 @@ func (pt *ProgressTracker) processLine(line string) {
 	pt.sendThrottledUpdate()
 }
 
-// simulateProgressInCurrentPhase adds gradual progress within the current phase
-func (pt *ProgressTracker) simulateProgressInCurrentPhase() {
-	switch pt.state.Phase {
-	case domain.DownloadPhaseVideo:
-		// Slowly increment video progress from 5% to 75%
-		if pt.state.CurrentProgress < 75 {
-			increment := 0.5 + (time.Since(pt.state.LastUpdate).Seconds() * 0.1)
-			pt.state.CurrentProgress += increment
-			if pt.state.CurrentProgress > 75 {
-				pt.state.CurrentProgress = 75
-			}
-		}
-	case domain.DownloadPhaseAudio:
-		// Slowly increment audio progress from 80% to 95%
-		if pt.state.CurrentProgress < 95 {
-			increment := 0.3 + (time.Since(pt.state.LastUpdate).Seconds() * 0.05)
-			pt.state.CurrentProgress += increment
-			if pt.state.CurrentProgress > 95 {
-				pt.state.CurrentProgress = 95
-			}
-		}
-	case domain.DownloadPhaseMetadata:
-		// Slowly increment metadata progress from 1% to 4%
-		if pt.state.CurrentProgress < 4 {
-			pt.state.CurrentProgress += 0.1
-			if pt.state.CurrentProgress > 4 {
-				pt.state.CurrentProgress = 4
-			}
-		}
-	}
-}
 
 // detectContentType determines if this is a video, playlist, or channel download
 func (pt *ProgressTracker) detectContentType(line string) {
@@ -197,6 +184,11 @@ func (pt *ProgressTracker) updatePlaylistProgress(line string) {
 		// Reset current item progress when starting new item
 		pt.state.CurrentProgress = 0
 		pt.state.Phase = domain.DownloadPhaseMetadata
+		// Clear stream tracking for new item
+		pt.state.VideoStreams = make(map[string]int)
+		pt.state.RawProgress = make(map[string]float64)
+		pt.state.CurrentStreamType = make(map[string]string)
+		pt.state.VideoProgress = make(map[string]float64)
 
 		log.WithFields(log.Fields{
 			"currentItem": pt.state.CurrentItem,
@@ -205,30 +197,183 @@ func (pt *ProgressTracker) updatePlaylistProgress(line string) {
 	}
 }
 
-// detectPhase determines the current download phase and simulates progress
+// detectPhase determines the current download phase using alternating video/audio logic
 func (pt *ProgressTracker) detectPhase(line string) {
 	previousPhase := pt.state.Phase
 
 	if metadataPattern.MatchString(line) {
-		if pt.state.Phase != domain.DownloadPhaseMetadata {
+		// Only set metadata phase if we're not already past it
+		if pt.state.Phase == "" || pt.state.Phase == domain.DownloadPhaseMetadata {
 			pt.state.Phase = domain.DownloadPhaseMetadata
 			pt.state.CurrentProgress = 1 // Start with 1% for metadata
 		}
-	} else if videoStreamPattern.MatchString(line) {
-		// Only transition to video phase if we're not already in video or later phases
-		if pt.state.Phase == domain.DownloadPhaseMetadata {
-			pt.state.Phase = domain.DownloadPhaseVideo
-			pt.state.CurrentProgress = 5 // Start video at 5%
+	} else if progressMatch := progressTemplatePattern.FindStringSubmatch(line); progressMatch != nil {
+		// Parse actual progress data from yt-dlp template
+		// Format: [totalItems][playlist_index][video_id][title][format_id][format_note][vcodec][acodec]prog:[bytes/total][percent][speed][eta]
+		videoID := progressMatch[3]     // video_id
+		formatID := progressMatch[5]    // format_id
+		formatNote := progressMatch[6]  // format_note
+		vcodec := progressMatch[7]      // vcodec
+		acodec := progressMatch[8]      // acodec
+		percentStr := progressMatch[11] // percent
+
+		if videoID != "NA" && videoID != "" {
+			// Initialize maps if needed
+			if pt.state.VideoStreams == nil {
+				pt.state.VideoStreams = make(map[string]int)
+			}
+			if pt.state.RawProgress == nil {
+				pt.state.RawProgress = make(map[string]float64)
+			}
+			if pt.state.CurrentStreamType == nil {
+				pt.state.CurrentStreamType = make(map[string]string)
+			}
+			if pt.state.VideoProgress == nil {
+				pt.state.VideoProgress = make(map[string]float64)
+			}
+
+			// Determine stream type based on codec information
+			// Video stream: has video codec (vcodec != "none") and no audio codec (acodec == "none")
+			// Audio stream: has audio codec (acodec != "none") and no video codec (vcodec == "none")
+			var streamType string
+			if vcodec != "none" && acodec == "none" {
+				streamType = "video"
+			} else if acodec != "none" && vcodec == "none" {
+				streamType = "audio"
+			} else {
+				// Fallback: combined format or uncertain - treat as video
+				streamType = "video"
+			}
+
+			// Parse the actual progress percentage
+			if percent, err := strconv.ParseFloat(percentStr, 64); err == nil {
+				// Check if stream type changed (e.g., from video to audio)
+				previousStreamType := pt.state.CurrentStreamType[videoID]
+				if previousStreamType != streamType && previousStreamType != "" {
+					log.WithFields(log.Fields{
+						"videoID":            videoID,
+						"previousStreamType": previousStreamType,
+						"newStreamType":      streamType,
+						"formatID":           formatID,
+						"formatNote":         formatNote,
+						"vcodec":             vcodec,
+						"acodec":             acodec,
+					}).Info("Stream type transition detected")
+				}
+
+				// Update current stream type
+				pt.state.CurrentStreamType[videoID] = streamType
+
+				// Initialize if this is the first time we see this video
+				if pt.state.VideoStreams[videoID] == 0 {
+					pt.state.VideoStreams[videoID] = 1
+					log.WithFields(log.Fields{
+						"videoID":    videoID,
+						"streamType": streamType,
+						"formatID":   formatID,
+						"formatNote": formatNote,
+						"vcodec":     vcodec,
+						"acodec":     acodec,
+					}).Info("Video tracking initialized")
+				}
+
+				// Update raw progress tracking
+				pt.state.RawProgress[videoID] = percent
+
+				// Determine phase and progress based on current stream type
+				if streamType == "audio" {
+					pt.state.Phase = domain.DownloadPhaseAudio
+					// Use saved video progress as base (default to 80 if not set)
+					videoBaseProgress := pt.state.VideoProgress[videoID]
+					if videoBaseProgress == 0 {
+						videoBaseProgress = 80 // Default if video progress wasn't captured
+					}
+					pt.state.CurrentProgress = videoBaseProgress + (percent * 0.20) // Map audio to continue from video progress
+				} else {
+					pt.state.Phase = domain.DownloadPhaseVideo
+					mappedVideoProgress := percent * 0.80 // Map video to 0-80%
+					pt.state.CurrentProgress = mappedVideoProgress
+					// Save video progress for when audio starts
+					pt.state.VideoProgress[videoID] = mappedVideoProgress
+				}
+
+				// Debug logging for all progress updates
+				log.WithFields(log.Fields{
+					"videoID":        videoID,
+					"formatID":       formatID,
+					"formatNote":     formatNote,
+					"vcodec":         vcodec,
+					"acodec":         acodec,
+					"rawPercent":     percent,
+					"mappedProgress": pt.state.CurrentProgress,
+					"streamType":     streamType,
+					"phase":          pt.state.Phase,
+					"videoProgress":  pt.state.VideoProgress[videoID],
+				}).Info("Progress update")
+			}
 		}
-	} else if audioStreamPattern.MatchString(line) {
-		// Only transition to audio phase if we're coming from video phase
-		if pt.state.Phase == domain.DownloadPhaseVideo {
+	} else if streamMatch := streamDownloadPattern.FindStringSubmatch(line); streamMatch != nil {
+		// Handle stream destination announcements to determine stream type
+		videoID := streamMatch[2]
+		formatCode := streamMatch[3] // Extract format code (e.g., "401", "251")
+		extension := streamMatch[4]   // Extract extension (e.g., "mp4", "webm", "m4a")
+
+		// Initialize maps if needed
+		if pt.state.CurrentStreamType == nil {
+			pt.state.CurrentStreamType = make(map[string]string)
+		}
+
+		// Determine stream type based on format code and extension
+		var streamType string
+		if formatCodeNum, err := strconv.Atoi(formatCode); err == nil {
+			// Video streams typically have format codes 300+ and use mp4/webm
+			// Audio streams typically have format codes 200-299 and use webm/m4a
+			if formatCodeNum >= 300 || extension == "mp4" {
+				streamType = "video"
+			} else if formatCodeNum < 300 || extension == "webm" || extension == "m4a" {
+				streamType = "audio"
+			} else {
+				streamType = "video" // Default fallback
+			}
+		} else {
+			// Fallback based on extension only
+			if extension == "mp4" {
+				streamType = "video"
+			} else {
+				streamType = "audio"
+			}
+		}
+
+		// Check if this is a stream type change
+		previousStreamType := pt.state.CurrentStreamType[videoID]
+		pt.state.CurrentStreamType[videoID] = streamType
+
+		// If transitioning from video to audio, update phase immediately
+		if previousStreamType == "video" && streamType == "audio" {
 			pt.state.Phase = domain.DownloadPhaseAudio
-			pt.state.CurrentProgress = 80 // Start audio at 80% for visual
+			log.WithFields(log.Fields{
+				"videoID":            videoID,
+				"previousStreamType": previousStreamType,
+				"newStreamType":      streamType,
+				"transition":         "video_to_audio",
+			}).Info("Stream type transition detected - switching to audio phase")
+		} else if streamType == "video" {
+			pt.state.Phase = domain.DownloadPhaseVideo
 		}
+
+		log.WithFields(log.Fields{
+			"videoID":    videoID,
+			"formatCode": formatCode,
+			"extension":  extension,
+			"streamType": streamType,
+			"phase":      pt.state.Phase,
+			"line":       line,
+		}).Info("Stream destination detected - stream type determined")
+
 	} else if mergePattern.MatchString(line) {
 		pt.state.Phase = domain.DownloadPhaseMerging
 		pt.state.CurrentProgress = 95 // Merging phase
+		log.WithField("line", line).Info("Merge phase detected")
 	}
 
 	// Check for item completion patterns

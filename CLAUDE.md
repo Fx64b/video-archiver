@@ -76,3 +76,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Backend: `DEBUG`, `DOWNLOAD_PATH`, `DATABASE_PATH`, `PORT`, `WS_PORT`
 - Frontend: `NEXT_PUBLIC_SERVER_URL`, `NEXT_PUBLIC_SERVER_URL_WS`
 - Default development URLs: Backend on :8080, WebSocket on :8081, Frontend on :3000
+
+## Future Improvements
+
+### WebSocket Reconnection
+- **Feature**: When the UI reconnects (WebSocket reconnection or page refresh), recent downloads should be reloaded
+- **Context**: Currently when users refresh the page or reconnect after network issues, they lose visibility into recent download progress and status
+- **Implementation**: Add logic to fetch and display recent downloads on WebSocket connection establishment
+- to memorize in the future somewhen i want to add / adjust metdata for this app, for exmaple the tab title
