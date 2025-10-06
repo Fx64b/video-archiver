@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/Fx64b/video-archiver/compare/0.1.4.0-BETA...0.1.4.1-BETA) (2025-10-06)
+
+
+### Bug Fixes
+
+* syntax error ([a2469e9](https://github.com/Fx64b/video-archiver/commit/a2469e9318fa19a92252a0fa91e710e0d05e90ac))
+
 # [1.4.0](https://github.com/Fx64b/video-archiver/compare/0.1.3.0-BETA...0.1.4.0-BETA) (2025-10-06)
 
 
