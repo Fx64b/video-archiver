@@ -161,8 +161,8 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
     },
 }))
 
-// Automatically connect when the service is imported
-if (typeof window !== 'undefined') {
+// Automatically connect when the service is imported (unless in test environment)
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
     setTimeout(() => {
         useWebSocketStore.getState().connect()
     }, 0)

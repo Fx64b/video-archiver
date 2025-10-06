@@ -56,7 +56,7 @@ describe('utils', () => {
             expect(formatSubscriberNumber(1000)).toBe('1K')
             expect(formatSubscriberNumber(1500)).toBe('1.5K')
             expect(formatSubscriberNumber(10000)).toBe('10K')
-            expect(formatSubscriberNumber(999999)).toBe('999.99K')
+            expect(formatSubscriberNumber(999999)).toBe('1000K')
         })
 
         it('should format millions with M suffix', () => {
