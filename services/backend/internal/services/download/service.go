@@ -299,15 +299,6 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	}
 
 	// TODO: Determine the membership type based on metadata type
-	/*	var membershipType string
-		switch metadataModel.(type) {
-		case *domain.PlaylistMetadata:
-			membershipType = "playlist"
-		case *domain.ChannelMetadata:
-			membershipType = "channel"
-		default:
-			membershipType = "unknown"
-		}*/
 
 	// Scan for downloaded video metadata files in the output directory
 	// Note: outputPath contains yt-dlp template variables like %(uploader)s, so we need to use the actual download path
