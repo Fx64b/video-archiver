@@ -44,6 +44,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Post("/download", h.HandleDownload)
 	r.Get("/recent", h.HandleRecent)
 	r.Get("/job/{id}", h.HandleGetJob)
+	r.Get("/job/{id}/parents", h.HandleGetJobParents)
 	r.Get("/statistics", h.HandleGetStatistics)
 	r.Get("/downloads/{type}", h.HandleGetDownloads)
 	r.Get("/video/{jobID}", h.HandleServeVideo)
@@ -138,7 +139,7 @@ func (h *Handler) HandleRecent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 	log.WithField("jobID", jobID).Info("Received request for job")
-	
+
 	if jobID == "" {
 		log.Warn("Missing job ID in request")
 		http.Error(w, "Missing job ID", http.StatusBadRequest)
@@ -159,6 +160,34 @@ func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{Message: jobWithMetadata}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) HandleGetJobParents(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	log.WithField("jobID", jobID).Info("Received request for job parents")
+
+	if jobID == "" {
+		log.Warn("Missing job ID in request")
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	jobRepo := h.downloadService.GetRepository()
+	parents, err := jobRepo.GetParentsForVideo(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get parents for video")
+		http.Error(w, "Failed to get parents for video", http.StatusInternalServerError)
+		return
+	}
+
+	// Return empty array if no parents found (not an error)
+	if parents == nil {
+		parents = []*domain.JobWithMetadata{}
+	}
+
+	resp := Response{Message: parents}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }

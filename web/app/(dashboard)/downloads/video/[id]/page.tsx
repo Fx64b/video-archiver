@@ -1,7 +1,7 @@
 'use client'
 
 import { JobWithMetadata, VideoMetadata } from '@/types'
-import { ArrowLeft, Calendar, Eye, ThumbsUp, User } from 'lucide-react'
+import { ArrowLeft, Calendar, Eye, List, ThumbsUp, User } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
@@ -19,6 +19,7 @@ import VideoPlayer from '@/components/video-player'
 export default function VideoDetailPage() {
     const { id } = useParams()
     const [video, setVideo] = useState<JobWithMetadata | null>(null)
+    const [parents, setParents] = useState<JobWithMetadata[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -27,16 +28,16 @@ export default function VideoDetailPage() {
             try {
                 const url = `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}`
                 console.log('Fetching video from:', url)
-                
+
                 const response = await fetch(url)
                 console.log('Video response status:', response.status)
-                
+
                 if (!response.ok) {
                     const errorText = await response.text()
                     console.error('Video API error:', errorText)
                     throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`)
                 }
-                
+
                 const data = await response.json()
                 console.log('Video API response:', data)
                 setVideo(data.message || data)
@@ -48,8 +49,29 @@ export default function VideoDetailPage() {
             }
         }
 
+        const fetchParents = async () => {
+            try {
+                const url = `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}/parents`
+                console.log('Fetching parents from:', url)
+
+                const response = await fetch(url)
+
+                if (response.ok) {
+                    const data = await response.json()
+                    console.log('Parents API response:', data)
+                    setParents(data.message || [])
+                } else {
+                    console.warn('Failed to fetch parents, continuing without them')
+                }
+            } catch (err) {
+                console.warn('Failed to fetch parents:', err)
+                // Don't fail the whole page if parents can't be fetched
+            }
+        }
+
         if (id) {
             fetchVideo()
+            fetchParents()
         }
     }, [id])
 
@@ -182,6 +204,52 @@ export default function VideoDetailPage() {
 
                 {/* Sidebar */}
                 <div className="space-y-4">
+                    {/* Parent playlists/channels */}
+                    {parents.length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <List className="h-5 w-5" />
+                                    Found in
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                {parents.map((parent) => {
+                                    const metadata = parent.metadata
+                                    const type = metadata?._type || 'unknown'
+
+                                    // Type-safe metadata access
+                                    let title = 'Unknown'
+                                    if (type === 'playlist' && metadata && 'title' in metadata) {
+                                        title = metadata.title
+                                    } else if (type === 'channel' && metadata && 'channel' in metadata) {
+                                        title = metadata.channel
+                                    }
+
+                                    const detailPath =
+                                        type === 'playlist' ? `/downloads/playlist/${parent.job?.id}` :
+                                        type === 'channel' ? `/downloads/channel/${parent.job?.id}` :
+                                        '#'
+
+                                    return (
+                                        <Link
+                                            key={parent.job?.id}
+                                            href={detailPath}
+                                            className="flex items-center gap-2 rounded-lg p-2 hover:bg-muted/50 transition-colors"
+                                        >
+                                            <Badge variant="outline" className="capitalize">
+                                                {type}
+                                            </Badge>
+                                            <span className="text-sm flex-1 truncate">
+                                                {title}
+                                            </span>
+                                        </Link>
+                                    )
+                                })}
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* Video details */}
                     <Card>
                         <CardHeader>

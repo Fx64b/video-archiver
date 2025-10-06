@@ -310,7 +310,8 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		}*/
 
 	// Scan for downloaded video metadata files in the output directory
-	baseDir := filepath.Dir(outputPath)
+	// Note: outputPath contains yt-dlp template variables like %(uploader)s, so we need to use the actual download path
+	baseDir := s.config.DownloadPath
 
 	// Check if we have any downloaded videos to process
 	if len(downloadedIDs) == 0 {
@@ -322,73 +323,68 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	for extractor, ids := range downloadedIDs {
 		log.Infof("Processing %d videos from extractor %s", len(ids), extractor)
 		for _, id := range ids {
-			// Try multiple naming patterns that yt-dlp might use
-			var matches []string
-			var err error
-			
-			// Pattern 1: extractor-id.info.json (e.g., youtube-ZzI9JE0i6Lc.info.json)
-			pattern1 := filepath.Join(baseDir, "*", fmt.Sprintf("%s-%s.info.json", extractor, id))
-			log.Infof("Trying pattern 1: %s", pattern1)
-			matches, err = filepath.Glob(pattern1)
-			
-			if err == nil && len(matches) > 0 {
-				log.Infof("Found metadata file with pattern 1: %v", matches)
-			} else {
-				// Pattern 2: just id.info.json (e.g., ZzI9JE0i6Lc.info.json)
-				pattern2 := filepath.Join(baseDir, "*", fmt.Sprintf("%s.info.json", id))
-				log.Infof("Trying pattern 2: %s", pattern2)
-				matches, err = filepath.Glob(pattern2)
-				
-				if err == nil && len(matches) > 0 {
-					log.Infof("Found metadata file with pattern 2: %v", matches)
-				} else {
-					// Pattern 3: Search through all .info.json files and check their content
-					log.Infof("Trying pattern 3: searching all .info.json files for video ID %s", id)
-					pattern3 := filepath.Join(baseDir, "*", "*.info.json")
-					allMatches, err := filepath.Glob(pattern3)
-					
-					if err != nil {
-						log.WithError(err).Warnf("Failed to search for metadata files with pattern: %s", pattern3)
-						continue
-					}
-					
-					log.Infof("Found %d .info.json files to search through", len(allMatches))
-					
-					// Search through all metadata files for this video ID
-					var foundMatch string
-					for _, match := range allMatches {
-						data, err := os.ReadFile(match)
-						if err != nil {
-							log.WithError(err).Warnf("Failed to read file: %s", match)
-							continue
-						}
+			// Search for metadata file by walking the directory tree
+			var metadataFilePath string
 
-						var videoInfo map[string]interface{}
-						if err := json.Unmarshal(data, &videoInfo); err != nil {
-							log.WithError(err).Warnf("Failed to parse JSON from file: %s", match)
-							continue
-						}
-
-						// Check if this file contains the video we're looking for
-						if videoID, ok := videoInfo["id"].(string); ok && videoID == id {
-							log.Infof("Found matching video ID %s in file: %s", id, match)
-							foundMatch = match
-							break
-						}
-					}
-					
-					if foundMatch != "" {
-						matches = []string{foundMatch}
-					} else {
-						log.Warnf("Could not find metadata file for video %s from extractor %s", id, extractor)
-						continue
-					}
+			// Walk the download directory to find .info.json files
+			err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil // Skip files with errors
 				}
+
+				// Skip if not a .info.json file
+				if info.IsDir() || !strings.HasSuffix(path, ".info.json") {
+					return nil
+				}
+
+				// Check if filename matches our patterns
+				filename := filepath.Base(path)
+
+				// Pattern 1: extractor-id.info.json (e.g., youtube-ZzI9JE0i6Lc.info.json)
+				if filename == fmt.Sprintf("%s-%s.info.json", extractor, id) {
+					metadataFilePath = path
+					return filepath.SkipAll // Found it, stop searching
+				}
+
+				// Pattern 2: just id.info.json (e.g., ZzI9JE0i6Lc.info.json)
+				if filename == fmt.Sprintf("%s.info.json", id) {
+					metadataFilePath = path
+					return filepath.SkipAll // Found it, stop searching
+				}
+
+				// Pattern 3: Check file content for video ID
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return nil // Skip files we can't read
+				}
+
+				var videoInfo map[string]interface{}
+				if err := json.Unmarshal(data, &videoInfo); err != nil {
+					return nil // Skip files that aren't valid JSON
+				}
+
+				if videoID, ok := videoInfo["id"].(string); ok && videoID == id {
+					metadataFilePath = path
+					return filepath.SkipAll // Found it, stop searching
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				log.WithError(err).Warnf("Failed to search for metadata files for video %s", id)
+				continue
 			}
 
-			// Process the found metadata file (we should only have one match at this point)
-			if len(matches) > 0 {
-				metadataFilePath := matches[0]
+			if metadataFilePath == "" {
+				log.Warnf("Could not find metadata file for video %s from extractor %s", id, extractor)
+				continue
+			}
+
+			log.Infof("Found metadata file: %s for video %s", metadataFilePath, id)
+
+			// Process the found metadata file
+			{
 				log.Infof("Processing metadata file: %s for video %s", metadataFilePath, id)
 
 				// Create a virtual job for this video using just the video ID
