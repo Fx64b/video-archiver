@@ -1,7 +1,15 @@
 'use client'
 
-import { JobWithMetadata, VideoMetadata } from '@/types'
-import { ArrowLeft, Calendar, Eye, List, ThumbsUp, User } from 'lucide-react'
+import { JobStatusError, JobWithMetadata, VideoMetadata } from '@/types'
+import {
+    AlertTriangle,
+    ArrowLeft,
+    Calendar,
+    Eye,
+    List,
+    ThumbsUp,
+    User,
+} from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
@@ -123,28 +131,78 @@ export default function VideoDetailPage() {
     }
 
     const metadata = video.metadata as VideoMetadata
+    const isFailed = video.job?.status === JobStatusError
 
     return (
         <div className="container mx-auto max-w-6xl p-6">
             {/* Header */}
-            <div className="mb-6">
+            <div className="mb-6 flex items-center justify-between">
                 <Link href="/downloads">
                     <Button variant="ghost" className="gap-2">
                         <ArrowLeft className="h-4 w-4" />
                         Back to Downloads
                     </Button>
                 </Link>
+                {isFailed && (
+                    <div className="flex items-center gap-2 text-destructive">
+                        <AlertTriangle className="h-5 w-5" />
+                        <span className="font-medium">Download Failed</span>
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 {/* Main content */}
                 <div className="lg:col-span-2">
-                    {/* Video player */}
-                    <VideoPlayer
-                        jobId={video.job?.id || ''}
-                        metadata={metadata}
-                        className="mb-4"
-                    />
+                    {/* Video player or error message */}
+                    {isFailed ? (
+                        <Card className="mb-4">
+                            <CardContent className="flex flex-col items-center justify-center gap-4 p-12 text-center">
+                                <AlertTriangle className="h-16 w-16 text-destructive" />
+                                <div>
+                                    <h3 className="mb-2 text-lg font-semibold">
+                                        Download Failed
+                                    </h3>
+                                    <p className="text-muted-foreground mb-4">
+                                        This video failed to download and is not
+                                        available for playback.
+                                    </p>
+                                    <div className="bg-muted rounded-lg p-4 text-left text-sm">
+                                        <p className="mb-2 font-medium">
+                                            Possible causes:
+                                        </p>
+                                        <ul className="text-muted-foreground list-inside list-disc space-y-1">
+                                            <li>
+                                                HTTP 403 Forbidden - Video may be
+                                                restricted or age-gated
+                                            </li>
+                                            <li>
+                                                Network errors during download
+                                            </li>
+                                            <li>
+                                                The video file is empty or
+                                                corrupted
+                                            </li>
+                                            <li>
+                                                Maximum retry attempts exceeded
+                                            </li>
+                                        </ul>
+                                        <p className="mt-3 text-xs">
+                                            Try downloading the video again or
+                                            check if it&apos;s still available
+                                            on the source platform.
+                                        </p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <VideoPlayer
+                            jobId={video.job?.id || ''}
+                            metadata={metadata}
+                            className="mb-4"
+                        />
+                    )}
 
                     {/* Video info */}
                     <div className="space-y-4">

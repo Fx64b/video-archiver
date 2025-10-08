@@ -33,11 +33,16 @@ export interface JobWithMetadata {
 export interface ProgressUpdate {
   jobID: string;
   jobType: string;
+  status?: JobStatus;
   currentItem: number /* int */;
   totalItems: number /* int */;
   progress: number /* float64 */;
   currentVideoProgress: number /* float64 */;
   downloadPhase: string;
+  isRetrying?: boolean;
+  retryCount?: number /* int */;
+  maxRetries?: number /* int */;
+  retryError?: string;
 }
 export const DownloadPhaseMetadata = "metadata";
 export const DownloadPhaseVideo = "video";

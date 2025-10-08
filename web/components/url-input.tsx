@@ -155,12 +155,13 @@ export function UrlInput() {
 
             {customQuality !== null && (
                 <div className="mt-2 flex items-center gap-2">
-                    <Badge variant="secondary" className="flex items-center gap-1">
-                        Custom Quality: {getQualityLabel(customQuality)}
-                        <X
-                            className="h-3 w-3 cursor-pointer hover:text-destructive"
-                            onClick={() => setCustomQuality(null)}
-                        />
+                    <Badge
+                        variant="secondary"
+                        className="flex cursor-pointer items-center gap-1"
+                        onClick={() => setCustomQuality(null)}
+                    >
+                        {getQualityLabel(customQuality)}
+                        <X className="h-3 w-3" />
                     </Badge>
                 </div>
             )}

@@ -1,5 +1,5 @@
-import { JobWithMetadata, VideoMetadata } from '@/types'
-import { Play } from 'lucide-react'
+import { JobStatusError, JobWithMetadata, VideoMetadata } from '@/types'
+import { AlertTriangle, Play } from 'lucide-react'
 
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -41,15 +41,23 @@ export function VideosGrid({ items }: VideosGridProps) {
                 const duration = metadata?.duration
                     ? formatSeconds(metadata.duration)
                     : `?:??`
+                const isFailed = item.job?.status === JobStatusError
 
                 return (
                     <Card
                         key={item.job?.id || i}
-                        className="cursor-pointer overflow-hidden pt-0 transition-transform hover:scale-105"
+                        className="relative cursor-pointer overflow-hidden pt-0 transition-transform hover:scale-105"
                         onClick={() =>
                             router.push(`/downloads/video/${item.job?.id}`)
                         }
                     >
+                        {isFailed && (
+                            <div className="absolute right-2 top-2 z-10">
+                                <div className="rounded-full bg-destructive p-1.5">
+                                    <AlertTriangle className="h-4 w-4 text-white" />
+                                </div>
+                            </div>
+                        )}
                         <div className="relative aspect-video">
                             <Image
                                 src={

@@ -22,15 +22,15 @@ var (
 
 	// Playlist patterns
 	playlistStartPattern = regexp.MustCompile(`\[download\] Downloading playlist: (.+)`)
-	playlistItemPattern = regexp.MustCompile(`\[download\] Downloading item (\d+) of (\d+)`)
+	playlistItemPattern  = regexp.MustCompile(`\[download\] Downloading item (\d+) of (\d+)`)
 
 	// Channel patterns
 	channelPattern = regexp.MustCompile(`\[youtube:tab\] @([^:]+):`)
 
 	// Phase detection patterns
-	metadataPattern = regexp.MustCompile(`\[youtube\] [^:]+: Downloading (webpage|tv.*API JSON|tv client config)`)
+	metadataPattern       = regexp.MustCompile(`\[youtube\] [^:]+: Downloading (webpage|tv.*API JSON|tv client config)`)
 	streamDownloadPattern = regexp.MustCompile(`\[download\] Destination: (.+) \[([A-Za-z0-9_-]+)\]\.f(\d+)\.(mp4|webm|m4a)`)
-	mergePattern = regexp.MustCompile(`\[Merger\] Merging formats into`)
+	mergePattern          = regexp.MustCompile(`\[Merger\] Merging formats into`)
 
 	// Progress parsing pattern for yt-dlp template output
 	// Format: [totalItems][playlist_index][video_id][title][format_id][format_note][vcodec][acodec]prog:[bytes/total][percent][speed][eta]
@@ -38,24 +38,42 @@ var (
 
 	// Already downloaded pattern
 	alreadyDownloadedPattern = regexp.MustCompile(`has already been downloaded|already been recorded in archive`)
+
+	// Retry and error patterns
+	retryPattern         = regexp.MustCompile(`\[download\] Got error: (.+)\. Retrying fragment \d+ \((\d+)/(\d+)\)`)
+	fragmentSkipPattern  = regexp.MustCompile(`\[download\] fragment not found; Skipping fragment \d+`)
+	httpErrorPattern     = regexp.MustCompile(`HTTP Error (\d+): (.+)`)
+	fragmentRetryPattern = regexp.MustCompile(`Retrying fragment (\d+) \((\d+)/(\d+)\)`)
+	errorPattern         = regexp.MustCompile(`^ERROR:`)
+	fileEmptyPattern     = regexp.MustCompile(`The downloaded file is empty`)
+)
+
+const (
+	maxRetryDuration = 60 * time.Second // Maximum time to spend retrying before giving up
 )
 
 // ProgressState represents the current state of a download job
 type ProgressState struct {
-	JobID           string
-	JobType         string
-	ContentType     string // "video", "playlist", "channel"
-	Phase           string
-	CurrentItem     int
-	TotalItems      int
-	ItemsCompleted  int
-	CurrentProgress float64 // 0-100 for current item
-	OverallProgress float64 // 0-100 for entire job
-	LastUpdate      time.Time
-	VideoStreams    map[string]int     // Track stream count per video ID (1st = video, 2nd = audio)
-	RawProgress     map[string]float64 // Track raw yt-dlp progress per video ID
-	CurrentStreamType map[string]string // Track current stream type per video ID ("video" or "audio")
+	JobID             string
+	JobType           string
+	ContentType       string // "video", "playlist", "channel"
+	Phase             string
+	CurrentItem       int
+	TotalItems        int
+	ItemsCompleted    int
+	CurrentProgress   float64 // 0-100 for current item
+	OverallProgress   float64 // 0-100 for entire job
+	LastUpdate        time.Time
+	VideoStreams      map[string]int     // Track stream count per video ID (1st = video, 2nd = audio)
+	RawProgress       map[string]float64 // Track raw yt-dlp progress per video ID
+	CurrentStreamType map[string]string  // Track current stream type per video ID ("video" or "audio")
 	VideoProgress     map[string]float64 // Track final video progress per video ID
+	RetryCount        int                // Track consecutive retries
+	MaxRetries        int                // Maximum retries from yt-dlp
+	LastRetryTime     time.Time          // Track when last retry occurred
+	RetryError        string             // Current retry error message
+	IsStuck           bool               // Flag if download is stuck retrying
+	HasError          bool               // Flag if download encountered an error
 }
 
 // ProgressTracker handles robust progress tracking
@@ -392,8 +410,18 @@ func (pt *ProgressTracker) detectPhase(line string) {
 }
 
 
-// handleSpecialCases deals with edge cases like already downloaded files
+// handleSpecialCases deals with edge cases like already downloaded files and retries
 func (pt *ProgressTracker) handleSpecialCases(line string) {
+	// Check for error messages
+	if errorPattern.MatchString(line) || fileEmptyPattern.MatchString(line) {
+		pt.state.HasError = true
+		log.WithFields(log.Fields{
+			"jobID": pt.state.JobID,
+			"error": line,
+		}).Error("Download error detected")
+		return
+	}
+
 	if alreadyDownloadedPattern.MatchString(line) {
 		pt.state.CurrentProgress = 100
 		pt.state.Phase = domain.DownloadPhaseComplete
@@ -402,6 +430,100 @@ func (pt *ProgressTracker) handleSpecialCases(line string) {
 		pt.completeCurrentItem()
 
 		log.WithField("line", line).Debug("Already downloaded detected")
+		return
+	}
+
+	// Handle retry patterns
+	if retryMatch := retryPattern.FindStringSubmatch(line); retryMatch != nil {
+		errorMsg := retryMatch[1]
+		currentRetryStr := retryMatch[2]
+		maxRetriesStr := retryMatch[3]
+
+		// Parse retry counts
+		currentRetry, _ := strconv.Atoi(currentRetryStr)
+		maxRetries, _ := strconv.Atoi(maxRetriesStr)
+
+		// Extract fragment number if present
+		var fragmentNum string
+		if fragmentMatch := fragmentRetryPattern.FindStringSubmatch(line); fragmentMatch != nil {
+			fragmentNum = fragmentMatch[1]
+		}
+
+		// Detect HTTP errors
+		var httpError string
+		if httpMatch := httpErrorPattern.FindStringSubmatch(errorMsg); httpMatch != nil {
+			httpError = fmt.Sprintf("HTTP %s: %s", httpMatch[1], httpMatch[2])
+		} else {
+			httpError = errorMsg
+		}
+
+		// Update retry state
+		pt.state.RetryCount = currentRetry
+		pt.state.MaxRetries = maxRetries
+		pt.state.RetryError = httpError
+
+		// Check if we just started retrying
+		if pt.state.LastRetryTime.IsZero() {
+			pt.state.LastRetryTime = time.Now()
+		}
+
+		// Check if we've been retrying for too long
+		retryDuration := time.Since(pt.state.LastRetryTime)
+		if retryDuration > maxRetryDuration {
+			pt.state.IsStuck = true
+			log.WithFields(log.Fields{
+				"jobID":         pt.state.JobID,
+				"retryDuration": retryDuration,
+				"retryCount":    pt.state.RetryCount,
+				"error":         httpError,
+			}).Error("Download stuck - exceeded maximum retry duration")
+			return
+		}
+
+		if fragmentNum != "" {
+			log.WithFields(log.Fields{
+				"jobID":      pt.state.JobID,
+				"fragment":   fragmentNum,
+				"retry":      currentRetry,
+				"maxRetries": maxRetries,
+				"error":      httpError,
+				"duration":   retryDuration.Round(time.Second),
+			}).Warn("Download retry in progress")
+		} else {
+			log.WithFields(log.Fields{
+				"jobID":      pt.state.JobID,
+				"retry":      currentRetry,
+				"maxRetries": maxRetries,
+				"error":      httpError,
+				"duration":   retryDuration.Round(time.Second),
+			}).Warn("Download retry in progress")
+		}
+		return
+	}
+
+	// Handle fragment skip (usually follows retries)
+	if fragmentSkipPattern.MatchString(line) {
+		log.WithField("jobID", pt.state.JobID).Debug("Fragment skipped after retries")
+		// Reset retry tracking since we're moving on
+		pt.state.RetryCount = 0
+		pt.state.MaxRetries = 0
+		pt.state.RetryError = ""
+		pt.state.LastRetryTime = time.Time{}
+		return
+	}
+
+	// Reset retry tracking on successful progress
+	if pt.state.RetryCount > 0 && !retryPattern.MatchString(line) && !fragmentSkipPattern.MatchString(line) {
+		if pt.state.RetryCount > 5 {
+			log.WithFields(log.Fields{
+				"jobID":      pt.state.JobID,
+				"retryCount": pt.state.RetryCount,
+			}).Info("Download recovered after retries")
+		}
+		pt.state.RetryCount = 0
+		pt.state.MaxRetries = 0
+		pt.state.RetryError = ""
+		pt.state.LastRetryTime = time.Time{}
 	}
 }
 
@@ -466,13 +588,18 @@ func (pt *ProgressTracker) sendThrottledUpdate() {
 
 // sendFinalUpdate sends the final completion update
 func (pt *ProgressTracker) sendFinalUpdate() {
-	pt.state.OverallProgress = 100
-	pt.state.Phase = domain.DownloadPhaseComplete
+	// Don't mark as complete if there was an error
+	if !pt.state.HasError {
+		pt.state.OverallProgress = 100
+		pt.state.Phase = domain.DownloadPhaseComplete
 
-	pt.broadcastUpdate()
-	pt.updateDatabase()
+		pt.broadcastUpdate()
+		pt.updateDatabase()
 
-	log.WithField("jobID", pt.state.JobID).Debug("Final progress update sent")
+		log.WithField("jobID", pt.state.JobID).Debug("Final progress update sent")
+	} else {
+		log.WithField("jobID", pt.state.JobID).Warn("Skipping final update due to error")
+	}
 }
 
 // broadcastUpdate sends the progress update via WebSocket
@@ -485,6 +612,10 @@ func (pt *ProgressTracker) broadcastUpdate() {
 		Progress:             pt.state.OverallProgress,
 		CurrentVideoProgress: pt.state.CurrentProgress,
 		DownloadPhase:        pt.state.Phase,
+		IsRetrying:           pt.state.RetryCount > 0,
+		RetryCount:           pt.state.RetryCount,
+		MaxRetries:           pt.state.MaxRetries,
+		RetryError:           pt.state.RetryError,
 	}
 
 	pt.service.hub.broadcast <- update
@@ -498,12 +629,28 @@ func (pt *ProgressTracker) broadcastUpdate() {
 			"currentProgress":    update.CurrentVideoProgress,
 			"phase":              update.DownloadPhase,
 			"contentType":        pt.state.ContentType,
+			"isRetrying":         update.IsRetrying,
+			"retryCount":         update.RetryCount,
 		}).Debug("Progress update broadcast")
 	}
 }
 
 // updateDatabase updates the job progress in the database
 func (pt *ProgressTracker) updateDatabase() {
+	// If download is stuck, mark job as failed
+	if pt.state.IsStuck {
+		job, err := pt.service.jobs.GetByID(pt.state.JobID)
+		if err != nil {
+			log.WithError(err).Error("Failed to get job for stuck download")
+			return
+		}
+		job.Status = domain.JobStatusError
+		if err := pt.service.jobs.Update(job); err != nil {
+			log.WithError(err).Error("Failed to mark stuck job as failed")
+		}
+		return
+	}
+
 	if err := pt.updateJobProgress(pt.state.JobID, pt.state.OverallProgress); err != nil {
 		log.WithError(err).Error("Failed to update job progress in database")
 	}

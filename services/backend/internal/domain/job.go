@@ -56,13 +56,18 @@ type JobWithMetadata struct {
 }
 
 type ProgressUpdate struct {
-	JobID                string  `json:"jobID"`
-	JobType              string  `json:"jobType"`
-	CurrentItem          int     `json:"currentItem"`
-	TotalItems           int     `json:"totalItems"`
-	Progress             float64 `json:"progress"`
-	CurrentVideoProgress float64 `json:"currentVideoProgress"`
-	DownloadPhase        string  `json:"downloadPhase"`
+	JobID                string    `json:"jobID"`
+	JobType              string    `json:"jobType"`
+	Status               JobStatus `json:"status,omitempty"`
+	CurrentItem          int       `json:"currentItem"`
+	TotalItems           int       `json:"totalItems"`
+	Progress             float64   `json:"progress"`
+	CurrentVideoProgress float64   `json:"currentVideoProgress"`
+	DownloadPhase        string    `json:"downloadPhase"`
+	IsRetrying           bool      `json:"isRetrying,omitempty"`
+	RetryCount           int       `json:"retryCount,omitempty"`
+	MaxRetries           int       `json:"maxRetries,omitempty"`
+	RetryError           string    `json:"retryError,omitempty"`
 }
 
 const (

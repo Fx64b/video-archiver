@@ -110,6 +110,15 @@ func (s *Service) processJobs() {
 				if err := s.jobs.Update(&job); err != nil {
 					log.WithError(err).Error("Failed to update job status")
 				}
+
+				// Broadcast error status via WebSocket
+				errorUpdate := domain.ProgressUpdate{
+					JobID:    job.ID,
+					JobType:  string(domain.JobTypeVideo),
+					Status:   domain.JobStatusError,
+					Progress: job.Progress,
+				}
+				s.hub.broadcast <- errorUpdate
 			}
 		}
 	}
@@ -281,14 +290,16 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 			"[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s][%%(info.format_id)s][%%(info.format_note)s][%%(info.vcodec)s][%%(info.acodec)s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]",
 			totalItems,
 		),
-		"--retries", "3",
+		"--retries", "3",             // Retry up to 3 times per fragment
+		"--fragment-retries", "5",    // Retry fragments up to 5 times
+		"--file-access-retries", "2", // Retry file access operations
 		"--continue",
 		"--ignore-errors",
 		"--add-metadata",
 		"--write-info-json",               // Write metadata for each video
 		"--download-archive", archiveFile, // Track downloaded videos
 		"--output", outputPath,
-		"--yes-playlist",                  // Ensure playlist processing is enabled
+		"--yes-playlist", // Ensure playlist processing is enabled
 	}
 	
 	// Add channel-specific arguments if this is a channel
@@ -551,7 +562,9 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		"--newline",
 		// Enhanced progress template with format info to distinguish video/audio streams
 		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s][%(info.format_id)s][%(info.format_note)s][%(info.vcodec)s][%(info.acodec)s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
-		"--retries", "3",
+		"--retries", "3",            // Retry up to 3 times per fragment
+		"--fragment-retries", "5",   // Retry fragments up to 5 times
+		"--file-access-retries", "2", // Retry file access operations
 		"--continue",
 		"--ignore-errors",
 		"--add-metadata",
