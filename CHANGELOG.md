@@ -1,3 +1,11 @@
+# [1.7.0](https://github.com/Fx64b/video-archiver/compare/0.1.6.0-BETA...0.1.7.0-BETA) (2025-10-08)
+
+
+### Features
+
+* add settings ([dbcb6b4](https://github.com/Fx64b/video-archiver/commit/dbcb6b432746a95d27695cc76ab84ca85113b98b))
+* **downloads:** add retry and display failed videos properly ([7812d89](https://github.com/Fx64b/video-archiver/commit/7812d891a1a0bf23be6a66f6061e31f7ef043c0d))
+
 # [1.6.0](https://github.com/Fx64b/video-archiver/compare/0.1.5.0-BETA...0.1.6.0-BETA) (2025-10-06)
 
 

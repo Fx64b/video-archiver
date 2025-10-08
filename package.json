@@ -1,6 +1,6 @@
 {
   "name": "video-archiver",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "repository": "https://github.com/fx64b/video-archiver",
   "scripts": {
