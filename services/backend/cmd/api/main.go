@@ -57,13 +57,15 @@ __     _____ ____  _____ ___
 	defer db.Close()
 
 	jobRepo := sqlite.NewJobRepository(db)
+	settingsRepo := sqlite.NewSettingsRepository(db)
 
 	fmt.Println("Starting Download Service...")
 	downloadService := download.NewService(&download.Config{
-		JobRepository: jobRepo,
-		DownloadPath:  cfg.Server.DownloadPath,
-		Concurrency:   cfg.YtDlp.Concurrency,
-		MaxQuality:    cfg.YtDlp.MaxQuality,
+		JobRepository:      jobRepo,
+		SettingsRepository: settingsRepo,
+		DownloadPath:       cfg.Server.DownloadPath,
+		Concurrency:        cfg.YtDlp.Concurrency,
+		MaxQuality:         cfg.YtDlp.MaxQuality,
 	})
 
 	if err := downloadService.Start(); err != nil {
@@ -71,7 +73,7 @@ __     _____ ____  _____ ___
 	}
 	defer downloadService.Stop()
 
-	handler := handlers.NewHandler(downloadService, os.Getenv("DOWNLOAD_PATH"))
+	handler := handlers.NewHandler(downloadService, os.Getenv("DOWNLOAD_PATH"), settingsRepo)
 
 	apiRouter := chi.NewRouter()
 	handler.RegisterRoutes(apiRouter)

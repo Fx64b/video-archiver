@@ -93,9 +93,9 @@ const Recent: React.FC = () => {
                         job={job.job}
                     />
                 ))
-            ) : (
+            ) : jobs.length === 0 ? (
                 <p>{message || 'No recent downloads found.'}</p>
-            )}
+            ) : null}
         </div>
     )
 }

@@ -19,15 +19,17 @@ import (
 )
 
 type Config struct {
-	JobRepository domain.JobRepository
-	DownloadPath  string
-	Concurrency   int
-	MaxQuality    int
+	JobRepository      domain.JobRepository
+	SettingsRepository domain.SettingsRepository
+	DownloadPath       string
+	Concurrency        int
+	MaxQuality         int
 }
 
 type Service struct {
 	config        *Config
 	jobs          domain.JobRepository
+	settings      domain.SettingsRepository
 	queue         chan domain.Job
 	wg            sync.WaitGroup
 	hub           *WebSocketHub
@@ -41,12 +43,13 @@ func NewService(config *Config) *Service {
 	hub := NewWebSocketHub()
 
 	return &Service{
-		config: config,
-		jobs:   config.JobRepository,
-		queue:  make(chan domain.Job, 100),
-		hub:    hub,
-		ctx:    ctx,
-		cancel: cancel,
+		config:   config,
+		jobs:     config.JobRepository,
+		settings: config.SettingsRepository,
+		queue:    make(chan domain.Job, 100),
+		hub:      hub,
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 }
 
@@ -107,6 +110,15 @@ func (s *Service) processJobs() {
 				if err := s.jobs.Update(&job); err != nil {
 					log.WithError(err).Error("Failed to update job status")
 				}
+
+				// Broadcast error status via WebSocket
+				errorUpdate := domain.ProgressUpdate{
+					JobID:    job.ID,
+					JobType:  string(domain.JobTypeVideo),
+					Status:   domain.JobStatusError,
+					Progress: job.Progress,
+				}
+				s.hub.broadcast <- errorUpdate
 			}
 		}
 	}
@@ -176,10 +188,34 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	return s.jobs.Update(&job)
 }
 
+func (s *Service) getSettings() (int, int) {
+	// Get settings from database
+	settings, err := s.settings.Get()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get settings, using defaults")
+		log.Debugf("Using default settings - Concurrency: %d, Quality: %dp", s.config.Concurrency, s.config.MaxQuality)
+		return s.config.Concurrency, s.config.MaxQuality
+	}
+	log.Debugf("Retrieved settings from database - Concurrency: %d, Quality: %dp", settings.ConcurrentDownloads, settings.DownloadQuality)
+	return settings.ConcurrentDownloads, settings.DownloadQuality
+}
+
+func (s *Service) getQualityForJob(job domain.Job) int {
+	// If job has custom quality, use it
+	if job.CustomQuality != nil {
+		log.Debugf("[Job %s] Using custom quality: %dp", job.ID, *job.CustomQuality)
+		return *job.CustomQuality
+	}
+
+	// Otherwise, get from settings
+	_, quality := s.getSettings()
+	return quality
+}
+
 func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job, metadataModel domain.Metadata, outputPath string) error {
 	// Prepare the URL for playlist/channel downloads
 	downloadURL := job.URL
-	
+
 	// For channels, ensure we're using the proper URL format for downloading all videos
 	if channelMeta, ok := metadataModel.(*domain.ChannelMetadata); ok {
 		// If URL is a channel page, convert it to download all videos
@@ -191,7 +227,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		}
 		log.Infof("Processing channel: %s with %d videos", channelMeta.Channel, channelMeta.VideoCount)
 	}
-	
+
 	if playlistMeta, ok := metadataModel.(*domain.PlaylistMetadata); ok {
 		log.Infof("Processing playlist: %s with %d items", playlistMeta.Title, playlistMeta.ItemCount)
 	}
@@ -223,35 +259,47 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 			totalItems = m.PlaylistCount
 		}
 	}
-	
+
 	// If we still don't have a valid total items count, log a warning and set a reasonable default
 	if totalItems <= 0 {
 		log.Warnf("No valid total items count found for playlist/channel %s, metadata might be incomplete", job.ID)
 		totalItems = 1 // Set to 1 to prevent division by zero in progress calculations
 	}
-	
+
 	log.Infof("Starting download of %d items from %s", totalItems, downloadURL)
+
+	// Get current settings
+	concurrency, _ := s.getSettings()
+	maxQuality := s.getQualityForJob(job)
+
+	if job.CustomQuality != nil {
+		log.Infof("[Job %s] Starting playlist/channel download with custom quality: %dp, concurrency: %d", job.ID, maxQuality, concurrency)
+	} else {
+		log.Infof("[Job %s] Starting playlist/channel download with quality: %dp, concurrency: %d", job.ID, maxQuality, concurrency)
+	}
 
 	// Build the command with enhanced progress template
 	// Template format: [totalItems][playlist_index][video_id][title][format_id][format_note][vcodec][acodec]prog:[bytes/total][percent][speed][eta]
 	// This provides enough info to distinguish video/audio streams and track progress accurately
 	cmdArgs := []string{
-		"-N", fmt.Sprintf("%d", s.config.Concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
+		"-N", fmt.Sprintf("%d", concurrency),
+		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
 		"--merge-output-format", "mp4",
 		"--newline", // Important for progress parsing
 		"--progress-template", fmt.Sprintf(
 			"[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s][%%(info.format_id)s][%%(info.format_note)s][%%(info.vcodec)s][%%(info.acodec)s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]",
 			totalItems,
 		),
-		"--retries", "3",
+		"--retries", "3",             // Retry up to 3 times per fragment
+		"--fragment-retries", "5",    // Retry fragments up to 5 times
+		"--file-access-retries", "2", // Retry file access operations
 		"--continue",
 		"--ignore-errors",
 		"--add-metadata",
 		"--write-info-json",               // Write metadata for each video
 		"--download-archive", archiveFile, // Track downloaded videos
 		"--output", outputPath,
-		"--yes-playlist",                  // Ensure playlist processing is enabled
+		"--yes-playlist", // Ensure playlist processing is enabled
 	}
 	
 	// Add channel-specific arguments if this is a channel
@@ -287,14 +335,14 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		return fmt.Errorf("download command failed: %w", err)
 	}
 	// Process the archive file to get the downloaded video IDs
-	log.Infof("Processing archive file: %s", archiveFile)
+	log.Debugf("Processing archive file: %s", archiveFile)
 	downloadedIDs, err := s.processArchiveFile(archiveFile)
 	if err != nil {
 		log.WithError(err).Warn("Failed to process archive file")
 	} else {
-		log.Infof("Found %d extractors with videos in archive file", len(downloadedIDs))
+		log.Debugf("Found %d extractors with videos in archive file", len(downloadedIDs))
 		for extractor, ids := range downloadedIDs {
-			log.Infof("Extractor %s has %d videos: %v", extractor, len(ids), ids)
+			log.Debugf("Extractor %s has %d videos: %v", extractor, len(ids), ids)
 		}
 	}
 
@@ -312,7 +360,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 
 	// For each downloaded video, create a virtual job and link it to the playlist/channel
 	for extractor, ids := range downloadedIDs {
-		log.Infof("Processing %d videos from extractor %s", len(ids), extractor)
+		log.Debugf("Processing %d videos from extractor %s", len(ids), extractor)
 		for _, id := range ids {
 			// Search for metadata file by walking the directory tree
 			var metadataFilePath string
@@ -372,20 +420,20 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 				continue
 			}
 
-			log.Infof("Found metadata file: %s for video %s", metadataFilePath, id)
+			log.Debugf("Found metadata file: %s for video %s", metadataFilePath, id)
 
 			// Process the found metadata file
 			{
-				log.Infof("Processing metadata file: %s for video %s", metadataFilePath, id)
+				log.Debugf("Processing metadata file: %s for video %s", metadataFilePath, id)
 
 				// Create a virtual job for this video using just the video ID
 				videoJobID := id
-				log.Infof("Creating virtual job for video %s (extractor: %s)", videoJobID, extractor)
+				log.Debugf("Creating virtual job for video %s (extractor: %s)", videoJobID, extractor)
 
 				// Check if a job already exists for this video
 				existingJob, err := s.jobs.GetByID(videoJobID)
 				if err == nil && existingJob != nil {
-					log.Infof("Job already exists for video %s, linking to parent", videoJobID)
+					log.Debugf("Job already exists for video %s, linking to parent", videoJobID)
 					// Job exists, create membership relationship
 					membershipType := "unknown"
 					switch metadataModel.(type) {
@@ -398,7 +446,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
 						log.WithError(err).Warnf("Failed to link existing video %s to %s %s", videoJobID, membershipType, job.ID)
 					} else {
-						log.Infof("Successfully linked existing video %s to %s %s", videoJobID, membershipType, job.ID)
+						log.Debugf("Successfully linked existing video %s to %s %s", videoJobID, membershipType, job.ID)
 					}
 					continue
 				}
@@ -413,14 +461,14 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					UpdatedAt: time.Now(),
 				}
 
-				log.Infof("Creating new virtual job with ID: %s, URL: %s", videoJob.ID, videoJob.URL)
+				log.Debugf("Creating new virtual job with ID: %s, URL: %s", videoJob.ID, videoJob.URL)
 
 				// Create the job and store its metadata
 				if err := s.jobs.Create(&videoJob); err != nil {
 					log.WithError(err).Warnf("Failed to create virtual job for video %s", videoJobID)
 					continue
 				}
-				log.Infof("Successfully created virtual job for video %s", videoJobID)
+				log.Debugf("Successfully created virtual job for video %s", videoJobID)
 
 				// Extract and store the video metadata
 				videoMetadata, err := metadata.ExtractMetadata(metadataFilePath)
@@ -434,7 +482,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					log.WithError(err).Warnf("Failed to store metadata for video %s", videoJobID)
 					continue
 				}
-				log.Infof("Successfully stored metadata for video %s", videoJobID)
+				log.Debugf("Successfully stored metadata for video %s", videoJobID)
 
 				// Link the video to the playlist/channel
 				membershipType := "unknown"
@@ -444,11 +492,11 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 				case *domain.ChannelMetadata:
 					membershipType = "channel"
 				}
-				
+
 				if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
 					log.WithError(err).Warnf("Failed to link video %s to %s %s", videoJobID, membershipType, job.ID)
 				} else {
-					log.Infof("Successfully linked video %s to %s %s", videoJobID, membershipType, job.ID)
+					log.Debugf("Successfully linked video %s to %s %s", videoJobID, membershipType, job.ID)
 				}
 			}
 		}
@@ -459,25 +507,25 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 
 func (s *Service) processArchiveFile(archiveFile string) (map[string][]string, error) {
 	// Read the archive file to get the IDs of downloaded videos
-	log.Infof("Reading archive file: %s", archiveFile)
+	log.Debugf("Reading archive file: %s", archiveFile)
 	data, err := os.ReadFile(archiveFile)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to read archive file: %s", archiveFile)
 		return nil, err
 	}
 
-	log.Infof("Archive file content (%d bytes): %s", len(data), string(data))
+	log.Debugf("Archive file content (%d bytes): %s", len(data), string(data))
 	lines := strings.Split(string(data), "\n")
 	result := make(map[string][]string)
-	
-	log.Infof("Processing %d lines from archive file", len(lines))
+
+	log.Debugf("Processing %d lines from archive file", len(lines))
 
 	for i, line := range lines {
 		if line == "" {
 			continue
 		}
 
-		log.Infof("Archive line %d: %s", i, line)
+		log.Debugf("Archive line %d: %s", i, line)
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) != 2 {
 			log.Warnf("Invalid archive line format: %s", line)
@@ -486,28 +534,41 @@ func (s *Service) processArchiveFile(archiveFile string) (map[string][]string, e
 
 		extractor := parts[0]
 		id := parts[1]
-		
-		log.Infof("Parsed extractor: %s, id: %s", extractor, id)
+
+		log.Debugf("Parsed extractor: %s, id: %s", extractor, id)
 
 		result[extractor] = append(result[extractor], id)
 	}
 
-	log.Infof("Processed archive file, found %d extractors", len(result))
+	log.Debugf("Processed archive file, found %d extractors", len(result))
 	return result, nil
 }
 
 func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath string) error {
+	// Get current settings
+	concurrency, _ := s.getSettings()
+	maxQuality := s.getQualityForJob(job)
+
+	if job.CustomQuality != nil {
+		log.Infof("[Job %s] Starting video download with custom quality: %dp, concurrency: %d", job.ID, maxQuality, concurrency)
+	} else {
+		log.Infof("[Job %s] Starting video download with quality: %dp, concurrency: %d", job.ID, maxQuality, concurrency)
+	}
+
 	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
-		"-N", fmt.Sprintf("%d", s.config.Concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", s.config.MaxQuality),
+		"-N", fmt.Sprintf("%d", concurrency),
+		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
 		"--merge-output-format", "mp4",
 		"--newline",
 		// Enhanced progress template with format info to distinguish video/audio streams
 		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s][%(info.format_id)s][%(info.format_note)s][%(info.vcodec)s][%(info.acodec)s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
-		"--retries", "3",
+		"--retries", "3",            // Retry up to 3 times per fragment
+		"--fragment-retries", "5",   // Retry fragments up to 5 times
+		"--file-access-retries", "2", // Retry file access operations
 		"--continue",
 		"--ignore-errors",
 		"--add-metadata",
+		"--write-info-json", // Write metadata with actual downloaded format info
 		"--output", outputPath,
 		job.URL,
 	)
@@ -538,6 +599,12 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 	}
 
 	log.WithField("jobID", job.ID).Info("yt-dlp download completed successfully")
+
+	// After download, update metadata with actual downloaded resolution
+	if err := s.updateDownloadedMetadata(job.ID, maxQuality); err != nil {
+		log.WithError(err).Warn("Failed to update downloaded metadata, continuing...")
+	}
+
 	return nil
 }
 
@@ -613,32 +680,32 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 			Metadata: extractedMetadata,
 		}
 		s.hub.broadcast <- basicMetadataUpdate
-		log.Info("Sent immediate basic metadata update to UI")
+		log.Debug("Sent immediate basic metadata update to UI")
 	}
 
 	// Phase 2: Enhance metadata for playlists and channels with detailed info
 	if isPlaylistOrChannel(extractedMetadata) {
-		log.Info("Enhancing metadata for playlist/channel with detailed information")
+		log.Debug("Enhancing metadata for playlist/channel with detailed information")
 		err = s.enhanceMetadata(ctx, job, extractedMetadata)
 		if err != nil {
 			log.WithError(err).Warn("Failed to enhance metadata, continuing with basic metadata")
-			
+
 			// Log the basic metadata to help debug
 			switch m := extractedMetadata.(type) {
 			case *domain.PlaylistMetadata:
-				log.Infof("Basic playlist metadata: %d items", m.ItemCount)
+				log.Debugf("Basic playlist metadata: %d items", m.ItemCount)
 			case *domain.ChannelMetadata:
-				log.Infof("Basic channel metadata: %d playlists, %d videos", m.PlaylistCount, m.VideoCount)
+				log.Debugf("Basic channel metadata: %d playlists, %d videos", m.PlaylistCount, m.VideoCount)
 			}
 		} else {
 			// Log enhanced metadata info
 			switch m := extractedMetadata.(type) {
 			case *domain.PlaylistMetadata:
-				log.Infof("Enhanced playlist metadata: %d items in Items slice", len(m.Items))
+				log.Debugf("Enhanced playlist metadata: %d items in Items slice", len(m.Items))
 			case *domain.ChannelMetadata:
-				log.Infof("Enhanced channel metadata: %d videos, %d recent videos", m.VideoCount, len(m.RecentVideos))
+				log.Debugf("Enhanced channel metadata: %d videos, %d recent videos", m.VideoCount, len(m.RecentVideos))
 			}
-			
+
 			// Store and broadcast the enhanced metadata
 			if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
 				log.WithError(err).Warn("Failed to store enhanced metadata")
@@ -648,7 +715,7 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 					Metadata: extractedMetadata,
 				}
 				s.hub.broadcast <- enhancedMetadataUpdate
-				log.Info("Sent enhanced metadata update to UI")
+				log.Debug("Sent enhanced metadata update to UI")
 			}
 		}
 	}
@@ -906,4 +973,47 @@ func formatDuration(seconds int) string {
 		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
 	}
 	return fmt.Sprintf("%d:%02d", m, s)
+}
+
+// updateDownloadedMetadata updates the video metadata with the actual downloaded resolution
+func (s *Service) updateDownloadedMetadata(jobID string, maxQuality int) error {
+	// Get the existing metadata
+	jobWithMetadata, err := s.jobs.GetJobWithMetadata(jobID)
+	if err != nil {
+		return fmt.Errorf("failed to get job metadata: %w", err)
+	}
+
+	videoMetadata, ok := jobWithMetadata.Metadata.(*domain.VideoMetadata)
+	if !ok {
+		return fmt.Errorf("metadata is not VideoMetadata type")
+	}
+
+	// Cap the resolution based on what was actually downloaded
+	// The downloaded resolution is the minimum of the original resolution and the quality setting
+	originalHeight := videoMetadata.Height
+	downloadedHeight := min(originalHeight, maxQuality)
+
+	if downloadedHeight != originalHeight {
+		// Calculate new width maintaining aspect ratio
+		aspectRatio := float64(videoMetadata.Width) / float64(videoMetadata.Height)
+		downloadedWidth := int(float64(downloadedHeight) * aspectRatio)
+
+		// Update the metadata with actual downloaded resolution
+		videoMetadata.Height = downloadedHeight
+		videoMetadata.Width = downloadedWidth
+		videoMetadata.Resolution = fmt.Sprintf("%dx%d", downloadedWidth, downloadedHeight)
+
+		log.Infof("[Job %s] Updated metadata: original %dx%d -> downloaded %dx%d (quality limit: %dp)",
+			jobID, videoMetadata.Width, originalHeight, downloadedWidth, downloadedHeight, maxQuality)
+
+		// Store the updated metadata
+		if err := s.jobs.StoreMetadata(jobID, videoMetadata); err != nil {
+			return fmt.Errorf("failed to store updated metadata: %w", err)
+		}
+	} else {
+		log.Debugf("[Job %s] Video resolution %dp is within quality limit %dp, no update needed",
+			jobID, originalHeight, maxQuality)
+	}
+
+	return nil
 }

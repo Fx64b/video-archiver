@@ -12,12 +12,13 @@ const (
 )
 
 type Job struct {
-	ID        string    `json:"id"`
-	URL       string    `json:"url"`
-	Status    JobStatus `json:"status"`
-	Progress  float64   `json:"progress"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	URL           string    `json:"url"`
+	Status        JobStatus `json:"status"`
+	Progress      float64   `json:"progress"`
+	CustomQuality *int      `json:"custom_quality,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 //tygo:ignore
@@ -55,13 +56,18 @@ type JobWithMetadata struct {
 }
 
 type ProgressUpdate struct {
-	JobID                string  `json:"jobID"`
-	JobType              string  `json:"jobType"`
-	CurrentItem          int     `json:"currentItem"`
-	TotalItems           int     `json:"totalItems"`
-	Progress             float64 `json:"progress"`
-	CurrentVideoProgress float64 `json:"currentVideoProgress"`
-	DownloadPhase        string  `json:"downloadPhase"`
+	JobID                string    `json:"jobID"`
+	JobType              string    `json:"jobType"`
+	Status               JobStatus `json:"status,omitempty"`
+	CurrentItem          int       `json:"currentItem"`
+	TotalItems           int       `json:"totalItems"`
+	Progress             float64   `json:"progress"`
+	CurrentVideoProgress float64   `json:"currentVideoProgress"`
+	DownloadPhase        string    `json:"downloadPhase"`
+	IsRetrying           bool      `json:"isRetrying,omitempty"`
+	RetryCount           int       `json:"retryCount,omitempty"`
+	MaxRetries           int       `json:"maxRetries,omitempty"`
+	RetryError           string    `json:"retryError,omitempty"`
 }
 
 const (

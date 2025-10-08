@@ -13,6 +13,7 @@ export interface Job {
   url: string;
   status: JobStatus;
   progress: number /* float64 */;
+  custom_quality?: number /* int */;
   created_at: string /* RFC3339 */;
   updated_at: string /* RFC3339 */;
 }
@@ -32,11 +33,16 @@ export interface JobWithMetadata {
 export interface ProgressUpdate {
   jobID: string;
   jobType: string;
+  status?: JobStatus;
   currentItem: number /* int */;
   totalItems: number /* int */;
   progress: number /* float64 */;
   currentVideoProgress: number /* float64 */;
   downloadPhase: string;
+  isRetrying?: boolean;
+  retryCount?: number /* int */;
+  maxRetries?: number /* int */;
+  retryError?: string;
 }
 export const DownloadPhaseMetadata = "metadata";
 export const DownloadPhaseVideo = "video";
@@ -146,6 +152,20 @@ export interface MetadataUpdate {
   metadata: Metadata;
 }
 export type Metadata = any;
+
+//////////
+// source: settings.go
+
+export interface Settings {
+  id: number /* int */;
+  theme: string;
+  download_quality: number /* int */;
+  concurrent_downloads: number /* int */;
+  created_at: string /* RFC3339 */;
+  updated_at: string /* RFC3339 */;
+}
+
+export type SettingsRepository = any;
 
 //////////
 // source: statistics.go

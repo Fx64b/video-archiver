@@ -43,3 +43,15 @@ CREATE TABLE IF NOT EXISTS video_memberships (
                                                  FOREIGN KEY (video_job_id) REFERENCES jobs (job_id),
                                                  FOREIGN KEY (parent_job_id) REFERENCES jobs (job_id)
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+                                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                                        theme TEXT DEFAULT 'system',
+                                        download_quality INTEGER DEFAULT 1080,
+                                        concurrent_downloads INTEGER DEFAULT 2,
+                                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO settings (id, theme, download_quality, concurrent_downloads)
+VALUES (1, 'system', 1080, 2);

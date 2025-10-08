@@ -5,11 +5,12 @@ import {
     DownloadPhaseMetadata,
     DownloadPhaseVideo,
     Job,
+    JobStatusError,
     JobTypeMetadata,
     Metadata,
     ProgressUpdate,
 } from '@/types'
-import { CircleCheck, Clock, User } from 'lucide-react'
+import { AlertTriangle, CircleCheck, Clock, User } from 'lucide-react'
 
 import React from 'react'
 
@@ -48,9 +49,17 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
     const isChannel = isChannelMetadata(metadata)
     const isVideo = isVideoMetadata(metadata)
 
+    const isRetrying = 'isRetrying' in job && job.isRetrying
+    const isFailed = 'status' in job && job.status === JobStatusError
+
     return (
-        <Card className="w-full">
+        <Card className="relative w-full">
             <div className="flex items-center">
+                {(isRetrying || isFailed) && (
+                    <div className="absolute right-4 top-4">
+                        <AlertTriangle className={`h-6 w-6 ${isFailed ? 'text-destructive' : 'text-yellow-500'}`} />
+                    </div>
+                )}
                 <div className="flex w-64 justify-center">
                     {thumbnailUrl ? (
                         <div
@@ -121,10 +130,21 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                 )}
                             </p>
                             <div>
-                                {job.progress === 100 &&
-                                ('jobType' in job
-                                    ? job.jobType !== JobTypeMetadata
-                                    : true) ? (
+                                {isFailed ? (
+                                    <div className="flex gap-2 text-destructive">
+                                        <span>Download Failed</span>
+                                        <AlertTriangle />
+                                    </div>
+                                ) : isRetrying ? (
+                                    <span className="text-yellow-600">
+                                        Retrying ({job.retryCount || 0}/
+                                        {job.maxRetries || 3})
+                                        {job.retryError && `: ${job.retryError}`}
+                                    </span>
+                                ) : job.progress === 100 &&
+                                  ('jobType' in job
+                                      ? job.jobType !== JobTypeMetadata
+                                      : true) ? (
                                     <div className={'flex gap-2'}>
                                         <span>Download Finished</span>
                                         <CircleCheck
