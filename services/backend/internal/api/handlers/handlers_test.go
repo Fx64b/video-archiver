@@ -8,16 +8,42 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"video-archiver/internal/domain"
 	"video-archiver/internal/services/download"
 	"video-archiver/internal/testutil"
 
 	"github.com/go-chi/chi"
 )
 
+// mockSettingsRepository is a mock implementation of domain.SettingsRepository for testing
+type mockSettingsRepository struct {
+	settings *domain.Settings
+}
+
+func newMockSettingsRepository() *mockSettingsRepository {
+	return &mockSettingsRepository{
+		settings: &domain.Settings{
+			DownloadQuality:     1080,
+			ConcurrentDownloads: 2,
+			Theme:               "dark",
+		},
+	}
+}
+
+func (m *mockSettingsRepository) Get() (*domain.Settings, error) {
+	return m.settings, nil
+}
+
+func (m *mockSettingsRepository) Update(settings *domain.Settings) error {
+	m.settings = settings
+	return nil
+}
+
 func setupTestHandler(t *testing.T) (*Handler, *testutil.MockJobRepository) {
 	t.Helper()
 
 	mockRepo := testutil.NewMockJobRepository()
+	mockSettings := newMockSettingsRepository()
 	config := &download.Config{
 		JobRepository: mockRepo,
 		DownloadPath:  "/tmp/test",
@@ -26,7 +52,7 @@ func setupTestHandler(t *testing.T) (*Handler, *testutil.MockJobRepository) {
 	}
 	service := download.NewService(config)
 
-	handler := NewHandler(service, "/tmp/test")
+	handler := NewHandler(service, "/tmp/test", mockSettings)
 	return handler, mockRepo
 }
 
@@ -310,6 +336,7 @@ func TestHandleRecent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clean mock repo for each test
 			mockRepo = testutil.NewMockJobRepository()
+			mockSettings := newMockSettingsRepository()
 			config := &download.Config{
 				JobRepository: mockRepo,
 				DownloadPath:  "/tmp/test",
@@ -317,7 +344,7 @@ func TestHandleRecent(t *testing.T) {
 				MaxQuality:    1080,
 			}
 			service := download.NewService(config)
-			handler = NewHandler(service, "/tmp/test")
+			handler = NewHandler(service, "/tmp/test", mockSettings)
 
 			// Setup test data
 			for i := 0; i < tt.setupJobs; i++ {
