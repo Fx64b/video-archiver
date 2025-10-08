@@ -19,7 +19,8 @@ import (
 )
 
 type DownloadRequest struct {
-	URL string `json:"url"`
+	URL     string `json:"url"`
+	Quality *int   `json:"quality,omitempty"`
 }
 
 type Response struct {
@@ -27,14 +28,16 @@ type Response struct {
 }
 
 type Handler struct {
-	downloadService *download.Service
-	downloadPath    string
+	downloadService    *download.Service
+	downloadPath       string
+	settingsRepository domain.SettingsRepository
 }
 
-func NewHandler(downloadService *download.Service, downloadPath string) *Handler {
+func NewHandler(downloadService *download.Service, downloadPath string, settingsRepository domain.SettingsRepository) *Handler {
 	return &Handler{
-		downloadService: downloadService,
-		downloadPath:    downloadPath,
+		downloadService:    downloadService,
+		downloadPath:       downloadPath,
+		settingsRepository: settingsRepository,
 	}
 }
 
@@ -48,6 +51,8 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Get("/statistics", h.HandleGetStatistics)
 	r.Get("/downloads/{type}", h.HandleGetDownloads)
 	r.Get("/video/{jobID}", h.HandleServeVideo)
+	r.Get("/settings", h.HandleGetSettings)
+	r.Put("/settings", h.HandleUpdateSettings)
 }
 
 func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
@@ -128,13 +133,34 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Infof("Received download request for URL: %s", req.URL)
+	// Validate custom quality if provided
+	if req.Quality != nil {
+		validQualities := []int{360, 480, 720, 1080, 1440, 2160}
+		qualityValid := false
+		for _, q := range validQualities {
+			if *req.Quality == q {
+				qualityValid = true
+				break
+			}
+		}
+		if !qualityValid {
+			http.Error(w, "Invalid quality. Must be 360, 480, 720, 1080, 1440, or 2160", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if req.Quality != nil {
+		log.Infof("Received download request for URL: %s with custom quality: %dp", req.URL, *req.Quality)
+	} else {
+		log.Infof("Received download request for URL: %s", req.URL)
+	}
 
 	job := domain.Job{
-		ID:        uuid.New().String(),
-		URL:       req.URL,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:              uuid.New().String(),
+		URL:             req.URL,
+		CustomQuality:   req.Quality,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 
 	if err := h.downloadService.Submit(job); err != nil {
@@ -157,7 +183,10 @@ func (h *Handler) HandleRecent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(recentJobs) == 0 {
-		http.Error(w, "No recent downloads found", http.StatusNotFound)
+		// Return empty array with 200 status instead of 404
+		resp := Response{Message: []interface{}{}}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -395,6 +424,85 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, videoPath)
 }
 
+
+func (h *Handler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.settingsRepository.Get()
+	if err != nil {
+		log.WithError(err).Error("Failed to get settings")
+		http.Error(w, "Failed to get settings", http.StatusInternalServerError)
+		return
+	}
+
+	resp := Response{Message: settings}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+type UpdateSettingsRequest struct {
+	Theme               string `json:"theme"`
+	DownloadQuality     int    `json:"download_quality"`
+	ConcurrentDownloads int    `json:"concurrent_downloads"`
+}
+
+func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var req UpdateSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	// Validate theme
+	if req.Theme != "light" && req.Theme != "dark" && req.Theme != "system" {
+		http.Error(w, "Invalid theme. Must be 'light', 'dark', or 'system'", http.StatusBadRequest)
+		return
+	}
+
+	// Validate download quality
+	validQualities := []int{360, 480, 720, 1080, 1440, 2160}
+	qualityValid := false
+	for _, q := range validQualities {
+		if req.DownloadQuality == q {
+			qualityValid = true
+			break
+		}
+	}
+	if !qualityValid {
+		http.Error(w, "Invalid download quality. Must be 360, 480, 720, 1080, 1440, or 2160", http.StatusBadRequest)
+		return
+	}
+
+	// Validate concurrent downloads
+	if req.ConcurrentDownloads < 1 || req.ConcurrentDownloads > 10 {
+		http.Error(w, "Invalid concurrent downloads. Must be between 1 and 10", http.StatusBadRequest)
+		return
+	}
+
+	// Get current settings
+	settings, err := h.settingsRepository.Get()
+	if err != nil {
+		log.WithError(err).Error("Failed to get current settings")
+		http.Error(w, "Failed to get settings", http.StatusInternalServerError)
+		return
+	}
+
+	// Update settings
+	settings.Theme = req.Theme
+	settings.DownloadQuality = req.DownloadQuality
+	settings.ConcurrentDownloads = req.ConcurrentDownloads
+
+	if err := h.settingsRepository.Update(settings); err != nil {
+		log.WithError(err).Error("Failed to update settings")
+		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+		return
+	}
+
+	log.Infof("Settings updated successfully - Theme: %s, Quality: %dp, Concurrent Downloads: %d",
+		settings.Theme, settings.DownloadQuality, settings.ConcurrentDownloads)
+
+	resp := Response{Message: settings}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

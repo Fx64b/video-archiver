@@ -127,15 +127,15 @@ func (pt *ProgressTracker) processLine(line string) {
 		log.WithField("line", line).Debug("Processing line")
 	}
 
-	// Check if this line matches our patterns
+	// Check if this line matches our patterns (debug logging only)
 	if progressTemplatePattern.MatchString(line) {
-		log.WithField("line", line).Info("Line matches progress template pattern")
+		log.WithField("line", line).Debug("Line matches progress template pattern")
 	} else if metadataPattern.MatchString(line) {
-		log.WithField("line", line).Info("Line matches metadata pattern")
+		log.WithField("line", line).Debug("Line matches metadata pattern")
 	} else if streamDownloadPattern.MatchString(line) {
-		log.WithField("line", line).Info("Line matches stream download pattern")
+		log.WithField("line", line).Debug("Line matches stream download pattern")
 	} else if mergePattern.MatchString(line) {
-		log.WithField("line", line).Info("Line matches merge pattern")
+		log.WithField("line", line).Debug("Line matches merge pattern")
 	}
 
 	// 1. Content type detection (only set once)
@@ -258,7 +258,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 						"formatNote":         formatNote,
 						"vcodec":             vcodec,
 						"acodec":             acodec,
-					}).Info("Stream type transition detected")
+					}).Debug("Stream type transition detected")
 				}
 
 				// Update current stream type
@@ -274,7 +274,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 						"formatNote": formatNote,
 						"vcodec":     vcodec,
 						"acodec":     acodec,
-					}).Info("Video tracking initialized")
+					}).Debug("Video tracking initialized")
 				}
 
 				// Update raw progress tracking
@@ -309,7 +309,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 					"streamType":     streamType,
 					"phase":          pt.state.Phase,
 					"videoProgress":  pt.state.VideoProgress[videoID],
-				}).Info("Progress update")
+				}).Debug("Progress update")
 			}
 		}
 	} else if streamMatch := streamDownloadPattern.FindStringSubmatch(line); streamMatch != nil {
@@ -356,7 +356,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 				"previousStreamType": previousStreamType,
 				"newStreamType":      streamType,
 				"transition":         "video_to_audio",
-			}).Info("Stream type transition detected - switching to audio phase")
+			}).Debug("Stream type transition detected - switching to audio phase")
 		} else if streamType == "video" {
 			pt.state.Phase = domain.DownloadPhaseVideo
 		}
@@ -368,12 +368,12 @@ func (pt *ProgressTracker) detectPhase(line string) {
 			"streamType": streamType,
 			"phase":      pt.state.Phase,
 			"line":       line,
-		}).Info("Stream destination detected - stream type determined")
+		}).Debug("Stream destination detected - stream type determined")
 
 	} else if mergePattern.MatchString(line) {
 		pt.state.Phase = domain.DownloadPhaseMerging
 		pt.state.CurrentProgress = 95 // Merging phase
-		log.WithField("line", line).Info("Merge phase detected")
+		log.WithField("line", line).Debug("Merge phase detected")
 	}
 
 	// Check for item completion patterns

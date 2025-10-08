@@ -12,12 +12,13 @@ const (
 )
 
 type Job struct {
-	ID        string    `json:"id"`
-	URL       string    `json:"url"`
-	Status    JobStatus `json:"status"`
-	Progress  float64   `json:"progress"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	URL           string    `json:"url"`
+	Status        JobStatus `json:"status"`
+	Progress      float64   `json:"progress"`
+	CustomQuality *int      `json:"custom_quality,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 //tygo:ignore

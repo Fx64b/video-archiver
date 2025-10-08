@@ -60,7 +60,9 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      shift
+      echo "Error: Unknown argument '$1'"
+      echo "Run './run.sh --help' for available options."
+      exit 1
       ;;
   esac
 done

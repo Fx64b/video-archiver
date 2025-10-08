@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 
 import { AppSidebar } from '@/components/app-sidebar'
+import { SettingsInitializer } from '@/components/settings-initializer'
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/ui/theme-provider'
@@ -43,6 +44,7 @@ export default function RootLayout({
                     enableSystem
                     disableTransitionOnChange
                 >
+                    <SettingsInitializer />
                     <SidebarProvider>
                         <AppSidebar />
                         <main className={'w-full'}>

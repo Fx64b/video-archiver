@@ -302,7 +302,7 @@ func TestHandleRecent(t *testing.T) {
 		{
 			name:           "no jobs",
 			setupJobs:      0,
-			expectedStatus: http.StatusNotFound,
+			expectedStatus: http.StatusOK,
 		},
 	}
 

@@ -2,19 +2,29 @@
 
 import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
-import { AlertCircle, LoaderCircle, Settings } from 'lucide-react'
+import { AlertCircle, LoaderCircle, Settings, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
 
 import { AlertDestructive } from '@/components/alert-destructive'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 
 export function UrlInput() {
     const [url, setUrl] = useState('')
     const [error, setError] = useState('')
     const [dotIndex, setDotIndex] = useState(0) // for reconnecting dots . .. ...
+    const [customQuality, setCustomQuality] = useState<number | null>(null)
 
     const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL
     const setIsDownloading = useAppState((state) => state.setIsDownloading)
@@ -41,10 +51,15 @@ export function UrlInput() {
 
         setIsDownloading(true)
         try {
+            const body: { url: string; quality?: number } = { url }
+            if (customQuality !== null) {
+                body.quality = customQuality
+            }
+
             const response = await fetch(`${SERVER_URL}/download`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url }),
+                body: JSON.stringify(body),
             })
 
             if (!response.ok) {
@@ -61,8 +76,17 @@ export function UrlInput() {
         }
     }
 
-    const settings = () => {
-        console.log('Settings')
+    const qualityOptions = [
+        { value: 360, label: '360p' },
+        { value: 480, label: '480p' },
+        { value: 720, label: '720p (HD)' },
+        { value: 1080, label: '1080p (Full HD)' },
+        { value: 1440, label: '1440p (2K)' },
+        { value: 2160, label: '2160p (4K)' },
+    ]
+
+    const getQualityLabel = (quality: number) => {
+        return qualityOptions.find((q) => q.value === quality)?.label || `${quality}p`
     }
 
     useEffect(() => {
@@ -91,15 +115,30 @@ export function UrlInput() {
                     onChange={(e) => setUrl(e.target.value)}
                     disabled={isDownloading}
                 />
-                <Button
-                    type="submit"
-                    variant={'outline'}
-                    onClick={settings}
-                    disabled={isDownloading}
-                    className={'w-12'}
-                >
-                    <Settings />
-                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            type="button"
+                            variant={'outline'}
+                            disabled={isDownloading}
+                            className={'w-12'}
+                        >
+                            <Settings />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Quality Override</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {qualityOptions.map((option) => (
+                            <DropdownMenuItem
+                                key={option.value}
+                                onClick={() => setCustomQuality(option.value)}
+                            >
+                                {option.label}
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                     type="submit"
                     onClick={download}
@@ -113,6 +152,18 @@ export function UrlInput() {
                     )}
                 </Button>
             </div>
+
+            {customQuality !== null && (
+                <div className="mt-2 flex items-center gap-2">
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                        Custom Quality: {getQualityLabel(customQuality)}
+                        <X
+                            className="h-3 w-3 cursor-pointer hover:text-destructive"
+                            onClick={() => setCustomQuality(null)}
+                        />
+                    </Badge>
+                </div>
+            )}
 
             {!isConnected && (
                 <div
