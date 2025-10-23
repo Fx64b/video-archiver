@@ -150,11 +150,10 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 
 	log.Infof("Download Path: %s", basePath)
 
-	// TODO: start metadata extraction in a separate goroutine and then do the downloading
-	// Extract metadata first
-	extractedMetadata, err := s.extractMetadata(ctx, job, basePath)
+	// Extract basic metadata first (fast - determines type)
+	extractedMetadata, err := s.extractBasicMetadata(ctx, job, basePath)
 	if err != nil {
-		log.WithError(err).Error("Failed to extract metadata")
+		log.WithError(err).Error("Failed to extract basic metadata")
 	}
 
 	isPlaylist := false
@@ -169,6 +168,13 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 		}
 	}
 
+	// Start metadata enhancement in parallel for playlists/channels
+	// This allows the download to proceed while detailed metadata is being fetched
+	if (isPlaylist || isChannel) && extractedMetadata != nil {
+		go s.enhanceMetadataAsync(ctx, job, extractedMetadata)
+	}
+
+	// Start download immediately (runs in parallel with metadata enhancement)
 	if isPlaylist || isChannel {
 		// For playlists and channels, we may want to modify the download command
 		// to better track the individual videos
@@ -608,7 +614,9 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 	return nil
 }
 
-func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPath string) (domain.Metadata, error) {
+// extractBasicMetadata extracts basic metadata quickly using --flat-playlist
+// This is fast and provides enough information to determine the content type
+func (s *Service) extractBasicMetadata(ctx context.Context, job domain.Job, outputPath string) (domain.Metadata, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	metadataCmd := exec.CommandContext(ctx, "yt-dlp",
 		"--skip-download",
@@ -683,47 +691,50 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		log.Debug("Sent immediate basic metadata update to UI")
 	}
 
-	// Phase 2: Enhance metadata for playlists and channels with detailed info
-	if isPlaylistOrChannel(extractedMetadata) {
-		log.Debug("Enhancing metadata for playlist/channel with detailed information")
-		err = s.enhanceMetadata(ctx, job, extractedMetadata)
-		if err != nil {
-			log.WithError(err).Warn("Failed to enhance metadata, continuing with basic metadata")
-
-			// Log the basic metadata to help debug
-			switch m := extractedMetadata.(type) {
-			case *domain.PlaylistMetadata:
-				log.Debugf("Basic playlist metadata: %d items", m.ItemCount)
-			case *domain.ChannelMetadata:
-				log.Debugf("Basic channel metadata: %d playlists, %d videos", m.PlaylistCount, m.VideoCount)
-			}
-		} else {
-			// Log enhanced metadata info
-			switch m := extractedMetadata.(type) {
-			case *domain.PlaylistMetadata:
-				log.Debugf("Enhanced playlist metadata: %d items in Items slice", len(m.Items))
-			case *domain.ChannelMetadata:
-				log.Debugf("Enhanced channel metadata: %d videos, %d recent videos", m.VideoCount, len(m.RecentVideos))
-			}
-
-			// Store and broadcast the enhanced metadata
-			if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
-				log.WithError(err).Warn("Failed to store enhanced metadata")
-			} else {
-				enhancedMetadataUpdate := domain.MetadataUpdate{
-					JobID:    job.ID,
-					Metadata: extractedMetadata,
-				}
-				s.hub.broadcast <- enhancedMetadataUpdate
-				log.Debug("Sent enhanced metadata update to UI")
-			}
-		}
-	}
-
 	update.Progress = 1
 	s.hub.broadcast <- update
 
 	return extractedMetadata, nil
+}
+
+// enhanceMetadataAsync runs metadata enhancement in a goroutine for playlists/channels
+// This allows detailed metadata extraction to happen in parallel with the download
+func (s *Service) enhanceMetadataAsync(ctx context.Context, job domain.Job, basicMetadata domain.Metadata) {
+	log.WithField("jobID", job.ID).Info("Starting async metadata enhancement")
+
+	err := s.enhanceMetadata(ctx, job, basicMetadata)
+	if err != nil {
+		log.WithError(err).Warn("Failed to enhance metadata in background")
+
+		// Log the basic metadata to help debug
+		switch m := basicMetadata.(type) {
+		case *domain.PlaylistMetadata:
+			log.Debugf("Basic playlist metadata: %d items", m.ItemCount)
+		case *domain.ChannelMetadata:
+			log.Debugf("Basic channel metadata: %d playlists, %d videos", m.PlaylistCount, m.VideoCount)
+		}
+		return
+	}
+
+	// Log enhanced metadata info
+	switch m := basicMetadata.(type) {
+	case *domain.PlaylistMetadata:
+		log.Debugf("Enhanced playlist metadata: %d items in Items slice", len(m.Items))
+	case *domain.ChannelMetadata:
+		log.Debugf("Enhanced channel metadata: %d videos, %d recent videos", m.VideoCount, len(m.RecentVideos))
+	}
+
+	// Store and broadcast the enhanced metadata
+	if err := s.jobs.StoreMetadata(job.ID, basicMetadata); err != nil {
+		log.WithError(err).Warn("Failed to store enhanced metadata")
+	} else {
+		enhancedMetadataUpdate := domain.MetadataUpdate{
+			JobID:    job.ID,
+			Metadata: basicMetadata,
+		}
+		s.hub.broadcast <- enhancedMetadataUpdate
+		log.WithField("jobID", job.ID).Info("Sent enhanced metadata update to UI")
+	}
 }
 
 func (s *Service) enhanceMetadata(ctx context.Context, job domain.Job, basicMetadata domain.Metadata) error {
