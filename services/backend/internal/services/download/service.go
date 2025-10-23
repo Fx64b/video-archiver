@@ -346,7 +346,8 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		}
 	}
 
-	// TODO: Determine the membership type based on metadata type
+	// Determine the membership type based on metadata type
+	membershipType := determineMembershipType(metadataModel)
 
 	// Scan for downloaded video metadata files in the output directory
 	// Note: outputPath contains yt-dlp template variables like %(uploader)s, so we need to use the actual download path
@@ -435,14 +436,6 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 				if err == nil && existingJob != nil {
 					log.Debugf("Job already exists for video %s, linking to parent", videoJobID)
 					// Job exists, create membership relationship
-					membershipType := "unknown"
-					switch metadataModel.(type) {
-					case *domain.PlaylistMetadata:
-						membershipType = "playlist"
-					case *domain.ChannelMetadata:
-						membershipType = "channel"
-					}
-					
 					if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
 						log.WithError(err).Warnf("Failed to link existing video %s to %s %s", videoJobID, membershipType, job.ID)
 					} else {
@@ -485,14 +478,6 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 				log.Debugf("Successfully stored metadata for video %s", videoJobID)
 
 				// Link the video to the playlist/channel
-				membershipType := "unknown"
-				switch metadataModel.(type) {
-				case *domain.PlaylistMetadata:
-					membershipType = "playlist"
-				case *domain.ChannelMetadata:
-					membershipType = "channel"
-				}
-
 				if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
 					log.WithError(err).Warnf("Failed to link video %s to %s %s", videoJobID, membershipType, job.ID)
 				} else {
@@ -1016,4 +1001,15 @@ func (s *Service) updateDownloadedMetadata(jobID string, maxQuality int) error {
 	}
 
 	return nil
+}
+// determineMembershipType determines the relationship type based on metadata type
+func determineMembershipType(metadata domain.Metadata) string {
+	switch metadata.(type) {
+	case *domain.PlaylistMetadata:
+		return "playlist"
+	case *domain.ChannelMetadata:
+		return "channel"
+	default:
+		return "unknown"
+	}
 }

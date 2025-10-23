@@ -8,11 +8,11 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/download"
 	"video-archiver/internal/testutil"
-
-	"github.com/go-chi/chi"
 )
 
 // mockSettingsRepository is a mock implementation of domain.SettingsRepository for testing
@@ -52,7 +52,8 @@ func setupTestHandler(t *testing.T) (*Handler, *testutil.MockJobRepository) {
 	}
 	service := download.NewService(config)
 
-	handler := NewHandler(service, "/tmp/test", mockSettings)
+	allowedOrigins := []string{"http://localhost:3000", "http://localhost:8080"}
+	handler := NewHandler(service, "/tmp/test", mockSettings, allowedOrigins)
 	return handler, mockRepo
 }
 
@@ -344,7 +345,8 @@ func TestHandleRecent(t *testing.T) {
 				MaxQuality:    1080,
 			}
 			service := download.NewService(config)
-			handler = NewHandler(service, "/tmp/test", mockSettings)
+			allowedOrigins := []string{"http://localhost:3000"}
+			handler = NewHandler(service, "/tmp/test", mockSettings, allowedOrigins)
 
 			// Setup test data
 			for i := 0; i < tt.setupJobs; i++ {
@@ -366,41 +368,70 @@ func TestHandleRecent(t *testing.T) {
 }
 
 func TestCorsMiddleware(t *testing.T) {
+	handler, _ := setupTestHandler(t)
+
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handlerToTest := corsMiddleware(nextHandler)
+	handlerToTest := handler.corsMiddleware(nextHandler)
 
 	tests := []struct {
 		name           string
 		method         string
+		origin         string
 		expectedStatus int
 		checkHeaders   bool
+		shouldAllow    bool
 	}{
 		{
-			name:           "GET request",
+			name:           "GET request with allowed origin",
 			method:         http.MethodGet,
+			origin:         "http://localhost:3000",
 			expectedStatus: http.StatusOK,
 			checkHeaders:   true,
+			shouldAllow:    true,
 		},
 		{
-			name:           "OPTIONS request",
+			name:           "GET request with unauthorized origin",
+			method:         http.MethodGet,
+			origin:         "http://evil.com",
+			expectedStatus: http.StatusOK,
+			checkHeaders:   false,
+			shouldAllow:    false,
+		},
+		{
+			name:           "OPTIONS request with allowed origin",
 			method:         http.MethodOptions,
+			origin:         "http://localhost:3000",
 			expectedStatus: http.StatusOK,
 			checkHeaders:   true,
+			shouldAllow:    true,
 		},
 		{
-			name:           "POST request",
+			name:           "OPTIONS request with unauthorized origin",
+			method:         http.MethodOptions,
+			origin:         "http://evil.com",
+			expectedStatus: http.StatusForbidden,
+			checkHeaders:   false,
+			shouldAllow:    false,
+		},
+		{
+			name:           "POST request with allowed origin",
 			method:         http.MethodPost,
+			origin:         "http://localhost:3000",
 			expectedStatus: http.StatusOK,
 			checkHeaders:   true,
+			shouldAllow:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "/test", nil)
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
 			w := httptest.NewRecorder()
 
 			handlerToTest.ServeHTTP(w, req)
@@ -409,12 +440,17 @@ func TestCorsMiddleware(t *testing.T) {
 				t.Errorf("Status code = %v, want %v", w.Code, tt.expectedStatus)
 			}
 
-			if tt.checkHeaders {
-				if w.Header().Get("Access-Control-Allow-Origin") != "*" {
-					t.Error("CORS header Access-Control-Allow-Origin not set correctly")
+			if tt.shouldAllow {
+				if w.Header().Get("Access-Control-Allow-Origin") != tt.origin {
+					t.Errorf("CORS header Access-Control-Allow-Origin = %v, want %v",
+						w.Header().Get("Access-Control-Allow-Origin"), tt.origin)
 				}
 				if w.Header().Get("Access-Control-Allow-Methods") == "" {
 					t.Error("CORS header Access-Control-Allow-Methods not set")
+				}
+			} else {
+				if w.Header().Get("Access-Control-Allow-Origin") != "" {
+					t.Error("CORS header should not be set for unauthorized origin")
 				}
 			}
 		})

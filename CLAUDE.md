@@ -62,7 +62,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **ProgressUpdate**: Real-time download progress information
 
 ### Technology Stack
-- **Backend**: Go 1.23+ with Chi router, SQLite, yt-dlp, ffmpeg
+- **Backend**: Go 1.23+ with Chi v5 router, SQLite, yt-dlp, ffmpeg
 - **Frontend**: Next.js 15, TypeScript, shadcn/ui, Zustand, WebSocket
 - **Development**: Docker Compose for orchestration
 
@@ -73,9 +73,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Accurate progress calculation**: Video (80%) + Audio (20%) for single videos
 
 ### Environment Configuration
-- Backend: `DEBUG`, `DOWNLOAD_PATH`, `DATABASE_PATH`, `PORT`, `WS_PORT`
-- Frontend: `NEXT_PUBLIC_SERVER_URL`, `NEXT_PUBLIC_SERVER_URL_WS`
+- Backend:
+  - `DEBUG`: Enable debug logging (default: false)
+  - `DOWNLOAD_PATH`: Video download directory (default: ./data/downloads)
+  - `DATABASE_PATH`: SQLite database path (default: ./data/db/video-archiver.db)
+  - `PORT`: API server port (default: :8080)
+  - `WS_PORT`: WebSocket server port (default: :8081)
+  - `ALLOWED_ORIGINS`: CORS allowed origins, comma-separated (default: http://localhost:3000)
+- Frontend:
+  - `NEXT_PUBLIC_SERVER_URL`: Backend API URL (default: http://localhost:8080)
+  - `NEXT_PUBLIC_SERVER_URL_WS`: WebSocket URL (default: ws://localhost:8081)
 - Default development URLs: Backend on :8080, WebSocket on :8081, Frontend on :3000
+
+### Security Features
+- **CORS Protection**: Origin validation with configurable allowed origins
+- **Path Traversal Protection**: File serving validates paths stay within download directory
+- **Request Logging**: Security events logged for monitoring
+- **Chi v5 Router**: Using latest stable version with security fixes
 
 ## Future Improvements
 

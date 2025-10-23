@@ -16,6 +16,7 @@ services:
       - DOWNLOAD_PATH=/app/data/downloads
       - DATABASE_PATH=/app/data/db/video-archiver.db
       - DEBUG=${DEBUG:-false}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       - XDG_CACHE_HOME=/app/cache
 
   web:

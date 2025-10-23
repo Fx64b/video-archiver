@@ -7,8 +7,7 @@ jest.mock('sonner', () => ({
     toast: jest.fn(),
 }))
 
-// TODO: Update these tests to match the new WebSocket implementation with ping/pong and onReconnect
-describe.skip('websocket service', () => {
+describe('websocket service', () => {
     let mockWebSocket: any
     let onOpenCallback: (() => void) | null = null
     let onMessageCallback: ((event: MessageEvent) => void) | null = null
@@ -248,12 +247,77 @@ describe.skip('websocket service', () => {
         onCloseCallback?.()
 
         expect(useWebSocketStore.getState().isConnected).toBe(false)
+        expect(useWebSocketStore.getState().isReconnecting).toBe(false)
 
-        // Fast-forward timer
+        // Fast-forward timer to trigger reconnect
         jest.advanceTimersByTime(5000)
+
+        // Should set isReconnecting flag
+        expect(useWebSocketStore.getState().isReconnecting).toBe(true)
 
         // Should attempt to reconnect
         expect(global.WebSocket).toHaveBeenCalledTimes(2)
+    })
+
+    it('should call onReconnect callbacks after successful reconnection', async () => {
+        const { default: useWebSocketStore } = await import(
+            '../websocket'
+        )
+        const { toast } = require('sonner')
+
+        const reconnectCallback = jest.fn()
+        const store = useWebSocketStore.getState()
+
+        // Register reconnect callback
+        store.onReconnect(reconnectCallback)
+
+        // Initial connection
+        store.connect()
+        mockWebSocket.readyState = WebSocket.OPEN
+        onOpenCallback?.()
+
+        expect(reconnectCallback).not.toHaveBeenCalled()
+
+        // Disconnect
+        onCloseCallback?.()
+
+        // Trigger reconnect
+        jest.advanceTimersByTime(5000)
+
+        // Simulate successful reconnection
+        mockWebSocket.readyState = WebSocket.OPEN
+        onOpenCallback?.()
+
+        // Callback should be called
+        expect(reconnectCallback).toHaveBeenCalledTimes(1)
+        expect(toast).toHaveBeenCalledWith('Reconnected to server successfully.')
+    })
+
+    it('should unregister onReconnect callbacks', async () => {
+        const { default: useWebSocketStore } = await import(
+            '../websocket'
+        )
+
+        const reconnectCallback = jest.fn()
+        const store = useWebSocketStore.getState()
+
+        // Register and then unregister
+        const unregister = store.onReconnect(reconnectCallback)
+        unregister()
+
+        // Initial connection
+        store.connect()
+        mockWebSocket.readyState = WebSocket.OPEN
+        onOpenCallback?.()
+
+        // Disconnect and reconnect
+        onCloseCallback?.()
+        jest.advanceTimersByTime(5000)
+        mockWebSocket.readyState = WebSocket.OPEN
+        onOpenCallback?.()
+
+        // Callback should not be called
+        expect(reconnectCallback).not.toHaveBeenCalled()
     })
 
     it('should disconnect and cleanup', async () => {

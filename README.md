@@ -32,13 +32,14 @@ Video Archiver allows you to download and organize videos from YouTube for offli
 
 ## Technology Stack
 
-- **Backend**: Go 1.23+ with Chi router
+- **Backend**: Go 1.23+ with Chi v5 router
 - **Frontend**: Next.js 15+ with TypeScript
 - **UI**: shadcn/ui components
 - **State Management**: Zustand
 - **Real-time Updates**: WebSocket
 - **Database**: SQLite
 - **Media Handling**: yt-dlp and ffmpeg
+- **Security**: CORS protection, path traversal prevention
 
 ## Installation
 
@@ -123,6 +124,7 @@ The application can be configured through environment variables:
 - `DATABASE_PATH`: Path to SQLite database (default: ./data/db/video-archiver.db)
 - `PORT`: API server port (default: 8080)
 - `WS_PORT`: WebSocket server port (default: 8081)
+- `ALLOWED_ORIGINS`: Comma-separated list of allowed CORS origins (default: http://localhost:3000)
 
 ### Frontend
 - `NEXT_PUBLIC_SERVER_URL`: URL for backend API (default: http://localhost:8080)

@@ -4,7 +4,7 @@ go 1.23.2
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
-	github.com/go-chi/chi v4.1.2+incompatible
+	github.com/go-chi/chi/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/mattn/go-sqlite3 v1.14.29

@@ -3,16 +3,17 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/go-chi/chi"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/download"
 	"video-archiver/internal/util/statistics"
@@ -31,18 +32,20 @@ type Handler struct {
 	downloadService    *download.Service
 	downloadPath       string
 	settingsRepository domain.SettingsRepository
+	allowedOrigins     []string
 }
 
-func NewHandler(downloadService *download.Service, downloadPath string, settingsRepository domain.SettingsRepository) *Handler {
+func NewHandler(downloadService *download.Service, downloadPath string, settingsRepository domain.SettingsRepository, allowedOrigins []string) *Handler {
 	return &Handler{
 		downloadService:    downloadService,
 		downloadPath:       downloadPath,
 		settingsRepository: settingsRepository,
+		allowedOrigins:     allowedOrigins,
 	}
 }
 
 func (h *Handler) RegisterRoutes(r *chi.Mux) {
-	r.Use(corsMiddleware)
+	r.Use(h.corsMiddleware)
 
 	r.Post("/download", h.HandleDownload)
 	r.Get("/recent", h.HandleRecent)
@@ -56,7 +59,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 }
 
 func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
-	r.Use(corsMiddleware)
+	r.Use(h.corsMiddleware)
 	r.Get("/ws", h.HandleWebSocket)
 }
 
@@ -371,7 +374,7 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 
 	// Try to find the video file based on the metadata
 	var videoPath string
-	
+
 	switch metadata := jobWithMetadata.Metadata.(type) {
 	case *domain.VideoMetadata:
 		// For videos, construct the expected file path
@@ -382,27 +385,32 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 		if channelDir == "" {
 			channelDir = "Unknown"
 		}
-		
+
 		title := metadata.Title
 		if title == "" {
 			title = "Unknown"
 		}
-		
-		// Clean the filename
-		title = strings.ReplaceAll(title, "/", "_")
-		title = strings.ReplaceAll(title, "\\", "_")
-		title = strings.ReplaceAll(title, ":", "_")
-		title = strings.ReplaceAll(title, "*", "_")
-		title = strings.ReplaceAll(title, "?", "_")
-		title = strings.ReplaceAll(title, "\"", "_")
-		title = strings.ReplaceAll(title, "<", "_")
-		title = strings.ReplaceAll(title, ">", "_")
-		title = strings.ReplaceAll(title, "|", "_")
-		
+
+		// Clean the filename to prevent path traversal
+		title = sanitizeFilename(title)
+		channelDir = sanitizeFilename(channelDir)
+
 		videoPath = filepath.Join(h.downloadPath, channelDir, title+".mp4")
-		
+
 	default:
 		http.Error(w, "Unsupported content type for video playback", http.StatusBadRequest)
+		return
+	}
+
+	// Validate the path to prevent directory traversal attacks
+	if err := validateVideoPath(h.downloadPath, videoPath); err != nil {
+		log.WithFields(log.Fields{
+			"error":        err,
+			"requested_path": videoPath,
+			"base_path":     h.downloadPath,
+			"remote_ip":     r.RemoteAddr,
+		}).Warn("Path traversal attempt blocked")
+		http.Error(w, "Access denied", http.StatusForbidden)
 		return
 	}
 
@@ -422,6 +430,44 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 
 	// Serve the file
 	http.ServeFile(w, r, videoPath)
+}
+
+// sanitizeFilename removes dangerous characters from filenames
+func sanitizeFilename(filename string) string {
+	// Replace path separators and other dangerous characters
+	filename = strings.ReplaceAll(filename, "/", "_")
+	filename = strings.ReplaceAll(filename, "\\", "_")
+	filename = strings.ReplaceAll(filename, "..", "_")
+	filename = strings.ReplaceAll(filename, ":", "_")
+	filename = strings.ReplaceAll(filename, "*", "_")
+	filename = strings.ReplaceAll(filename, "?", "_")
+	filename = strings.ReplaceAll(filename, "\"", "_")
+	filename = strings.ReplaceAll(filename, "<", "_")
+	filename = strings.ReplaceAll(filename, ">", "_")
+	filename = strings.ReplaceAll(filename, "|", "_")
+	return filename
+}
+
+// validateVideoPath ensures the requested path is within the allowed download directory
+func validateVideoPath(basePath, videoPath string) error {
+	// Clean and get absolute paths
+	cleanBasePath, err := filepath.Abs(filepath.Clean(basePath))
+	if err != nil {
+		return fmt.Errorf("failed to resolve base path: %w", err)
+	}
+
+	cleanVideoPath, err := filepath.Abs(filepath.Clean(videoPath))
+	if err != nil {
+		return fmt.Errorf("failed to resolve video path: %w", err)
+	}
+
+	// Check if the video path is within the base path
+	if !strings.HasPrefix(cleanVideoPath, cleanBasePath) {
+		return fmt.Errorf("path traversal detected: video path %s is outside base path %s",
+			cleanVideoPath, cleanBasePath)
+	}
+
+	return nil
 }
 
 
@@ -504,14 +550,42 @@ func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+// corsMiddleware implements secure CORS handling with origin validation
+func (h *Handler) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+
+		// Check if the origin is in the allowed list
+		allowed := false
+		for _, allowedOrigin := range h.allowedOrigins {
+			if origin == allowedOrigin {
+				allowed = true
+				break
+			}
+		}
+
+		// Only set CORS headers if origin is allowed
+		if allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		} else if origin != "" {
+			// Log blocked origin attempts for security monitoring
+			log.WithFields(log.Fields{
+				"origin":     origin,
+				"method":     r.Method,
+				"path":       r.URL.Path,
+				"remote_ip":  r.RemoteAddr,
+			}).Warn("CORS request from unauthorized origin blocked")
+		}
 
 		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+			if allowed {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				w.WriteHeader(http.StatusForbidden)
+			}
 			return
 		}
 
