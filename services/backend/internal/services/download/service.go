@@ -979,12 +979,36 @@ func copyMetadata(metadata domain.Metadata) domain.Metadata {
 		// Deep copy items slice (if populated)
 		if len(m.Items) > 0 {
 			metaCopy.Items = make([]domain.PlaylistItem, len(m.Items))
-			for i, item := range m.Items {
-				metaCopy.Items[i] = item
-				// Deep copy tags slice if present
-				if len(item.Tags) > 0 {
-					metaCopy.Items[i].Tags = make([]string, len(item.Tags))
-					copy(metaCopy.Items[i].Tags, item.Tags)
+			for i := range m.Items {
+				// Explicitly copy each field to avoid any shared slice references
+				metaCopy.Items[i] = domain.PlaylistItem{
+					ID:             m.Items[i].ID,
+					Title:          m.Items[i].Title,
+					Description:    m.Items[i].Description,
+					Thumbnail:      m.Items[i].Thumbnail,
+					Duration:       m.Items[i].Duration,
+					DurationString: m.Items[i].DurationString,
+					UploadDate:     m.Items[i].UploadDate,
+					ViewCount:      m.Items[i].ViewCount,
+					LikeCount:      m.Items[i].LikeCount,
+					VideoFile:      m.Items[i].VideoFile,
+					Channel:        m.Items[i].Channel,
+					ChannelID:      m.Items[i].ChannelID,
+					ChannelURL:     m.Items[i].ChannelURL,
+					Width:          m.Items[i].Width,
+					Height:         m.Items[i].Height,
+					Resolution:     m.Items[i].Resolution,
+					FileSize:       m.Items[i].FileSize,
+					Format:         m.Items[i].Format,
+					Extension:      m.Items[i].Extension,
+				}
+				// Deep copy tags slice (always create new slice, even if empty)
+				if len(m.Items[i].Tags) > 0 {
+					metaCopy.Items[i].Tags = make([]string, len(m.Items[i].Tags))
+					copy(metaCopy.Items[i].Tags, m.Items[i].Tags)
+				} else if m.Items[i].Tags != nil {
+					// Preserve empty non-nil slice
+					metaCopy.Items[i].Tags = make([]string, 0)
 				}
 			}
 		}
@@ -1013,12 +1037,36 @@ func copyMetadata(metadata domain.Metadata) domain.Metadata {
 		// Deep copy recent videos slice (if populated)
 		if len(m.RecentVideos) > 0 {
 			metaCopy.RecentVideos = make([]domain.PlaylistItem, len(m.RecentVideos))
-			for i, item := range m.RecentVideos {
-				metaCopy.RecentVideos[i] = item
-				// Deep copy tags slice if present
-				if len(item.Tags) > 0 {
-					metaCopy.RecentVideos[i].Tags = make([]string, len(item.Tags))
-					copy(metaCopy.RecentVideos[i].Tags, item.Tags)
+			for i := range m.RecentVideos {
+				// Explicitly copy each field to avoid any shared slice references
+				metaCopy.RecentVideos[i] = domain.PlaylistItem{
+					ID:             m.RecentVideos[i].ID,
+					Title:          m.RecentVideos[i].Title,
+					Description:    m.RecentVideos[i].Description,
+					Thumbnail:      m.RecentVideos[i].Thumbnail,
+					Duration:       m.RecentVideos[i].Duration,
+					DurationString: m.RecentVideos[i].DurationString,
+					UploadDate:     m.RecentVideos[i].UploadDate,
+					ViewCount:      m.RecentVideos[i].ViewCount,
+					LikeCount:      m.RecentVideos[i].LikeCount,
+					VideoFile:      m.RecentVideos[i].VideoFile,
+					Channel:        m.RecentVideos[i].Channel,
+					ChannelID:      m.RecentVideos[i].ChannelID,
+					ChannelURL:     m.RecentVideos[i].ChannelURL,
+					Width:          m.RecentVideos[i].Width,
+					Height:         m.RecentVideos[i].Height,
+					Resolution:     m.RecentVideos[i].Resolution,
+					FileSize:       m.RecentVideos[i].FileSize,
+					Format:         m.RecentVideos[i].Format,
+					Extension:      m.RecentVideos[i].Extension,
+				}
+				// Deep copy tags slice (always create new slice, even if empty)
+				if len(m.RecentVideos[i].Tags) > 0 {
+					metaCopy.RecentVideos[i].Tags = make([]string, len(m.RecentVideos[i].Tags))
+					copy(metaCopy.RecentVideos[i].Tags, m.RecentVideos[i].Tags)
+				} else if m.RecentVideos[i].Tags != nil {
+					// Preserve empty non-nil slice
+					metaCopy.RecentVideos[i].Tags = make([]string, 0)
 				}
 			}
 		}
@@ -1051,16 +1099,22 @@ func copyMetadata(metadata domain.Metadata) domain.Metadata {
 			FileSize:    m.FileSize,
 		}
 
-		// Deep copy tags slice
+		// Deep copy tags slice (always create new slice, even if empty)
 		if len(m.Tags) > 0 {
 			metaCopy.Tags = make([]string, len(m.Tags))
 			copy(metaCopy.Tags, m.Tags)
+		} else if m.Tags != nil {
+			// Preserve empty non-nil slice
+			metaCopy.Tags = make([]string, 0)
 		}
 
-		// Deep copy categories slice
+		// Deep copy categories slice (always create new slice, even if empty)
 		if len(m.Categories) > 0 {
 			metaCopy.Categories = make([]string, len(m.Categories))
 			copy(metaCopy.Categories, m.Categories)
+		} else if m.Categories != nil {
+			// Preserve empty non-nil slice
+			metaCopy.Categories = make([]string, 0)
 		}
 
 		return metaCopy
