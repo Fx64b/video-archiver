@@ -16,47 +16,49 @@ describe('websocket service', () => {
 
     beforeAll(() => {
         // Set up mocks before any module loads
-        // Mock WebSocket
-        mockWebSocket = {
-            readyState: WebSocket.CONNECTING,
-            close: jest.fn(),
-            send: jest.fn(),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn(),
-        }
-
         // @ts-ignore
         global.WebSocket = jest.fn().mockImplementation(() => {
-            return mockWebSocket
-        })
+            // Create a new mock WebSocket for each connection
+            const ws = {
+                readyState: WebSocket.CONNECTING,
+                close: jest.fn(),
+                send: jest.fn(),
+                addEventListener: jest.fn(),
+                removeEventListener: jest.fn(),
+            }
 
-        // Capture event listeners
-        Object.defineProperty(mockWebSocket, 'onopen', {
-            set: (callback: () => void) => {
-                onOpenCallback = callback
-            },
-            configurable: true,
-        })
+            // Capture event listeners for this WebSocket instance
+            Object.defineProperty(ws, 'onopen', {
+                set: (callback: () => void) => {
+                    onOpenCallback = callback
+                },
+                configurable: true,
+            })
 
-        Object.defineProperty(mockWebSocket, 'onmessage', {
-            set: (callback: (event: MessageEvent) => void) => {
-                onMessageCallback = callback
-            },
-            configurable: true,
-        })
+            Object.defineProperty(ws, 'onmessage', {
+                set: (callback: (event: MessageEvent) => void) => {
+                    onMessageCallback = callback
+                },
+                configurable: true,
+            })
 
-        Object.defineProperty(mockWebSocket, 'onclose', {
-            set: (callback: () => void) => {
-                onCloseCallback = callback
-            },
-            configurable: true,
-        })
+            Object.defineProperty(ws, 'onclose', {
+                set: (callback: () => void) => {
+                    onCloseCallback = callback
+                },
+                configurable: true,
+            })
 
-        Object.defineProperty(mockWebSocket, 'onerror', {
-            set: (callback: (error: Event) => void) => {
-                onErrorCallback = callback
-            },
-            configurable: true,
+            Object.defineProperty(ws, 'onerror', {
+                set: (callback: (error: Event) => void) => {
+                    onErrorCallback = callback
+                },
+                configurable: true,
+            })
+
+            // Store the most recent WebSocket instance
+            mockWebSocket = ws
+            return ws
         })
     })
 
@@ -69,9 +71,6 @@ describe('websocket service', () => {
         onMessageCallback = null
         onCloseCallback = null
         onErrorCallback = null
-
-        // Reset mock readyState
-        mockWebSocket.readyState = WebSocket.CONNECTING
 
         // Reset the WebSocket store state
         jest.resetModules()
