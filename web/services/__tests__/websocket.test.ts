@@ -2,6 +2,10 @@
  * @jest-environment jsdom
  */
 
+// Mock environment variables before any imports
+process.env.NEXT_PUBLIC_SERVER_URL_WS = 'ws://localhost:8081'
+process.env.NODE_ENV = 'test'
+
 // Mock the toast from sonner
 jest.mock('sonner', () => ({
     toast: jest.fn(),
@@ -15,7 +19,7 @@ describe('websocket service', () => {
     let onErrorCallback: ((error: Event) => void) | null = null
 
     beforeAll(() => {
-        // Set up mocks before any module loads
+        // Set up global WebSocket mock before any module loads
         // @ts-ignore
         global.WebSocket = jest.fn().mockImplementation(() => {
             // Create a new mock WebSocket for each connection
@@ -63,7 +67,9 @@ describe('websocket service', () => {
     })
 
     beforeEach(async () => {
-        jest.clearAllMocks()
+        // Clear mock call history
+        ;(global.WebSocket as jest.Mock).mockClear()
+
         jest.useFakeTimers()
 
         // Reset callbacks
