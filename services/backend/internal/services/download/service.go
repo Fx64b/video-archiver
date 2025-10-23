@@ -171,7 +171,17 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	// Start metadata enhancement in parallel for playlists/channels
 	// This allows the download to proceed while detailed metadata is being fetched
 	if (isPlaylist || isChannel) && extractedMetadata != nil {
-		go s.enhanceMetadataAsync(ctx, job, extractedMetadata)
+		// Create a detached context that survives the main job context
+		// This prevents the goroutine from being abruptly terminated if the job is canceled
+		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+
+		// Track the goroutine to prevent leaks during service shutdown
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer asyncCancel()
+			s.enhanceMetadataAsync(asyncCtx, job, extractedMetadata)
+		}()
 	}
 
 	// Start download immediately (runs in parallel with metadata enhancement)
