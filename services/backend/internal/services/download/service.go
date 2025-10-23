@@ -171,6 +171,10 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 	// Start metadata enhancement in parallel for playlists/channels
 	// This allows the download to proceed while detailed metadata is being fetched
 	if (isPlaylist || isChannel) && extractedMetadata != nil {
+		// Create a copy of the metadata to avoid race conditions
+		// The main goroutine may read the metadata while the async goroutine modifies it
+		metadataCopy := copyMetadata(extractedMetadata)
+
 		// Create a detached context that survives the main job context
 		// This prevents the goroutine from being abruptly terminated if the job is canceled
 		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -180,7 +184,7 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 		go func() {
 			defer s.wg.Done()
 			defer asyncCancel()
-			s.enhanceMetadataAsync(asyncCtx, job, extractedMetadata)
+			s.enhanceMetadataAsync(asyncCtx, job, metadataCopy)
 		}()
 	}
 
@@ -753,7 +757,13 @@ func (s *Service) enhanceMetadata(ctx context.Context, job domain.Job, basicMeta
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.WithError(err).Warnf("Failed to clean up temp directory: %s", tempDir)
+		} else {
+			log.Debugf("Cleaned up temp directory: %s", tempDir)
+		}
+	}()
 
 	// Run yt-dlp with --dump-single-json to get comprehensive info
 	cmd := exec.CommandContext(ctx, "yt-dlp",
@@ -936,6 +946,129 @@ func isPlaylistOrChannel(metadata domain.Metadata) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// copyMetadata creates a deep copy of metadata to avoid race conditions
+// when the metadata is accessed by multiple goroutines
+func copyMetadata(metadata domain.Metadata) domain.Metadata {
+	switch m := metadata.(type) {
+	case *domain.PlaylistMetadata:
+		// Create a copy of the playlist metadata
+		metaCopy := &domain.PlaylistMetadata{
+			ID:               m.ID,
+			Title:            m.Title,
+			Description:      m.Description,
+			UploaderID:       m.UploaderID,
+			UploaderURL:      m.UploaderURL,
+			ChannelID:        m.ChannelID,
+			Channel:          m.Channel,
+			ChannelURL:       m.ChannelURL,
+			ChannelFollowers: m.ChannelFollowers,
+			ItemCount:        m.ItemCount,
+			ViewCount:        m.ViewCount,
+			Type:             m.Type,
+		}
+
+		// Deep copy thumbnails slice
+		if len(m.Thumbnails) > 0 {
+			metaCopy.Thumbnails = make([]domain.Thumbnail, len(m.Thumbnails))
+			copy(metaCopy.Thumbnails, m.Thumbnails)
+		}
+
+		// Deep copy items slice (if populated)
+		if len(m.Items) > 0 {
+			metaCopy.Items = make([]domain.PlaylistItem, len(m.Items))
+			for i, item := range m.Items {
+				metaCopy.Items[i] = item
+				// Deep copy tags slice if present
+				if len(item.Tags) > 0 {
+					metaCopy.Items[i].Tags = make([]string, len(item.Tags))
+					copy(metaCopy.Items[i].Tags, item.Tags)
+				}
+			}
+		}
+
+		return metaCopy
+
+	case *domain.ChannelMetadata:
+		// Create a copy of the channel metadata
+		metaCopy := &domain.ChannelMetadata{
+			ID:           m.ID,
+			Channel:      m.Channel,
+			URL:          m.URL,
+			Description:  m.Description,
+			VideoCount:   m.VideoCount,
+			PlaylistCount: m.PlaylistCount,
+			TotalStorage: m.TotalStorage,
+			TotalViews:   m.TotalViews,
+		}
+
+		// Deep copy thumbnails slice
+		if len(m.Thumbnails) > 0 {
+			metaCopy.Thumbnails = make([]domain.Thumbnail, len(m.Thumbnails))
+			copy(metaCopy.Thumbnails, m.Thumbnails)
+		}
+
+		// Deep copy recent videos slice (if populated)
+		if len(m.RecentVideos) > 0 {
+			metaCopy.RecentVideos = make([]domain.PlaylistItem, len(m.RecentVideos))
+			for i, item := range m.RecentVideos {
+				metaCopy.RecentVideos[i] = item
+				// Deep copy tags slice if present
+				if len(item.Tags) > 0 {
+					metaCopy.RecentVideos[i].Tags = make([]string, len(item.Tags))
+					copy(metaCopy.RecentVideos[i].Tags, item.Tags)
+				}
+			}
+		}
+
+		return metaCopy
+
+	case *domain.VideoMetadata:
+		// For video metadata, create a shallow copy (no nested slices to worry about)
+		metaCopy := &domain.VideoMetadata{
+			ID:          m.ID,
+			Title:       m.Title,
+			Description: m.Description,
+			Thumbnail:   m.Thumbnail,
+			Duration:    m.Duration,
+			DurationString: m.DurationString,
+			UploadDate:  m.UploadDate,
+			Uploader:    m.Uploader,
+			UploaderID:  m.UploaderID,
+			UploaderURL: m.UploaderURL,
+			Channel:     m.Channel,
+			ChannelID:   m.ChannelID,
+			ChannelURL:  m.ChannelURL,
+			ViewCount:   m.ViewCount,
+			LikeCount:   m.LikeCount,
+			Width:       m.Width,
+			Height:      m.Height,
+			Resolution:  m.Resolution,
+			FPS:         m.FPS,
+			Format:      m.Format,
+			FileSize:    m.FileSize,
+		}
+
+		// Deep copy tags slice
+		if len(m.Tags) > 0 {
+			metaCopy.Tags = make([]string, len(m.Tags))
+			copy(metaCopy.Tags, m.Tags)
+		}
+
+		// Deep copy categories slice
+		if len(m.Categories) > 0 {
+			metaCopy.Categories = make([]string, len(m.Categories))
+			copy(metaCopy.Categories, m.Categories)
+		}
+
+		return metaCopy
+
+	default:
+		// Should not happen, but return the original if unknown type
+		log.Warnf("Unknown metadata type for copying: %T", metadata)
+		return metadata
 	}
 }
 
