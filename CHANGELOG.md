@@ -1,3 +1,17 @@
+# [1.8.0](https://github.com/Fx64b/video-archiver/compare/0.1.7.0-BETA...0.1.8.0-BETA) (2025-10-25)
+
+
+### Bug Fixes
+
+* **download:** prevent context cancellation and goroutine leaks in async metadata ([ce95286](https://github.com/Fx64b/video-archiver/commit/ce95286f090f916fd281cb24842991bb6d75f7ae))
+* **download:** resolve race condition and improve temp dir cleanup ([2e43147](https://github.com/Fx64b/video-archiver/commit/2e431478597d03bf1b7d7c2fdac86e5f400943fe))
+* **download:** use explicit field copying to eliminate slice sharing ([082114b](https://github.com/Fx64b/video-archiver/commit/082114baf2a9c0c83b954487edaac407f702b084))
+
+
+### Features
+
+* **download:** implement parallel metadata extraction ([a7bb327](https://github.com/Fx64b/video-archiver/commit/a7bb327ead702fde6a9bf5a6caa7e0281533d7a2))
+
 # [1.7.0](https://github.com/Fx64b/video-archiver/compare/0.1.6.0-BETA...0.1.7.0-BETA) (2025-10-08)
 
 
