@@ -87,9 +87,15 @@ describe('websocket service', () => {
             store.disconnect()
         }
 
-        // Clear all listeners
+        // Clear all listeners and reset state
         store.listeners.clear()
         store.onReconnectCallbacks.clear()
+
+        // Manually reset reconnecting state
+        useWebSocketStore.setState({
+            isReconnecting: false,
+            reconnectTimer: null
+        })
     })
 
     afterEach(() => {
