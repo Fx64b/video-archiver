@@ -150,11 +150,10 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 
 	log.Infof("Download Path: %s", basePath)
 
-	// TODO: start metadata extraction in a separate goroutine and then do the downloading
-	// Extract metadata first
-	extractedMetadata, err := s.extractMetadata(ctx, job, basePath)
+	// Extract basic metadata first (fast - determines type)
+	extractedMetadata, err := s.extractBasicMetadata(ctx, job, basePath)
 	if err != nil {
-		log.WithError(err).Error("Failed to extract metadata")
+		log.WithError(err).Error("Failed to extract basic metadata")
 	}
 
 	isPlaylist := false
@@ -169,6 +168,27 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 		}
 	}
 
+	// Start metadata enhancement in parallel for playlists/channels
+	// This allows the download to proceed while detailed metadata is being fetched
+	if (isPlaylist || isChannel) && extractedMetadata != nil {
+		// Create a copy of the metadata to avoid race conditions
+		// The main goroutine may read the metadata while the async goroutine modifies it
+		metadataCopy := copyMetadata(extractedMetadata)
+
+		// Create a detached context that survives the main job context
+		// This prevents the goroutine from being abruptly terminated if the job is canceled
+		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+
+		// Track the goroutine to prevent leaks during service shutdown
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer asyncCancel()
+			s.enhanceMetadataAsync(asyncCtx, job, metadataCopy)
+		}()
+	}
+
+	// Start download immediately (runs in parallel with metadata enhancement)
 	if isPlaylist || isChannel {
 		// For playlists and channels, we may want to modify the download command
 		// to better track the individual videos
@@ -608,7 +628,9 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 	return nil
 }
 
-func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPath string) (domain.Metadata, error) {
+// extractBasicMetadata extracts basic metadata quickly using --flat-playlist
+// This is fast and provides enough information to determine the content type
+func (s *Service) extractBasicMetadata(ctx context.Context, job domain.Job, outputPath string) (domain.Metadata, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	metadataCmd := exec.CommandContext(ctx, "yt-dlp",
 		"--skip-download",
@@ -683,47 +705,50 @@ func (s *Service) extractMetadata(ctx context.Context, job domain.Job, outputPat
 		log.Debug("Sent immediate basic metadata update to UI")
 	}
 
-	// Phase 2: Enhance metadata for playlists and channels with detailed info
-	if isPlaylistOrChannel(extractedMetadata) {
-		log.Debug("Enhancing metadata for playlist/channel with detailed information")
-		err = s.enhanceMetadata(ctx, job, extractedMetadata)
-		if err != nil {
-			log.WithError(err).Warn("Failed to enhance metadata, continuing with basic metadata")
-
-			// Log the basic metadata to help debug
-			switch m := extractedMetadata.(type) {
-			case *domain.PlaylistMetadata:
-				log.Debugf("Basic playlist metadata: %d items", m.ItemCount)
-			case *domain.ChannelMetadata:
-				log.Debugf("Basic channel metadata: %d playlists, %d videos", m.PlaylistCount, m.VideoCount)
-			}
-		} else {
-			// Log enhanced metadata info
-			switch m := extractedMetadata.(type) {
-			case *domain.PlaylistMetadata:
-				log.Debugf("Enhanced playlist metadata: %d items in Items slice", len(m.Items))
-			case *domain.ChannelMetadata:
-				log.Debugf("Enhanced channel metadata: %d videos, %d recent videos", m.VideoCount, len(m.RecentVideos))
-			}
-
-			// Store and broadcast the enhanced metadata
-			if err := s.jobs.StoreMetadata(job.ID, extractedMetadata); err != nil {
-				log.WithError(err).Warn("Failed to store enhanced metadata")
-			} else {
-				enhancedMetadataUpdate := domain.MetadataUpdate{
-					JobID:    job.ID,
-					Metadata: extractedMetadata,
-				}
-				s.hub.broadcast <- enhancedMetadataUpdate
-				log.Debug("Sent enhanced metadata update to UI")
-			}
-		}
-	}
-
 	update.Progress = 1
 	s.hub.broadcast <- update
 
 	return extractedMetadata, nil
+}
+
+// enhanceMetadataAsync runs metadata enhancement in a goroutine for playlists/channels
+// This allows detailed metadata extraction to happen in parallel with the download
+func (s *Service) enhanceMetadataAsync(ctx context.Context, job domain.Job, basicMetadata domain.Metadata) {
+	log.WithField("jobID", job.ID).Info("Starting async metadata enhancement")
+
+	err := s.enhanceMetadata(ctx, job, basicMetadata)
+	if err != nil {
+		log.WithError(err).Warn("Failed to enhance metadata in background")
+
+		// Log the basic metadata to help debug
+		switch m := basicMetadata.(type) {
+		case *domain.PlaylistMetadata:
+			log.Debugf("Basic playlist metadata: %d items", m.ItemCount)
+		case *domain.ChannelMetadata:
+			log.Debugf("Basic channel metadata: %d playlists, %d videos", m.PlaylistCount, m.VideoCount)
+		}
+		return
+	}
+
+	// Log enhanced metadata info
+	switch m := basicMetadata.(type) {
+	case *domain.PlaylistMetadata:
+		log.Debugf("Enhanced playlist metadata: %d items in Items slice", len(m.Items))
+	case *domain.ChannelMetadata:
+		log.Debugf("Enhanced channel metadata: %d videos, %d recent videos", m.VideoCount, len(m.RecentVideos))
+	}
+
+	// Store and broadcast the enhanced metadata
+	if err := s.jobs.StoreMetadata(job.ID, basicMetadata); err != nil {
+		log.WithError(err).Warn("Failed to store enhanced metadata")
+	} else {
+		enhancedMetadataUpdate := domain.MetadataUpdate{
+			JobID:    job.ID,
+			Metadata: basicMetadata,
+		}
+		s.hub.broadcast <- enhancedMetadataUpdate
+		log.WithField("jobID", job.ID).Info("Sent enhanced metadata update to UI")
+	}
 }
 
 func (s *Service) enhanceMetadata(ctx context.Context, job domain.Job, basicMetadata domain.Metadata) error {
@@ -732,7 +757,13 @@ func (s *Service) enhanceMetadata(ctx context.Context, job domain.Job, basicMeta
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.WithError(err).Warnf("Failed to clean up temp directory: %s", tempDir)
+		} else {
+			log.Debugf("Cleaned up temp directory: %s", tempDir)
+		}
+	}()
 
 	// Run yt-dlp with --dump-single-json to get comprehensive info
 	cmd := exec.CommandContext(ctx, "yt-dlp",
@@ -915,6 +946,183 @@ func isPlaylistOrChannel(metadata domain.Metadata) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// copyMetadata creates a deep copy of metadata to avoid race conditions
+// when the metadata is accessed by multiple goroutines
+func copyMetadata(metadata domain.Metadata) domain.Metadata {
+	switch m := metadata.(type) {
+	case *domain.PlaylistMetadata:
+		// Create a copy of the playlist metadata
+		metaCopy := &domain.PlaylistMetadata{
+			ID:               m.ID,
+			Title:            m.Title,
+			Description:      m.Description,
+			UploaderID:       m.UploaderID,
+			UploaderURL:      m.UploaderURL,
+			ChannelID:        m.ChannelID,
+			Channel:          m.Channel,
+			ChannelURL:       m.ChannelURL,
+			ChannelFollowers: m.ChannelFollowers,
+			ItemCount:        m.ItemCount,
+			ViewCount:        m.ViewCount,
+			Type:             m.Type,
+		}
+
+		// Deep copy thumbnails slice
+		if len(m.Thumbnails) > 0 {
+			metaCopy.Thumbnails = make([]domain.Thumbnail, len(m.Thumbnails))
+			copy(metaCopy.Thumbnails, m.Thumbnails)
+		}
+
+		// Deep copy items slice (if populated)
+		if len(m.Items) > 0 {
+			metaCopy.Items = make([]domain.PlaylistItem, len(m.Items))
+			for i := range m.Items {
+				// Explicitly copy each field to avoid any shared slice references
+				metaCopy.Items[i] = domain.PlaylistItem{
+					ID:             m.Items[i].ID,
+					Title:          m.Items[i].Title,
+					Description:    m.Items[i].Description,
+					Thumbnail:      m.Items[i].Thumbnail,
+					Duration:       m.Items[i].Duration,
+					DurationString: m.Items[i].DurationString,
+					UploadDate:     m.Items[i].UploadDate,
+					ViewCount:      m.Items[i].ViewCount,
+					LikeCount:      m.Items[i].LikeCount,
+					VideoFile:      m.Items[i].VideoFile,
+					Channel:        m.Items[i].Channel,
+					ChannelID:      m.Items[i].ChannelID,
+					ChannelURL:     m.Items[i].ChannelURL,
+					Width:          m.Items[i].Width,
+					Height:         m.Items[i].Height,
+					Resolution:     m.Items[i].Resolution,
+					FileSize:       m.Items[i].FileSize,
+					Format:         m.Items[i].Format,
+					Extension:      m.Items[i].Extension,
+				}
+				// Deep copy tags slice (always create new slice, even if empty)
+				if len(m.Items[i].Tags) > 0 {
+					metaCopy.Items[i].Tags = make([]string, len(m.Items[i].Tags))
+					copy(metaCopy.Items[i].Tags, m.Items[i].Tags)
+				} else if m.Items[i].Tags != nil {
+					// Preserve empty non-nil slice
+					metaCopy.Items[i].Tags = make([]string, 0)
+				}
+			}
+		}
+
+		return metaCopy
+
+	case *domain.ChannelMetadata:
+		// Create a copy of the channel metadata
+		metaCopy := &domain.ChannelMetadata{
+			ID:           m.ID,
+			Channel:      m.Channel,
+			URL:          m.URL,
+			Description:  m.Description,
+			VideoCount:   m.VideoCount,
+			PlaylistCount: m.PlaylistCount,
+			TotalStorage: m.TotalStorage,
+			TotalViews:   m.TotalViews,
+		}
+
+		// Deep copy thumbnails slice
+		if len(m.Thumbnails) > 0 {
+			metaCopy.Thumbnails = make([]domain.Thumbnail, len(m.Thumbnails))
+			copy(metaCopy.Thumbnails, m.Thumbnails)
+		}
+
+		// Deep copy recent videos slice (if populated)
+		if len(m.RecentVideos) > 0 {
+			metaCopy.RecentVideos = make([]domain.PlaylistItem, len(m.RecentVideos))
+			for i := range m.RecentVideos {
+				// Explicitly copy each field to avoid any shared slice references
+				metaCopy.RecentVideos[i] = domain.PlaylistItem{
+					ID:             m.RecentVideos[i].ID,
+					Title:          m.RecentVideos[i].Title,
+					Description:    m.RecentVideos[i].Description,
+					Thumbnail:      m.RecentVideos[i].Thumbnail,
+					Duration:       m.RecentVideos[i].Duration,
+					DurationString: m.RecentVideos[i].DurationString,
+					UploadDate:     m.RecentVideos[i].UploadDate,
+					ViewCount:      m.RecentVideos[i].ViewCount,
+					LikeCount:      m.RecentVideos[i].LikeCount,
+					VideoFile:      m.RecentVideos[i].VideoFile,
+					Channel:        m.RecentVideos[i].Channel,
+					ChannelID:      m.RecentVideos[i].ChannelID,
+					ChannelURL:     m.RecentVideos[i].ChannelURL,
+					Width:          m.RecentVideos[i].Width,
+					Height:         m.RecentVideos[i].Height,
+					Resolution:     m.RecentVideos[i].Resolution,
+					FileSize:       m.RecentVideos[i].FileSize,
+					Format:         m.RecentVideos[i].Format,
+					Extension:      m.RecentVideos[i].Extension,
+				}
+				// Deep copy tags slice (always create new slice, even if empty)
+				if len(m.RecentVideos[i].Tags) > 0 {
+					metaCopy.RecentVideos[i].Tags = make([]string, len(m.RecentVideos[i].Tags))
+					copy(metaCopy.RecentVideos[i].Tags, m.RecentVideos[i].Tags)
+				} else if m.RecentVideos[i].Tags != nil {
+					// Preserve empty non-nil slice
+					metaCopy.RecentVideos[i].Tags = make([]string, 0)
+				}
+			}
+		}
+
+		return metaCopy
+
+	case *domain.VideoMetadata:
+		// For video metadata, create a shallow copy (no nested slices to worry about)
+		metaCopy := &domain.VideoMetadata{
+			ID:          m.ID,
+			Title:       m.Title,
+			Description: m.Description,
+			Thumbnail:   m.Thumbnail,
+			Duration:    m.Duration,
+			DurationString: m.DurationString,
+			UploadDate:  m.UploadDate,
+			Uploader:    m.Uploader,
+			UploaderID:  m.UploaderID,
+			UploaderURL: m.UploaderURL,
+			Channel:     m.Channel,
+			ChannelID:   m.ChannelID,
+			ChannelURL:  m.ChannelURL,
+			ViewCount:   m.ViewCount,
+			LikeCount:   m.LikeCount,
+			Width:       m.Width,
+			Height:      m.Height,
+			Resolution:  m.Resolution,
+			FPS:         m.FPS,
+			Format:      m.Format,
+			FileSize:    m.FileSize,
+		}
+
+		// Deep copy tags slice (always create new slice, even if empty)
+		if len(m.Tags) > 0 {
+			metaCopy.Tags = make([]string, len(m.Tags))
+			copy(metaCopy.Tags, m.Tags)
+		} else if m.Tags != nil {
+			// Preserve empty non-nil slice
+			metaCopy.Tags = make([]string, 0)
+		}
+
+		// Deep copy categories slice (always create new slice, even if empty)
+		if len(m.Categories) > 0 {
+			metaCopy.Categories = make([]string, len(m.Categories))
+			copy(metaCopy.Categories, m.Categories)
+		} else if m.Categories != nil {
+			// Preserve empty non-nil slice
+			metaCopy.Categories = make([]string, 0)
+		}
+
+		return metaCopy
+
+	default:
+		// Should not happen, but return the original if unknown type
+		log.Warnf("Unknown metadata type for copying: %T", metadata)
+		return metadata
 	}
 }
 
