@@ -161,6 +161,10 @@ export interface Settings {
   theme: string;
   download_quality: number /* int */;
   concurrent_downloads: number /* int */;
+  tools_default_format: string;
+  tools_default_quality: string;
+  tools_preserve_original: boolean;
+  tools_output_path: string;
   created_at: string /* RFC3339 */;
   updated_at: string /* RFC3339 */;
 }
@@ -185,3 +189,99 @@ export interface VideoStorageInfo {
   size: number /* int */;
   channel: string;
 }
+
+//////////
+// source: tools.go
+
+export type ToolsJobStatus = string;
+export const ToolsJobStatusPending: ToolsJobStatus = "pending";
+export const ToolsJobStatusProcessing: ToolsJobStatus = "processing";
+export const ToolsJobStatusComplete: ToolsJobStatus = "complete";
+export const ToolsJobStatusFailed: ToolsJobStatus = "failed";
+export const ToolsJobStatusCancelled: ToolsJobStatus = "cancelled";
+export type ToolsOperationType = string;
+export const OpTypeTrim: ToolsOperationType = "trim";
+export const OpTypeConcat: ToolsOperationType = "concat";
+export const OpTypeConvert: ToolsOperationType = "convert";
+export const OpTypeExtractAudio: ToolsOperationType = "extract_audio";
+export const OpTypeAdjustQuality: ToolsOperationType = "adjust_quality";
+export const OpTypeRotate: ToolsOperationType = "rotate";
+export const OpTypeWorkflow: ToolsOperationType = "workflow";
+export interface ToolsJob {
+  id: string;
+  operation_type: ToolsOperationType;
+  status: ToolsJobStatus;
+  progress: number /* float64 */; // 0-100
+  input_files: string[]; // Job IDs (videos, playlists, or channels)
+  input_type: string; // "videos", "playlist", "channel"
+  output_file: string; // Generated file path
+  parameters: { [key: string]: any}; // Operation-specific params
+  error_message?: string;
+  created_at: string /* RFC3339 */;
+  updated_at: string /* RFC3339 */;
+  completed_at?: string /* RFC3339 */;
+  estimated_size?: number /* int64 */; // Bytes
+  actual_size?: number /* int64 */; // Bytes
+}
+/**
+ * Operation-specific parameter structures
+ */
+export interface TrimParameters {
+  start_time: string; // HH:MM:SS or seconds
+  end_time: string; // HH:MM:SS or seconds
+  re_encode: boolean; // Force re-encode or stream copy
+}
+export interface ConcatParameters {
+  output_format: string; // mp4, mkv, etc.
+  re_encode: boolean; // Force re-encode if codecs differ
+  file_order: string[]; // Explicit ordering of input files
+  sort_by: string; // For channel: upload_date, title, duration
+  order: string; // asc or desc
+}
+export interface ConvertParameters {
+  output_format: string; // mp4, webm, mkv, avi, mov
+  video_codec: string; // h264, h265, vp9, etc.
+  audio_codec: string; // aac, mp3, opus, etc.
+  bitrate: string; // e.g., "2M", "5M"
+  preserve_quality: boolean; // Use original quality settings
+}
+export interface ExtractAudioParameters {
+  output_format: string; // mp3, aac, flac, wav, ogg
+  bitrate: string; // e.g., "128k", "320k"
+  sample_rate: number /* int */; // e.g., 44100, 48000
+}
+export interface AdjustQualityParameters {
+  resolution: string; // 480p, 720p, 1080p, etc.
+  bitrate: string; // Target bitrate
+  crf: number /* int */; // Constant Rate Factor (0-51)
+  two_pass: boolean; // Use two-pass encoding
+}
+export interface RotateParameters {
+  rotation: number /* int */; // 90, 180, 270 degrees
+  flip_h: boolean; // Flip horizontal
+  flip_v: boolean; // Flip vertical
+}
+export interface WorkflowParameters {
+  steps: WorkflowStep[]; // Ordered list of operations
+  keep_intermediate_files: boolean; // Save intermediate outputs
+  stop_on_error: boolean; // Stop workflow if step fails
+}
+export interface WorkflowStep {
+  operation: ToolsOperationType; // Operation type for this step
+  parameters: { [key: string]: any}; // Parameters for this operation
+  output_name?: string; // Custom name for output
+}
+/**
+ * Progress update for WebSocket
+ */
+export interface ToolsProgressUpdate {
+  jobID: string;
+  status: ToolsJobStatus;
+  progress: number /* float64 */;
+  current_step: string; // e.g., "Analyzing", "Encoding", "Finalizing"
+  time_elapsed: number /* int */; // Seconds
+  time_remaining: number /* int */; // Estimated seconds
+  error?: string;
+}
+
+export type ToolsRepository = any;
