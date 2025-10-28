@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-chi/chi"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	log "github.com/sirupsen/logrus"
 	"video-archiver/internal/api/handlers"
 	"video-archiver/internal/config"
 	"video-archiver/internal/repositories/sqlite"
@@ -73,7 +75,14 @@ __     _____ ____  _____ ___
 	}
 	defer downloadService.Stop()
 
-	handler := handlers.NewHandler(downloadService, os.Getenv("DOWNLOAD_PATH"), settingsRepo)
+	// Parse allowed origins from config (comma-separated list)
+	allowedOrigins := strings.Split(cfg.Server.AllowedOrigins, ",")
+	for i := range allowedOrigins {
+		allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+	}
+	log.Infof("CORS allowed origins: %v", allowedOrigins)
+
+	handler := handlers.NewHandler(downloadService, os.Getenv("DOWNLOAD_PATH"), settingsRepo, allowedOrigins)
 
 	apiRouter := chi.NewRouter()
 	handler.RegisterRoutes(apiRouter)

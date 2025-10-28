@@ -6,6 +6,7 @@
 # build
 *.exe
 /services/backend/main
+/services/backend/api
 
 # local env files
 .env*.local

@@ -28,10 +28,14 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
     connect: () => {
         const { socket, disconnect } = get()
 
-        if (socket?.readyState === WebSocket.OPEN) return
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            return
+        }
 
         // Close existing socket if it exists but isn't open
-        if (socket) disconnect()
+        if (socket) {
+            disconnect()
+        }
 
         const wsUrl = process.env.NEXT_PUBLIC_SERVER_URL_WS + '/ws'
         const newSocket = new WebSocket(wsUrl)
@@ -93,7 +97,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
 
         newSocket.onclose = () => {
             console.log('WebSocket connection closed')
-            set({ isConnected: false })
+            set({ isConnected: false, socket: null })
 
             const { reconnectTimer } = get()
             if (!reconnectTimer) {
