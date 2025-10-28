@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,12 @@ type Config struct {
 	Concurrency        int
 }
 
+// activeJob tracks a running job and its cancellation function
+type activeJob struct {
+	job    *domain.ToolsJob
+	cancel context.CancelFunc
+}
+
 type Service struct {
 	config         *Config
 	toolsRepo      domain.ToolsRepository
@@ -34,7 +41,7 @@ type Service struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	ffmpeg         *FFmpegWrapper
-	activeJobs     sync.Map // map[string]*domain.ToolsJob
+	activeJobs     sync.Map // map[string]*activeJob
 	downloadPath   string
 	processedPath  string
 }
@@ -139,6 +146,14 @@ func (s *Service) CancelJob(id string) error {
 		return fmt.Errorf("cannot cancel completed or failed job")
 	}
 
+	// Cancel the running FFmpeg process if it's active
+	if activeJobVal, ok := s.activeJobs.Load(id); ok {
+		if aj, ok := activeJobVal.(*activeJob); ok && aj.cancel != nil {
+			aj.cancel() // This will stop the FFmpeg process
+			log.WithField("job_id", id).Info("Cancelled running FFmpeg process")
+		}
+	}
+
 	job.Status = domain.ToolsJobStatusCancelled
 	now := time.Now()
 	job.CompletedAt = &now
@@ -165,14 +180,22 @@ func (s *Service) processJobs() {
 				return
 			}
 
-			s.activeJobs.Store(job.ID, job)
-			s.processJob(job)
+			// Create cancellable context for this job
+			jobCtx, cancelFunc := context.WithCancel(s.ctx)
+
+			// Store job with cancel function
+			s.activeJobs.Store(job.ID, &activeJob{
+				job:    job,
+				cancel: cancelFunc,
+			})
+
+			s.processJob(jobCtx, job)
 			s.activeJobs.Delete(job.ID)
 		}
 	}
 }
 
-func (s *Service) processJob(job *domain.ToolsJob) {
+func (s *Service) processJob(ctx context.Context, job *domain.ToolsJob) {
 	log.WithField("job_id", job.ID).WithField("operation", job.OperationType).Info("Processing tools job")
 
 	// Update status to processing
@@ -369,10 +392,18 @@ func (s *Service) resolveFilePaths(jobIDs []string) ([]string, error) {
 			title = "Unknown"
 		}
 
-		// Clean filename
+		// Clean filename - sanitize BOTH channel directory and title to prevent path traversal
+		channelDir = cleanFilename(channelDir)
 		title = cleanFilename(title)
 
-		filePath := filepath.Join(s.downloadPath, channelDir, title+".mp4")
+		// Construct path and clean it to resolve any relative path components
+		filePath := filepath.Clean(filepath.Join(s.downloadPath, channelDir, title+".mp4"))
+
+		// Security: Validate the resolved path is still within the download directory
+		cleanDownloadPath := filepath.Clean(s.downloadPath)
+		if !strings.HasPrefix(filePath, cleanDownloadPath) {
+			return nil, fmt.Errorf("invalid file path: potential path traversal detected for job %s", jobID)
+		}
 
 		// Check if file exists
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {

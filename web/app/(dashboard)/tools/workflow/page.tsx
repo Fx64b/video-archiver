@@ -31,7 +31,7 @@ const OPERATION_TEMPLATES: Record<string, { label: string; defaultParams: Record
     },
     extract_audio: {
         label: 'Extract Audio',
-        defaultParams: { format: 'mp3', bitrate: '192k', sample_rate: 44100 },
+        defaultParams: { output_format: 'mp3', bitrate: '192k', sample_rate: 44100 },
     },
     convert: {
         label: 'Convert Format',
@@ -54,7 +54,7 @@ const WORKFLOW_PRESETS = {
         description: 'Merge videos and extract audio (ideal for podcasts)',
         steps: [
             { operation: 'concat', parameters: { output_format: 'mp4', re_encode: false } },
-            { operation: 'extract_audio', parameters: { format: 'mp3', bitrate: '192k', sample_rate: 44100 } },
+            { operation: 'extract_audio', parameters: { output_format: 'mp3', bitrate: '192k', sample_rate: 44100 } },
         ],
     },
     trim_and_convert: {
@@ -228,9 +228,9 @@ export default function WorkflowPage() {
                             <div>
                                 <Label className="text-xs">Format</Label>
                                 <Select
-                                    value={step.parameters.format}
+                                    value={step.parameters.output_format}
                                     onValueChange={(value) =>
-                                        updateStepParameter(index, 'format', value)
+                                        updateStepParameter(index, 'output_format', value)
                                     }
                                 >
                                     <SelectTrigger className="h-8">

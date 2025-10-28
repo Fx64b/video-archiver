@@ -100,17 +100,16 @@ func (f *FFmpegWrapper) Concat(ctx context.Context, inputs []string, output stri
 	if err != nil {
 		return fmt.Errorf("create concat list: %w", err)
 	}
+	defer file.Close() // Ensure file is closed even on error
 
 	for _, input := range inputs {
 		// Make paths absolute
 		absPath, err := filepath.Abs(input)
 		if err != nil {
-			file.Close()
 			return fmt.Errorf("get absolute path: %w", err)
 		}
 		fmt.Fprintf(file, "file '%s'\n", absPath)
 	}
-	file.Close()
 
 	args := []string{
 		"-f", "concat",

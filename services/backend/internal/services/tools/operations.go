@@ -10,6 +10,35 @@ import (
 	"video-archiver/internal/domain"
 )
 
+// createThrottledCallback creates a progress callback that throttles database updates
+// to at most once per second, while still sending WebSocket updates on every call
+func (s *Service) createThrottledCallback(job *domain.ToolsJob, stepDescription string) func(float64, time.Duration) {
+	var lastUpdate time.Time
+
+	return func(progress float64, elapsed time.Duration) {
+		job.Progress = progress
+
+		// Only update database if >1 second since last update or at 100%
+		if time.Since(lastUpdate) > time.Second || progress >= 100 {
+			if err := s.toolsRepo.Update(job); err != nil {
+				log.WithError(err).Warn("Failed to update job progress")
+			}
+			lastUpdate = time.Now()
+		}
+
+		// Calculate time estimates
+		estimatedTotal := time.Duration(0)
+		if progress > 0 {
+			estimatedTotal = time.Duration(float64(elapsed) / (progress / 100))
+		}
+		remaining := estimatedTotal - elapsed
+
+		// Send WebSocket update on every callback (lightweight)
+		s.sendProgress(job.ID, job.Status, progress, stepDescription,
+			int(elapsed.Seconds()), int(remaining.Seconds()))
+	}
+}
+
 // executeTrim handles video trimming operation
 func (s *Service) executeTrim(job *domain.ToolsJob, inputPath, outputPath string) error {
 	params, err := parseParameters[domain.TrimParameters](job.Parameters)
@@ -21,20 +50,7 @@ func (s *Service) executeTrim(job *domain.ToolsJob, inputPath, outputPath string
 		WithField("start", params.StartTime).WithField("end", params.EndTime).Info("Executing trim operation")
 
 	startTime := time.Now()
-	callback := func(progress float64, elapsed time.Duration) {
-		job.Progress = progress
-		if err := s.toolsRepo.Update(job); err != nil {
-			log.WithError(err).Warn("Failed to update job progress")
-		}
-
-		estimatedTotal := time.Duration(0)
-		if progress > 0 {
-			estimatedTotal = time.Duration(float64(elapsed) / (progress / 100))
-		}
-		remaining := estimatedTotal - elapsed
-
-		s.sendProgress(job.ID, job.Status, progress, "Trimming video", int(elapsed.Seconds()), int(remaining.Seconds()))
-	}
+	callback := s.createThrottledCallback(job, "Trimming video")
 
 	err = s.ffmpeg.Trim(s.ctx, inputPath, outputPath, params.StartTime, params.EndTime, params.ReEncode, callback)
 	if err != nil {
@@ -63,21 +79,7 @@ func (s *Service) executeConcat(job *domain.ToolsJob, inputPaths []string, outpu
 	}
 
 	startTime := time.Now()
-	callback := func(progress float64, elapsed time.Duration) {
-		job.Progress = progress
-		if err := s.toolsRepo.Update(job); err != nil {
-			log.WithError(err).Warn("Failed to update job progress")
-		}
-
-		estimatedTotal := time.Duration(0)
-		if progress > 0 {
-			estimatedTotal = time.Duration(float64(elapsed) / (progress / 100))
-		}
-		remaining := estimatedTotal - elapsed
-
-		s.sendProgress(job.ID, job.Status, progress, fmt.Sprintf("Concatenating %d videos", len(inputPaths)),
-			int(elapsed.Seconds()), int(remaining.Seconds()))
-	}
+	callback := s.createThrottledCallback(job, fmt.Sprintf("Concatenating %d videos", len(inputPaths)))
 
 	err = s.ffmpeg.Concat(s.ctx, inputPaths, outputPath, params.ReEncode, callback)
 	if err != nil {
@@ -99,21 +101,7 @@ func (s *Service) executeConvert(job *domain.ToolsJob, inputPath, outputPath str
 		WithField("format", params.OutputFormat).Info("Executing convert operation")
 
 	startTime := time.Now()
-	callback := func(progress float64, elapsed time.Duration) {
-		job.Progress = progress
-		if err := s.toolsRepo.Update(job); err != nil {
-			log.WithError(err).Warn("Failed to update job progress")
-		}
-
-		estimatedTotal := time.Duration(0)
-		if progress > 0 {
-			estimatedTotal = time.Duration(float64(elapsed) / (progress / 100))
-		}
-		remaining := estimatedTotal - elapsed
-
-		s.sendProgress(job.ID, job.Status, progress, fmt.Sprintf("Converting to %s", params.OutputFormat),
-			int(elapsed.Seconds()), int(remaining.Seconds()))
-	}
+	callback := s.createThrottledCallback(job, fmt.Sprintf("Converting to %s", params.OutputFormat))
 
 	err = s.ffmpeg.Convert(s.ctx, inputPath, outputPath, params.VideoCodec, params.AudioCodec, params.Bitrate, callback)
 	if err != nil {
@@ -135,21 +123,7 @@ func (s *Service) executeExtractAudio(job *domain.ToolsJob, inputPath, outputPat
 		WithField("format", params.OutputFormat).WithField("bitrate", params.Bitrate).Info("Executing extract audio operation")
 
 	startTime := time.Now()
-	callback := func(progress float64, elapsed time.Duration) {
-		job.Progress = progress
-		if err := s.toolsRepo.Update(job); err != nil {
-			log.WithError(err).Warn("Failed to update job progress")
-		}
-
-		estimatedTotal := time.Duration(0)
-		if progress > 0 {
-			estimatedTotal = time.Duration(float64(elapsed) / (progress / 100))
-		}
-		remaining := estimatedTotal - elapsed
-
-		s.sendProgress(job.ID, job.Status, progress, fmt.Sprintf("Extracting audio to %s", params.OutputFormat),
-			int(elapsed.Seconds()), int(remaining.Seconds()))
-	}
+	callback := s.createThrottledCallback(job, fmt.Sprintf("Extracting audio to %s", params.OutputFormat))
 
 	err = s.ffmpeg.ExtractAudio(s.ctx, inputPath, outputPath, params.OutputFormat, params.Bitrate, params.SampleRate, callback)
 	if err != nil {
@@ -171,10 +145,17 @@ func (s *Service) executeAdjustQuality(job *domain.ToolsJob, inputPath, outputPa
 		WithField("resolution", params.Resolution).WithField("crf", params.CRF).Info("Executing adjust quality operation")
 
 	startTime := time.Now()
+	// Custom throttled callback for adjust quality with dynamic step descriptions
+	var lastUpdate time.Time
 	callback := func(progress float64, elapsed time.Duration) {
 		job.Progress = progress
-		if err := s.toolsRepo.Update(job); err != nil {
-			log.WithError(err).Warn("Failed to update job progress")
+
+		// Throttle database updates to at most once per second
+		if time.Since(lastUpdate) > time.Second || progress >= 100 {
+			if err := s.toolsRepo.Update(job); err != nil {
+				log.WithError(err).Warn("Failed to update job progress")
+			}
+			lastUpdate = time.Now()
 		}
 
 		estimatedTotal := time.Duration(0)
@@ -216,20 +197,7 @@ func (s *Service) executeRotate(job *domain.ToolsJob, inputPath, outputPath stri
 		Info("Executing rotate operation")
 
 	startTime := time.Now()
-	callback := func(progress float64, elapsed time.Duration) {
-		job.Progress = progress
-		if err := s.toolsRepo.Update(job); err != nil {
-			log.WithError(err).Warn("Failed to update job progress")
-		}
-
-		estimatedTotal := time.Duration(0)
-		if progress > 0 {
-			estimatedTotal = time.Duration(float64(elapsed) / (progress / 100))
-		}
-		remaining := estimatedTotal - elapsed
-
-		s.sendProgress(job.ID, job.Status, progress, "Rotating video", int(elapsed.Seconds()), int(remaining.Seconds()))
-	}
+	callback := s.createThrottledCallback(job, "Rotating video")
 
 	err = s.ffmpeg.Rotate(s.ctx, inputPath, outputPath, params.Rotation, params.FlipH, params.FlipV, callback)
 	if err != nil {
@@ -250,7 +218,21 @@ func (s *Service) executeWorkflow(job *domain.ToolsJob, inputPaths []string) err
 	log.WithField("job_id", job.ID).WithField("step_count", len(params.Steps)).Info("Executing workflow")
 
 	var currentOutput string
+	var intermediateFiles []string // Track all intermediate files for cleanup
 	startTime := time.Now()
+
+	// Defer cleanup of intermediate files if requested
+	defer func() {
+		if !params.KeepIntermediateFiles && len(intermediateFiles) > 0 {
+			for _, file := range intermediateFiles {
+				if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+					log.WithError(err).WithField("file", file).Warn("Failed to cleanup intermediate file")
+				} else {
+					log.WithField("file", file).Debug("Cleaned up intermediate file")
+				}
+			}
+		}
+	}()
 
 	for i, step := range params.Steps {
 		stepNum := i + 1
@@ -360,14 +342,10 @@ func (s *Service) executeWorkflow(job *domain.ToolsJob, inputPaths []string) err
 		// Update current output for next step
 		currentOutput = stepOutput
 
-		// Cleanup intermediate files if not keeping them
-		if !params.KeepIntermediateFiles && i > 0 && i < len(params.Steps)-1 {
-			// Don't delete the final output or first intermediate
-			if prevOutput := stepInputs[0]; prevOutput != inputPaths[0] {
-				if err := os.Remove(prevOutput); err != nil {
-					log.WithError(err).Warn("Failed to cleanup intermediate file")
-				}
-			}
+		// Track intermediate files (all except the final output)
+		// Skip the first step's output if we're not keeping intermediates, as it will be cleaned later
+		if i < len(params.Steps)-1 {
+			intermediateFiles = append(intermediateFiles, stepOutput)
 		}
 	}
 

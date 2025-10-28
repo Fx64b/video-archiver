@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS tools_jobs (
 CREATE INDEX IF NOT EXISTS idx_tools_jobs_status ON tools_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_tools_jobs_created_at ON tools_jobs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tools_jobs_operation_type ON tools_jobs(operation_type);
+-- Composite index for filtered pagination queries (e.g., "get pending jobs ordered by date")
+CREATE INDEX IF NOT EXISTS idx_tools_jobs_status_created ON tools_jobs(status, created_at DESC);
 
 INSERT OR IGNORE INTO settings (id, theme, download_quality, concurrent_downloads, tools_default_format, tools_default_quality, tools_preserve_original, tools_output_path)
 VALUES (1, 'system', 1080, 2, 'mp4', '1080p', 1, './data/processed');
