@@ -31,10 +31,10 @@ COPY --from=builder /build/main .
 COPY --from=builder /build/db/schema.sql ./db/
 
 # Setup permissions
-RUN mkdir -p /app/data/downloads /app/data/db /app/cache && \
+RUN mkdir -p /app/data/downloads /app/data/db /app/data/processed /app/cache && \
     chown -R appuser:appgroup /app && \
     chmod -R 755 /app/data && \
-    chmod -R 777 /app/data/db
+    chmod -R 777 /app/data/db /app/data/processed
 
 # Set environment and switch user
 ENV XDG_CACHE_HOME=/app/cache
