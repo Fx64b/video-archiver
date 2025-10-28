@@ -279,14 +279,6 @@ func (s *Service) executeWorkflow(job *domain.ToolsJob, inputPaths []string) err
 			}
 		}
 
-		// Create a temporary job for this step (for progress tracking)
-		stepJob := &domain.ToolsJob{
-			ID:            job.ID,
-			OperationType: step.Operation,
-			Status:        domain.ToolsJobStatusProcessing,
-			Parameters:    step.Parameters,
-		}
-
 		// Execute the step
 		var stepErr error
 		stepCallback := func(progress float64, elapsed time.Duration) {
