@@ -65,15 +65,18 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
                 const { listeners } = get()
 
                 // Determine message type with a more robust check
-                const type =
-                    data && 'metadata' in data
-                        ? 'metadata'
-                        : data &&
-                            'jobID' in data &&
-                            ('progress' in data ||
-                                'currentVideoProgress' in data)
-                          ? 'progress'
-                          : 'unknown'
+                let type = 'unknown'
+
+                if (data && 'metadata' in data) {
+                    type = 'metadata'
+                } else if (data && 'jobID' in data) {
+                    // Check if it's a tools progress update (has current_step or time_elapsed)
+                    if ('current_step' in data || 'time_elapsed' in data || 'time_remaining' in data) {
+                        type = 'tools-progress'
+                    } else if ('progress' in data || 'currentVideoProgress' in data) {
+                        type = 'progress'
+                    }
+                }
 
                 if (type !== 'unknown') {
                     const typeListeners = listeners.get(type)

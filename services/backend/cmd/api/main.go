@@ -10,6 +10,7 @@ import (
 	"video-archiver/internal/config"
 	"video-archiver/internal/repositories/sqlite"
 	"video-archiver/internal/services/download"
+	"video-archiver/internal/services/tools"
 	"video-archiver/internal/util/version"
 )
 
@@ -58,6 +59,7 @@ __     _____ ____  _____ ___
 
 	jobRepo := sqlite.NewJobRepository(db)
 	settingsRepo := sqlite.NewSettingsRepository(db)
+	toolsRepo := sqlite.NewToolsRepository(db)
 
 	fmt.Println("Starting Download Service...")
 	downloadService := download.NewService(&download.Config{
@@ -73,10 +75,32 @@ __     _____ ____  _____ ___
 	}
 	defer downloadService.Stop()
 
+	fmt.Println("Starting Tools Service...")
+	processedPath := os.Getenv("PROCESSED_PATH")
+	if processedPath == "" {
+		processedPath = "./data/processed"
+	}
+
+	toolsService := tools.NewService(&tools.Config{
+		ToolsRepository:    toolsRepo,
+		JobRepository:      jobRepo,
+		SettingsRepository: settingsRepo,
+		DownloadPath:       cfg.Server.DownloadPath,
+		ProcessedPath:      processedPath,
+		Concurrency:        2, // 2 concurrent tools jobs by default
+	})
+
+	if err := toolsService.Start(); err != nil {
+		log.Fatalf("Failed to start tools service: %v", err)
+	}
+	defer toolsService.Stop()
+
 	handler := handlers.NewHandler(downloadService, os.Getenv("DOWNLOAD_PATH"), settingsRepo)
+	toolsHandler := handlers.NewToolsHandler(toolsService)
 
 	apiRouter := chi.NewRouter()
 	handler.RegisterRoutes(apiRouter)
+	toolsHandler.RegisterRoutes(apiRouter)
 
 	wsRouter := chi.NewRouter()
 	handler.RegisterWSRoutes(wsRouter)
