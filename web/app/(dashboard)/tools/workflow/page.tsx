@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Workflow, ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { Workflow, ArrowLeft, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 import VideoSelector from '@/components/tools/VideoSelector'
@@ -17,10 +17,10 @@ import { Input } from '@/components/ui/input'
 
 interface WorkflowStep {
     operation: string
-    parameters: Record<string, any>
+    parameters: Record<string, unknown>
 }
 
-const OPERATION_TEMPLATES: Record<string, { label: string; defaultParams: Record<string, any> }> = {
+const OPERATION_TEMPLATES: Record<string, { label: string; defaultParams: Record<string, unknown> }> = {
     trim: {
         label: 'Trim',
         defaultParams: { start_time: '00:00:00', end_time: '00:00:10', re_encode: false },
@@ -88,7 +88,7 @@ export default function WorkflowPage() {
         setSteps(steps.filter((_, i) => i !== index))
     }
 
-    const updateStepParameter = (stepIndex: number, paramKey: string, value: any) => {
+    const updateStepParameter = (stepIndex: number, paramKey: string, value: unknown) => {
         const newSteps = [...steps]
         newSteps[stepIndex].parameters[paramKey] = value
         setSteps(newSteps)
@@ -180,7 +180,7 @@ export default function WorkflowPage() {
                                     <Label className="text-xs">Start Time</Label>
                                     <Input
                                         type="text"
-                                        value={step.parameters.start_time}
+                                        value={String(step.parameters.start_time ?? '')}
                                         onChange={(e) =>
                                             updateStepParameter(index, 'start_time', e.target.value)
                                         }
@@ -191,7 +191,7 @@ export default function WorkflowPage() {
                                     <Label className="text-xs">End Time</Label>
                                     <Input
                                         type="text"
-                                        value={step.parameters.end_time}
+                                        value={String(step.parameters.end_time ?? '')}
                                         onChange={(e) =>
                                             updateStepParameter(index, 'end_time', e.target.value)
                                         }
@@ -206,7 +206,7 @@ export default function WorkflowPage() {
                         <div>
                             <Label className="text-xs">Output Format</Label>
                             <Select
-                                value={step.parameters.output_format}
+                                value={String(step.parameters.output_format ?? 'mp4')}
                                 onValueChange={(value) =>
                                     updateStepParameter(index, 'output_format', value)
                                 }
@@ -228,7 +228,7 @@ export default function WorkflowPage() {
                             <div>
                                 <Label className="text-xs">Format</Label>
                                 <Select
-                                    value={step.parameters.output_format}
+                                    value={String(step.parameters.output_format ?? 'mp3')}
                                     onValueChange={(value) =>
                                         updateStepParameter(index, 'output_format', value)
                                     }
@@ -247,7 +247,7 @@ export default function WorkflowPage() {
                             <div>
                                 <Label className="text-xs">Bitrate</Label>
                                 <Select
-                                    value={step.parameters.bitrate}
+                                    value={String(step.parameters.bitrate ?? '192k')}
                                     onValueChange={(value) =>
                                         updateStepParameter(index, 'bitrate', value)
                                     }
@@ -270,7 +270,7 @@ export default function WorkflowPage() {
                         <div>
                             <Label className="text-xs">Format</Label>
                             <Select
-                                value={step.parameters.format}
+                                value={String(step.parameters.format ?? 'mp4')}
                                 onValueChange={(value) =>
                                     updateStepParameter(index, 'format', value)
                                 }
@@ -292,7 +292,7 @@ export default function WorkflowPage() {
                         <div>
                             <Label className="text-xs">Degrees</Label>
                             <Select
-                                value={String(step.parameters.degrees)}
+                                value={String(step.parameters.degrees ?? 90)}
                                 onValueChange={(value) =>
                                     updateStepParameter(index, 'degrees', parseInt(value))
                                 }

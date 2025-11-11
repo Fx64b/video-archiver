@@ -4,12 +4,21 @@ import { JobWithMetadata } from '@/types'
 import useToolsState from '@/store/toolsState'
 import { Check, AlertCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+
+// Type for metadata with video_count (used in playlists and channels)
+interface MetadataWithVideoCount {
+    video_count?: number
+    title?: string
+    thumbnail?: string
+    duration_string?: string
+}
 
 interface PaginatedResponse {
     items: JobWithMetadata[]
@@ -120,10 +129,12 @@ export default function VideoSelector({
                 <CardContent className="p-0">
                     <div className="relative aspect-video">
                         {item.metadata.thumbnail && (
-                            <img
+                            <Image
                                 src={item.metadata.thumbnail}
                                 alt={item.metadata.title || 'Thumbnail'}
-                                className="w-full h-full object-cover rounded-t-lg"
+                                fill
+                                className="object-cover rounded-t-lg"
+                                unoptimized
                             />
                         )}
                         {isSelected && (
@@ -143,12 +154,12 @@ export default function VideoSelector({
                         )}
                         {activeTab === 'playlists' && (
                             <p className="text-sm text-muted-foreground">
-                                {(item.metadata as any).video_count || 0} videos
+                                {(item.metadata as MetadataWithVideoCount).video_count || 0} videos
                             </p>
                         )}
                         {activeTab === 'channels' && (
                             <p className="text-sm text-muted-foreground">
-                                {(item.metadata as any).video_count || 0} videos
+                                {(item.metadata as MetadataWithVideoCount).video_count || 0} videos
                             </p>
                         )}
                     </div>
