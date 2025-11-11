@@ -16,29 +16,41 @@ Video Archiver allows you to download and organize videos from YouTube for offli
 - Real-time download progress tracking via WebSocket
 - Queue management for multiple downloads
 - Modern responsive web interface
-- Dark/Light mode support
-- Dashboard with stats about your media collection
-- Basic metadata extraction and display
+- Dark/Light/System theme support
+- Dashboard with comprehensive statistics about your media collection
+- Complete metadata extraction and display (videos, playlists, channels)
+- Quality selection (360p, 480p, 720p, 1080p, 1440p, 4K)
+- Configurable concurrent downloads (1-10 simultaneous downloads)
+- **Video Processing Tools:**
+  - Trim videos to specific time ranges
+  - Concatenate multiple videos into one
+  - Extract audio in various formats (MP3, AAC, FLAC, WAV)
+  - Convert between video formats (MP4, WebM, AVI, MKV)
+  - Adjust video quality and bitrate
+  - Rotate videos (90°, 180°, 270°)
+  - Create custom workflows (chain multiple operations)
+- Real-time progress tracking for tool operations
 
 ### Planned Features
-- Advanced download options (quality selection, format selection)
-- Media conversion tools (video to audio, format conversion)
 - Enhanced metadata management and organization
 - Advanced search and categorization
 - Mobile-friendly streaming interface
 - User authentication and multiple user support
 - Download scheduling
-- API for integrations with other applications
+- API documentation for integrations with other applications
+- Playlist and channel organization features
 
 ## Technology Stack
 
-- **Backend**: Go 1.23+ with Chi router
-- **Frontend**: Next.js 15+ with TypeScript
-- **UI**: shadcn/ui components
-- **State Management**: Zustand
-- **Real-time Updates**: WebSocket
-- **Database**: SQLite
+- **Backend**: Go 1.23.2 with Chi router
+- **Frontend**: Next.js 15.4.7 with TypeScript 5.8.3
+- **UI**: shadcn/ui components with Radix UI primitives
+- **State Management**: Zustand 5.0+
+- **Real-time Updates**: WebSocket (Gorilla WebSocket)
+- **Database**: SQLite 3
 - **Media Handling**: yt-dlp and ffmpeg
+- **Styling**: Tailwind CSS 4.1.4
+- **Runtime**: React 19.1.0
 
 ## Installation
 
@@ -74,29 +86,34 @@ The web interface will be available at `http://localhost:3000`
 ./run.sh [options]
 
 Options:
-  --clear         Clear the database and downloads
-  --build         Rebuild the containers and regenerate TypeScript types
-  --debug         Enable debug logging in backend
-  --backend-only  Start only the backend service
-  --help|-h       Show help message
+  --clear           Clear the database and downloads
+  --build           Rebuild the containers and regenerate TypeScript types
+  --debug           Enable debug logging in backend
+  --backend-only    Start only the backend service
+  --test            Run backend unit tests
+  --test-verbose    Run backend tests with verbose output
+  --test-coverage   Run backend tests with coverage report
+  --help|-h         Show help message
 ```
 
 Common use cases:
 - Fresh start: `./run.sh --clear --build`
 - Development: `./run.sh --build --debug`
 - Production: `./run.sh`
+- Testing: `./run.sh --test` or `./run.sh --test-coverage`
 
 ### Manual Setup (Without Docker)
 
 #### Backend Requirements
-- Go 1.23+
-- SQLite
-- yt-dlp
-- ffmpeg
+- Go 1.23.2 or higher
+- SQLite 3
+- yt-dlp (latest version recommended)
+- ffmpeg (latest version recommended)
+- tygo (for TypeScript type generation): `go install github.com/gzuidhof/tygo@latest`
 
 #### Frontend Requirements
-- Node.js 20+
-- pnpm
+- Node.js 20+ (LTS recommended)
+- pnpm 9+
 
 Refer to the backend and frontend directories for specific setup instructions.
 
@@ -120,6 +137,7 @@ The application can be configured through environment variables:
 ### Backend
 - `DEBUG`: Enable debug logging (default: false)
 - `DOWNLOAD_PATH`: Directory for downloaded media (default: ./data/downloads)
+- `PROCESSED_PATH`: Directory for processed/converted videos (default: ./data/processed)
 - `DATABASE_PATH`: Path to SQLite database (default: ./data/db/video-archiver.db)
 - `PORT`: API server port (default: 8080)
 - `WS_PORT`: WebSocket server port (default: 8081)
@@ -187,5 +205,6 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 See the [open issues](https://github.com/Fx64b/video-archiver/issues) for a list of proposed features and known issues.
 
-- Q3 2025: Media streaming interface & Tools
+- ✅ ~~Q3 2025: Media streaming interface & Tools~~ (Tools completed)
 - Q4 2025: Advanced search and tagging system
+- 2026: User authentication, API documentation, and mobile-friendly streaming
