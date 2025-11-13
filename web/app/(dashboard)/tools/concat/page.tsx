@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Layers, ArrowLeft } from 'lucide-react'
+import { Layers, ArrowLeft, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 
-import VideoSelector from '@/components/tools/VideoSelector'
 import useToolsState from '@/store/toolsState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,6 +22,13 @@ export default function ConcatPage() {
     const [reEncode, setReEncode] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Redirect back if insufficient selection
+    useEffect(() => {
+        if (selectedInputs.length < 2) {
+            router.push('/tools')
+        }
+    }, [selectedInputs.length, router])
 
     const handleSubmit = async () => {
         if (selectedInputs.length < 2) {
@@ -67,8 +74,17 @@ export default function ConcatPage() {
         }
     }
 
+    const handleCancel = () => {
+        clearSelectedInputs()
+        router.push('/tools')
+    }
+
+    if (selectedInputs.length < 2) {
+        return null
+    }
+
     return (
-        <div className="flex min-h-screen w-full flex-col gap-8">
+        <div className="flex min-h-screen w-full flex-col gap-6">
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Link href="/tools">
@@ -77,29 +93,29 @@ export default function ConcatPage() {
                     </Button>
                 </Link>
                 <div className="flex items-center gap-3">
-                    <div className="text-purple-500">
-                        <Layers className="w-8 h-8" />
+                    <div className="text-muted-foreground">
+                        <Layers className="w-6 h-6" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold">Concatenate Videos</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl font-bold">Concatenate Videos</h1>
+                        <p className="text-sm text-muted-foreground">
                             Merge multiple videos into a single file
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Configuration Panel */}
-                <div className="lg:col-span-1">
-                    <Card className="sticky top-8">
+                <div className="lg:col-span-1 space-y-6">
+                    <Card>
                         <CardHeader>
                             <CardTitle>Configuration</CardTitle>
                             <CardDescription>
                                 Configure concatenation settings
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-6">
+                        <CardContent className="space-y-4">
                             {/* Output Format */}
                             <div className="space-y-2">
                                 <Label htmlFor="output-format">Output Format</Label>
@@ -117,7 +133,7 @@ export default function ConcatPage() {
                             </div>
 
                             {/* Re-encode Option */}
-                            <div className="flex items-center justify-between space-x-2">
+                            <div className="flex items-center justify-between space-x-2 pt-2">
                                 <Label htmlFor="re-encode" className="flex flex-col gap-1">
                                     <span>Re-encode</span>
                                     <span className="text-xs text-muted-foreground font-normal">
@@ -130,59 +146,90 @@ export default function ConcatPage() {
                                     onCheckedChange={setReEncode}
                                 />
                             </div>
+                        </CardContent>
+                    </Card>
 
-                            {/* Selected Count */}
-                            <div className="pt-4 border-t">
-                                <p className="text-sm text-muted-foreground">
-                                    Selected: <span className="font-semibold text-foreground">
-                                        {selectedInputs.length}
-                                    </span> {selectedInputs.length === 1 ? 'item' : 'items'}
-                                </p>
-                            </div>
-
-                            {/* Error Display */}
-                            {error && (
-                                <Alert variant="destructive">
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
-                            )}
-
-                            {/* Action Buttons */}
-                            <div className="space-y-2">
-                                <Button
-                                    className="w-full"
-                                    onClick={handleSubmit}
-                                    disabled={selectedInputs.length < 2 || isSubmitting}
-                                >
-                                    {isSubmitting ? 'Starting...' : 'Start Concatenation'}
-                                </Button>
-                                <Button
-                                    className="w-full"
-                                    variant="outline"
-                                    onClick={clearSelectedInputs}
-                                    disabled={selectedInputs.length === 0}
-                                >
-                                    Clear Selection
-                                </Button>
-                            </div>
+                    <Card className="bg-muted/50 border-muted">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Tips</CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-xs text-muted-foreground space-y-1.5">
+                            <p>• Videos will be merged in selection order</p>
+                            <p>• Enable re-encode if videos have different codecs or resolutions</p>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Video Selector */}
-                <div className="lg:col-span-2">
+                {/* Selected Videos */}
+                <div className="lg:col-span-2 space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Select Videos</CardTitle>
+                            <CardTitle>Selected Videos ({selectedInputs.length})</CardTitle>
                             <CardDescription>
-                                Choose videos to concatenate in order. You can select individual videos,
-                                an entire playlist (videos will be in playlist order), or all videos from a channel.
+                                Videos will be concatenated in the order shown below
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <VideoSelector mode="multiple" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {selectedInputs.map((input, index) => (
+                                    <Card key={input.id} className="overflow-hidden">
+                                        <CardContent className="p-0">
+                                            {input.thumbnail && (
+                                                <div className="relative aspect-video">
+                                                    <Image
+                                                        src={input.thumbnail}
+                                                        alt={input.title}
+                                                        fill
+                                                        className="object-cover"
+                                                        unoptimized
+                                                    />
+                                                    <div className="absolute top-2 left-2 bg-background/90 text-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold">
+                                                        {index + 1}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div className="p-3">
+                                                <p className="font-medium text-sm line-clamp-2">
+                                                    {input.title}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground mt-1 capitalize">
+                                                    {input.type}
+                                                </p>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
                         </CardContent>
                     </Card>
+
+                    {/* Error Display */}
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                        <Button
+                            className="flex-1"
+                            size="lg"
+                            onClick={handleSubmit}
+                            disabled={selectedInputs.length < 2 || isSubmitting}
+                        >
+                            {isSubmitting ? 'Starting...' : 'Start Concatenation'}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={handleCancel}
+                            disabled={isSubmitting}
+                        >
+                            Cancel
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>

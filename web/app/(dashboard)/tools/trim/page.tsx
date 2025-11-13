@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Scissors, ArrowLeft } from 'lucide-react'
+import { Scissors, ArrowLeft, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 
-import VideoSelector from '@/components/tools/VideoSelector'
 import useToolsState from '@/store/toolsState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,6 +23,13 @@ export default function TrimPage() {
     const [reEncode, setReEncode] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Redirect back if no selection
+    useEffect(() => {
+        if (selectedInputs.length === 0) {
+            router.push('/tools')
+        }
+    }, [selectedInputs.length, router])
 
     const handleSubmit = async () => {
         if (selectedInputs.length === 0) {
@@ -76,8 +83,17 @@ export default function TrimPage() {
         }
     }
 
+    const handleCancel = () => {
+        clearSelectedInputs()
+        router.push('/tools')
+    }
+
+    if (selectedInputs.length === 0) {
+        return null
+    }
+
     return (
-        <div className="flex min-h-screen w-full flex-col gap-8">
+        <div className="flex min-h-screen w-full flex-col gap-6">
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Link href="/tools">
@@ -86,29 +102,29 @@ export default function TrimPage() {
                     </Button>
                 </Link>
                 <div className="flex items-center gap-3">
-                    <div className="text-blue-500">
-                        <Scissors className="w-8 h-8" />
+                    <div className="text-muted-foreground">
+                        <Scissors className="w-6 h-6" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold">Trim Video</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl font-bold">Trim Video</h1>
+                        <p className="text-sm text-muted-foreground">
                             Cut and trim videos to specific time ranges
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Configuration Panel */}
-                <div className="lg:col-span-1">
-                    <Card className="sticky top-8">
+                <div className="lg:col-span-1 space-y-6">
+                    <Card>
                         <CardHeader>
                             <CardTitle>Configuration</CardTitle>
                             <CardDescription>
                                 Set the time range to trim
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-6">
+                        <CardContent className="space-y-4">
                             {/* Start Time */}
                             <div className="space-y-2">
                                 <Label htmlFor="start-time">Start Time (HH:MM:SS)</Label>
@@ -134,7 +150,7 @@ export default function TrimPage() {
                             </div>
 
                             {/* Re-encode Option */}
-                            <div className="flex items-center justify-between space-x-2">
+                            <div className="flex items-center justify-between space-x-2 pt-2">
                                 <Label htmlFor="re-encode" className="flex flex-col gap-1">
                                     <span>Re-encode</span>
                                     <span className="text-xs text-muted-foreground font-normal">
@@ -147,69 +163,87 @@ export default function TrimPage() {
                                     onCheckedChange={setReEncode}
                                 />
                             </div>
+                        </CardContent>
+                    </Card>
 
-                            {/* Selected Count */}
-                            <div className="pt-4 border-t">
-                                <p className="text-sm text-muted-foreground">
-                                    Selected: <span className="font-semibold text-foreground">
-                                        {selectedInputs.length}
-                                    </span> {selectedInputs.length === 1 ? 'video' : 'videos'}
-                                </p>
-                                {selectedInputs.length > 1 && (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        The same time range will be applied to all selected videos
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Error Display */}
-                            {error && (
-                                <Alert variant="destructive">
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
-                            )}
-
-                            {/* Action Buttons */}
-                            <div className="space-y-2">
-                                <Button
-                                    className="w-full"
-                                    onClick={handleSubmit}
-                                    disabled={selectedInputs.length === 0 || isSubmitting}
-                                >
-                                    {isSubmitting ? 'Starting...' : 'Trim Video'}
-                                </Button>
-                                <Button
-                                    className="w-full"
-                                    variant="outline"
-                                    onClick={clearSelectedInputs}
-                                    disabled={selectedInputs.length === 0}
-                                >
-                                    Clear Selection
-                                </Button>
-                            </div>
-
-                            {/* Tips */}
-                            <div className="pt-4 border-t text-xs text-muted-foreground space-y-1">
-                                <p><strong>Tip:</strong> Use re-encode for precise cuts at exact timestamps</p>
-                                <p>Without re-encode, cuts are made at nearest keyframes (faster but less precise)</p>
-                            </div>
+                    <Card className="bg-muted/50 border-muted">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Tips</CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-xs text-muted-foreground space-y-1.5">
+                            <p>• Use re-encode for precise cuts at exact timestamps</p>
+                            <p>• Without re-encode, cuts are made at nearest keyframes (faster but less precise)</p>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Video Selector */}
-                <div className="lg:col-span-2">
+                {/* Selected Videos */}
+                <div className="lg:col-span-2 space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Select Videos</CardTitle>
+                            <CardTitle>Selected Videos ({selectedInputs.length})</CardTitle>
                             <CardDescription>
-                                Choose videos to trim. The same time range will be applied to all selected videos.
+                                The same time range will be applied to all selected videos
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <VideoSelector mode="multiple" inputType="videos" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {selectedInputs.map((input) => (
+                                    <Card key={input.id} className="overflow-hidden">
+                                        <CardContent className="p-0">
+                                            {input.thumbnail && (
+                                                <div className="relative aspect-video">
+                                                    <Image
+                                                        src={input.thumbnail}
+                                                        alt={input.title}
+                                                        fill
+                                                        className="object-cover"
+                                                        unoptimized
+                                                    />
+                                                </div>
+                                            )}
+                                            <div className="p-3">
+                                                <p className="font-medium text-sm line-clamp-2">
+                                                    {input.title}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground mt-1 capitalize">
+                                                    {input.type}
+                                                </p>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
                         </CardContent>
                     </Card>
+
+                    {/* Error Display */}
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                        <Button
+                            className="flex-1"
+                            size="lg"
+                            onClick={handleSubmit}
+                            disabled={selectedInputs.length === 0 || isSubmitting}
+                        >
+                            {isSubmitting ? 'Starting...' : 'Start Trimming'}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={handleCancel}
+                            disabled={isSubmitting}
+                        >
+                            Cancel
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
