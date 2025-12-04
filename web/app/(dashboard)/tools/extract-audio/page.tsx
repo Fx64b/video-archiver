@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileAudio, ArrowLeft } from 'lucide-react'
+import { FileAudio, ArrowLeft, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 
-import VideoSelector from '@/components/tools/VideoSelector'
 import useToolsState from '@/store/toolsState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,6 +22,13 @@ export default function ExtractAudioPage() {
     const [sampleRate, setSampleRate] = useState('44100')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Redirect back if no selection
+    useEffect(() => {
+        if (selectedInputs.length === 0) {
+            router.push('/tools')
+        }
+    }, [selectedInputs.length, router])
 
     const handleSubmit = async () => {
         if (selectedInputs.length === 0) {
@@ -68,8 +75,17 @@ export default function ExtractAudioPage() {
         }
     }
 
+    const handleCancel = () => {
+        clearSelectedInputs()
+        router.push('/tools')
+    }
+
+    if (selectedInputs.length === 0) {
+        return null
+    }
+
     return (
-        <div className="flex min-h-screen w-full flex-col gap-8">
+        <div className="flex min-h-screen w-full flex-col gap-6">
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Link href="/tools">
@@ -78,29 +94,29 @@ export default function ExtractAudioPage() {
                     </Button>
                 </Link>
                 <div className="flex items-center gap-3">
-                    <div className="text-green-500">
-                        <FileAudio className="w-8 h-8" />
+                    <div className="text-muted-foreground">
+                        <FileAudio className="w-6 h-6" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold">Extract Audio</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl font-bold">Extract Audio</h1>
+                        <p className="text-sm text-muted-foreground">
                             Extract audio tracks from videos in various formats
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Configuration Panel */}
-                <div className="lg:col-span-1">
-                    <Card className="sticky top-8">
+                <div className="lg:col-span-1 space-y-6">
+                    <Card>
                         <CardHeader>
                             <CardTitle>Configuration</CardTitle>
                             <CardDescription>
                                 Configure audio extraction settings
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-6">
+                        <CardContent className="space-y-4">
                             {/* Audio Format */}
                             <div className="space-y-2">
                                 <Label htmlFor="audio-format">Audio Format</Label>
@@ -149,59 +165,87 @@ export default function ExtractAudioPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                        </CardContent>
+                    </Card>
 
-                            {/* Selected Count */}
-                            <div className="pt-4 border-t">
-                                <p className="text-sm text-muted-foreground">
-                                    Selected: <span className="font-semibold text-foreground">
-                                        {selectedInputs.length}
-                                    </span> {selectedInputs.length === 1 ? 'item' : 'items'}
-                                </p>
-                            </div>
-
-                            {/* Error Display */}
-                            {error && (
-                                <Alert variant="destructive">
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
-                            )}
-
-                            {/* Action Buttons */}
-                            <div className="space-y-2">
-                                <Button
-                                    className="w-full"
-                                    onClick={handleSubmit}
-                                    disabled={selectedInputs.length === 0 || isSubmitting}
-                                >
-                                    {isSubmitting ? 'Starting...' : 'Extract Audio'}
-                                </Button>
-                                <Button
-                                    className="w-full"
-                                    variant="outline"
-                                    onClick={clearSelectedInputs}
-                                    disabled={selectedInputs.length === 0}
-                                >
-                                    Clear Selection
-                                </Button>
-                            </div>
+                    <Card className="bg-muted/50 border-muted">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Tips</CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-xs text-muted-foreground space-y-1.5">
+                            <p>• Higher bitrate means better quality but larger file size</p>
+                            <p>• Use FLAC or WAV for lossless audio</p>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Video Selector */}
-                <div className="lg:col-span-2">
+                {/* Selected Videos */}
+                <div className="lg:col-span-2 space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Select Videos</CardTitle>
+                            <CardTitle>Selected Videos ({selectedInputs.length})</CardTitle>
                             <CardDescription>
-                                Choose videos to extract audio from. You can select individual videos,
-                                an entire playlist, or all videos from a channel.
+                                Audio will be extracted from all selected videos
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <VideoSelector mode="multiple" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {selectedInputs.map((input) => (
+                                    <Card key={input.id} className="overflow-hidden">
+                                        <CardContent className="p-0">
+                                            {input.thumbnail && (
+                                                <div className="relative aspect-video">
+                                                    <Image
+                                                        src={input.thumbnail}
+                                                        alt={input.title}
+                                                        fill
+                                                        className="object-cover"
+                                                        unoptimized
+                                                    />
+                                                </div>
+                                            )}
+                                            <div className="p-3">
+                                                <p className="font-medium text-sm line-clamp-2">
+                                                    {input.title}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground mt-1 capitalize">
+                                                    {input.type}
+                                                </p>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
                         </CardContent>
                     </Card>
+
+                    {/* Error Display */}
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                        <Button
+                            className="flex-1"
+                            size="lg"
+                            onClick={handleSubmit}
+                            disabled={selectedInputs.length === 0 || isSubmitting}
+                        >
+                            {isSubmitting ? 'Starting...' : 'Extract Audio'}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={handleCancel}
+                            disabled={isSubmitting}
+                        >
+                            Cancel
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>

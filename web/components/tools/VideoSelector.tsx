@@ -58,15 +58,42 @@ export default function VideoSelector({
             setError(null)
 
             try {
-                const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_SERVER_URL}/api/jobs?type=${activeTab}&page=${currentPage}&limit=${pageSize}&sort_by=created_at&order=desc&status=complete`
+                const url = new URL(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/downloads/${activeTab}`
                 )
+                url.searchParams.append('page', String(currentPage))
+                url.searchParams.append('limit', String(pageSize))
+                url.searchParams.append('sort_by', 'created_at')
+                url.searchParams.append('order', 'desc')
+
+                const response = await fetch(url.toString())
+
+                if (response.status === 404) {
+                    setData({
+                        items: [],
+                        total_count: 0,
+                        page: 1,
+                        limit: pageSize,
+                        total_pages: 1,
+                    })
+                    setLoading(false)
+                    return
+                }
 
                 if (!response.ok) {
                     throw new Error(`Failed to fetch ${activeTab}`)
                 }
 
-                const result: PaginatedResponse = await response.json()
+                const responseData = await response.json()
+
+                // Backend returns data in responseData.message
+                const result: PaginatedResponse = responseData.message || {
+                    items: [],
+                    total_count: 0,
+                    page: 1,
+                    limit: pageSize,
+                    total_pages: 1,
+                }
                 setData(result)
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load data')
