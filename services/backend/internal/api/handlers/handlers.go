@@ -45,6 +45,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Use(corsMiddleware)
 
 	r.Post("/download", h.HandleDownload)
+	r.Delete("/download/{id}", h.HandleCancelDownload)
 	r.Get("/recent", h.HandleRecent)
 	r.Get("/job/{id}", h.HandleGetJob)
 	r.Get("/job/{id}/parents", h.HandleGetJobParents)
@@ -171,6 +172,26 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{Message: "Video added to download queue"}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) HandleCancelDownload(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "Job ID is required", http.StatusBadRequest)
+		return
+	}
+
+	log.Infof("Received cancel request for job: %s", id)
+
+	if err := h.downloadService.CancelJob(id); err != nil {
+		log.WithError(err).Error("Failed to cancel job")
+		http.Error(w, fmt.Sprintf("Failed to cancel job: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	resp := Response{Message: "Download cancelled successfully"}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
