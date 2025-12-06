@@ -1,7 +1,7 @@
 'use client'
 
-import { JobWithMetadata, PlaylistItem, PlaylistMetadata } from '@/types'
-import { ArrowLeft, Eye, List, Play, User } from 'lucide-react'
+import { JobWithMetadata, PlaylistItem, PlaylistMetadata, VideoMetadata } from '@/types'
+import { AlertTriangle, ArrowLeft, Eye, List, Play, User, XCircle } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
@@ -20,6 +20,7 @@ export default function PlaylistDetailPage() {
     const { id } = useParams()
     const router = useRouter()
     const [playlist, setPlaylist] = useState<JobWithMetadata | null>(null)
+    const [videos, setVideos] = useState<JobWithMetadata[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -42,8 +43,25 @@ export default function PlaylistDetailPage() {
             }
         }
 
+        const fetchVideos = async () => {
+            try {
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}/videos`
+                )
+                if (!response.ok) {
+                    throw new Error('Failed to fetch videos')
+                }
+                const data = await response.json()
+                console.log('Videos API response:', data)
+                setVideos(data.message || [])
+            } catch (err) {
+                console.error('Failed to fetch videos:', err)
+            }
+        }
+
         if (id) {
             fetchPlaylist()
+            fetchVideos()
         }
     }, [id])
 
@@ -140,95 +158,102 @@ export default function PlaylistDetailPage() {
 
                     {/* Video list */}
                     <div className="space-y-2">
-                        {metadata?.items && metadata.items.length > 0 ? (
-                            metadata.items.map(
-                                (video: PlaylistItem, index: number) => (
-                                    <Card
-                                        key={video.id || index}
-                                        className="hover:bg-muted/50 cursor-pointer transition-colors"
-                                        onClick={() =>
-                                            handleVideoClick(video.id)
-                                        }
-                                    >
-                                        <CardContent className="flex gap-4 p-4">
-                                            <div className="flex-shrink-0">
-                                                <div className="relative h-20 w-36 overflow-hidden rounded-md">
-                                                    <Image
-                                                        src={
-                                                            video.thumbnail ||
-                                                            `https://picsum.photos/144/80?random=${index}`
-                                                        }
-                                                        alt={
-                                                            video.title ||
-                                                            `Video ${index + 1}`
-                                                        }
-                                                        fill
-                                                        className="object-cover"
-                                                    />
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
-                                                        <Play className="h-6 w-6 text-white" />
+                        {videos && videos.length > 0 ? (
+                            videos.map(
+                                (videoJob: JobWithMetadata, index: number) => {
+                                    const video = videoJob.metadata as VideoMetadata
+                                    const isFailed = videoJob.job?.status === 'error'
+
+                                    return (
+                                        <Card
+                                            key={videoJob.job?.id || index}
+                                            className={`${!isFailed ? 'hover:bg-muted/50 cursor-pointer' : 'opacity-75'} transition-colors`}
+                                            onClick={() =>
+                                                !isFailed && videoJob.job?.id && handleVideoClick(videoJob.job.id)
+                                            }
+                                        >
+                                            <CardContent className="flex gap-4 p-4">
+                                                <div className="flex-shrink-0">
+                                                    <div className="relative h-20 w-36 overflow-hidden rounded-md bg-muted">
+                                                        {!isFailed && video?.thumbnail ? (
+                                                            <>
+                                                                <Image
+                                                                    src={video.thumbnail}
+                                                                    alt={video.title || `Video ${index + 1}`}
+                                                                    fill
+                                                                    className="object-cover"
+                                                                />
+                                                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
+                                                                    <Play className="h-6 w-6 text-white" />
+                                                                </div>
+                                                                {video.duration_string && (
+                                                                    <div className="absolute right-1 bottom-1 rounded bg-black/80 px-1 text-xs text-white">
+                                                                        {video.duration_string}
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <div className="flex h-full items-center justify-center bg-destructive/10">
+                                                                <XCircle className="h-10 w-10 text-destructive" />
+                                                            </div>
+                                                        )}
+                                                        {isFailed && (
+                                                            <div className="absolute top-1 right-1 rounded-full bg-destructive p-1">
+                                                                <AlertTriangle className="h-4 w-4 text-white" />
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    {video.duration_string && (
-                                                        <div className="absolute right-1 bottom-1 rounded bg-black/80 px-1 text-xs text-white">
-                                                            {
-                                                                video.duration_string
-                                                            }
-                                                        </div>
-                                                    )}
                                                 </div>
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <h3 className="mb-1 line-clamp-2 font-medium">
-                                                    {video.title ||
-                                                        `Video ${index + 1}`}
-                                                </h3>
-                                                <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                                                    {video.channel && (
-                                                        <span>
-                                                            {video.channel}
-                                                        </span>
-                                                    )}
-                                                    {video.view_count && (
-                                                        <>
-                                                            <span>•</span>
-                                                            <span>
-                                                                {formatSubscriberNumber(
-                                                                    video.view_count
-                                                                )}{' '}
-                                                                views
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="mb-1 line-clamp-2 font-medium">
+                                                        {video?.title || `Video ${index + 1}`}
+                                                        {isFailed && (
+                                                            <span className="ml-2 text-destructive text-sm font-normal">
+                                                                (Failed)
                                                             </span>
-                                                        </>
-                                                    )}
-                                                    {video.upload_date && (
-                                                        <>
-                                                            <span>•</span>
-                                                            <span>
-                                                                {new Date(
-                                                                    video.upload_date
-                                                                ).toLocaleDateString()}
-                                                            </span>
-                                                        </>
+                                                        )}
+                                                    </h3>
+                                                    <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                        {video?.channel && (
+                                                            <span>{video.channel}</span>
+                                                        )}
+                                                        {video?.view_count && (
+                                                            <>
+                                                                <span>•</span>
+                                                                <span>
+                                                                    {formatSubscriberNumber(video.view_count)} views
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                        {video?.upload_date && (
+                                                            <>
+                                                                <span>•</span>
+                                                                <span>
+                                                                    {new Date(video.upload_date).toLocaleDateString()}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    {video?.description && (
+                                                        <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                                                            {video.description}
+                                                        </p>
                                                     )}
                                                 </div>
-                                                {video.description && (
-                                                    <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-                                                        {video.description}
-                                                    </p>
-                                                )}
-                                            </div>
-                                            <div className="flex-shrink-0 text-center">
-                                                <div className="text-muted-foreground text-lg font-medium">
-                                                    {index + 1}
+                                                <div className="flex-shrink-0 text-center">
+                                                    <div className="text-muted-foreground text-lg font-medium">
+                                                        {index + 1}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                )
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                }
                             )
                         ) : (
                             <div className="py-8 text-center">
                                 <p className="text-muted-foreground">
-                                    No videos found in this playlist
+                                    {loading ? 'Loading videos...' : 'No videos found in this playlist'}
                                 </p>
                             </div>
                         )}
