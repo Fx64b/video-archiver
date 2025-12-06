@@ -26,6 +26,12 @@ type Config struct {
 	MaxQuality         int
 }
 
+// activeJob tracks a running job and its cancellation function
+type activeJob struct {
+	job    *domain.Job
+	cancel context.CancelFunc
+}
+
 type Service struct {
 	config        *Config
 	jobs          domain.JobRepository
@@ -36,6 +42,7 @@ type Service struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	metadataPaths sync.Map
+	activeJobs    sync.Map // map[string]*activeJob
 }
 
 func NewService(config *Config) *Service {
@@ -85,6 +92,48 @@ func (s *Service) Submit(job domain.Job) error {
 	return nil
 }
 
+func (s *Service) CancelJob(id string) error {
+	job, err := s.jobs.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("get job: %w", err)
+	}
+
+	if job == nil {
+		return fmt.Errorf("job not found")
+	}
+
+	if job.Status == domain.JobStatusComplete || job.Status == domain.JobStatusError || job.Status == domain.JobStatusCancelled {
+		return fmt.Errorf("cannot cancel job with status: %s", job.Status)
+	}
+
+	// Cancel the running download process if it's active
+	if activeJobVal, ok := s.activeJobs.Load(id); ok {
+		if aj, ok := activeJobVal.(*activeJob); ok && aj.cancel != nil {
+			aj.cancel() // This will stop the yt-dlp process via context
+			log.WithField("job_id", id).Info("Cancelled running download process")
+		}
+	}
+
+	job.Status = domain.JobStatusCancelled
+	job.UpdatedAt = time.Now()
+
+	if err := s.jobs.Update(job); err != nil {
+		return fmt.Errorf("update job: %w", err)
+	}
+
+	// Broadcast cancellation status via WebSocket
+	cancelUpdate := domain.ProgressUpdate{
+		JobID:    job.ID,
+		JobType:  string(domain.JobTypeVideo),
+		Status:   domain.JobStatusCancelled,
+		Progress: job.Progress,
+	}
+	s.hub.broadcast <- cancelUpdate
+
+	log.WithField("job_id", id).Info("Download job cancelled")
+	return nil
+}
+
 func (s *Service) GetRepository() domain.JobRepository {
 	return s.jobs
 }
@@ -101,25 +150,43 @@ func (s *Service) processJobs() {
 		case <-s.ctx.Done():
 			return
 		case job := <-s.queue:
-			if err := s.processJob(s.ctx, job); err != nil {
-				log.WithError(err).
-					WithField("jobID", job.ID).
-					Error("Failed to process job")
+			// Create cancellable context for this job
+			jobCtx, cancelFunc := context.WithCancel(s.ctx)
 
-				job.Status = domain.JobStatusError
-				if err := s.jobs.Update(&job); err != nil {
-					log.WithError(err).Error("Failed to update job status")
-				}
+			// Store job with cancel function
+			s.activeJobs.Store(job.ID, &activeJob{
+				job:    &job,
+				cancel: cancelFunc,
+			})
 
-				// Broadcast error status via WebSocket
-				errorUpdate := domain.ProgressUpdate{
-					JobID:    job.ID,
-					JobType:  string(domain.JobTypeVideo),
-					Status:   domain.JobStatusError,
-					Progress: job.Progress,
+			if err := s.processJob(jobCtx, job); err != nil {
+				// Check if the error was due to context cancellation
+				if jobCtx.Err() == context.Canceled {
+					log.WithField("jobID", job.ID).Info("Job was cancelled")
+					// Status already updated by CancelJob, no need to update here
+				} else {
+					log.WithError(err).
+						WithField("jobID", job.ID).
+						Error("Failed to process job")
+
+					job.Status = domain.JobStatusError
+					if err := s.jobs.Update(&job); err != nil {
+						log.WithError(err).Error("Failed to update job status")
+					}
+
+					// Broadcast error status via WebSocket
+					errorUpdate := domain.ProgressUpdate{
+						JobID:    job.ID,
+						JobType:  string(domain.JobTypeVideo),
+						Status:   domain.JobStatusError,
+						Progress: job.Progress,
+					}
+					s.hub.broadcast <- errorUpdate
 				}
-				s.hub.broadcast <- errorUpdate
 			}
+
+			// Remove from active jobs after completion
+			s.activeJobs.Delete(job.ID)
 		}
 	}
 }

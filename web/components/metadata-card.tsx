@@ -5,12 +5,17 @@ import {
     DownloadPhaseMetadata,
     DownloadPhaseVideo,
     Job,
+    JobStatusCancelled,
+    JobStatusComplete,
     JobStatusError,
+    JobStatusInProgress,
+    JobStatusPending,
     JobTypeMetadata,
     Metadata,
     ProgressUpdate,
 } from '@/types'
-import { AlertTriangle, CircleCheck, Clock, User, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertTriangle, CircleCheck, Clock, User, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { toast } from 'sonner'
 
 import React, { useState } from 'react'
 
@@ -24,6 +29,7 @@ import {
 } from '@/lib/metadata'
 import { formatSeconds, formatSubscriberNumber } from '@/lib/utils'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,6 +43,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
     metadata,
     job,
 }) => {
+    const [isCancelling, setIsCancelling] = useState(false)
     const [showWarnings, setShowWarnings] = useState(false)
     const thumbnailUrl = getThumbnailUrl(metadata)
     const title = getTitle(metadata)
@@ -52,7 +59,34 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
 
     const isRetrying = 'isRetrying' in job && job.isRetrying
     const isFailed = 'status' in job && job.status === JobStatusError
+    const isCancelled = 'status' in job && job.status === JobStatusCancelled
+    const isInProgress = 'status' in job && (job.status === JobStatusInProgress || job.status === JobStatusPending)
+    const canCancel = isInProgress && !isCancelling && !isFailed && !isCancelled
     const hasWarnings = 'warnings' in job && job.warnings && job.warnings.length > 0
+
+    const handleCancel = async () => {
+        if (!('jobID' in job)) return
+
+        setIsCancelling(true)
+        try {
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_SERVER_URL}/download/${job.jobID}`,
+                {
+                    method: 'DELETE',
+                }
+            )
+
+            if (!response.ok) {
+                throw new Error('Failed to cancel download')
+            }
+
+            toast.success('Download cancelled successfully')
+        } catch (error) {
+            console.error('Failed to cancel download:', error)
+            toast.error('Failed to cancel download')
+            setIsCancelling(false)
+        }
+    }
 
     return (
         <Card className="relative w-full">
@@ -60,6 +94,20 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                 {(isRetrying || isFailed) && (
                     <div className="absolute right-4 top-4">
                         <AlertTriangle className={`h-6 w-6 ${isFailed ? 'text-destructive' : 'text-yellow-500'}`} />
+                    </div>
+                )}
+                {canCancel && (
+                    <div className="absolute right-4 top-4">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleCancel}
+                            disabled={isCancelling}
+                            className="h-8 w-8"
+                            title="Cancel download"
+                        >
+                            <X className="h-5 w-5" />
+                        </Button>
                     </div>
                 )}
                 <div className="flex w-64 justify-center">
@@ -132,7 +180,12 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                 )}
                             </p>
                             <div>
-                                {isFailed ? (
+                                {isCancelled ? (
+                                    <div className="flex gap-2 text-muted-foreground">
+                                        <span>Download Cancelled</span>
+                                        <X />
+                                    </div>
+                                ) : isFailed ? (
                                     <div className="flex gap-2 text-destructive">
                                         <span>Download Failed</span>
                                         <AlertTriangle />

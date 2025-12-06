@@ -8,6 +8,7 @@ export const JobStatusPending: JobStatus = "pending";
 export const JobStatusInProgress: JobStatus = "in_progress";
 export const JobStatusComplete: JobStatus = "complete";
 export const JobStatusError: JobStatus = "error";
+export const JobStatusCancelled: JobStatus = "cancelled";
 export interface Job {
   id: string;
   url: string;
