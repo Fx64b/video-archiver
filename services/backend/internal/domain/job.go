@@ -17,6 +17,7 @@ type Job struct {
 	Status        JobStatus `json:"status"`
 	Progress      float64   `json:"progress"`
 	CustomQuality *int      `json:"custom_quality,omitempty"`
+	Warnings      []string  `json:"warnings,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -68,6 +69,7 @@ type ProgressUpdate struct {
 	RetryCount           int       `json:"retryCount,omitempty"`
 	MaxRetries           int       `json:"maxRetries,omitempty"`
 	RetryError           string    `json:"retryError,omitempty"`
+	Warnings             []string  `json:"warnings,omitempty"`
 }
 
 const (
