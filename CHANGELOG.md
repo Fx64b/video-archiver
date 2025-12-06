@@ -1,3 +1,24 @@
+# [1.9.0](https://github.com/Fx64b/video-archiver/compare/0.1.8.0-BETA...0.1.9.0-BETA) (2025-12-06)
+
+
+### Bug Fixes
+
+* **frontend:** resolve lint and build issues ([c7e1414](https://github.com/Fx64b/video-archiver/commit/c7e14140bacd0a425736c2e9a61ffc1855cd57d9))
+* **tools:** address critical PR review issues ([195ce4f](https://github.com/Fx64b/video-archiver/commit/195ce4fc49b6036becfe9f0489875887b4c08bdc))
+* **tools:** remove unused stepJob variable causing compilation error ([f48e193](https://github.com/Fx64b/video-archiver/commit/f48e19364d2c12a1dad9b095f39cc2f03e41c00d))
+* update test schema to include warnings column ([b4aebe2](https://github.com/Fx64b/video-archiver/commit/b4aebe23932d556b09d5aba395986015033f7690))
+
+
+### Features
+
+* add warning storage and display for download errors ([4790290](https://github.com/Fx64b/video-archiver/commit/4790290e23bbe0a6f1e73061fce5be5c85b1e54a))
+* **tools:** add FFmpeg wrapper service with core operations ([127473b](https://github.com/Fx64b/video-archiver/commit/127473b1a291249f1d2296450d369a39bc1f90f3))
+* **tools:** add Phase 1 foundation for tools endpoint ([4d8f3ed](https://github.com/Fx64b/video-archiver/commit/4d8f3ed641b29afcc967bada537ba18fb283236c))
+* **tools:** add remaining tool pages (convert, quality, rotate) ([44eba6e](https://github.com/Fx64b/video-archiver/commit/44eba6ec5a875642e08a9ae86aacf1c84af03fef))
+* **tools:** add shadcn UI components for Phase 2 frontend ([470536d](https://github.com/Fx64b/video-archiver/commit/470536d3b84e2aa20198f6ae82efabc1d6200a61))
+* **tools:** complete Phase 1 implementation - service layer and API ([0b043f9](https://github.com/Fx64b/video-archiver/commit/0b043f97bb57492fcd7e8ec69d8a291b0b020939))
+* **tools:** complete Phase 2 frontend implementation ([acb7942](https://github.com/Fx64b/video-archiver/commit/acb7942654f67536b95c16f0996868aaadacb197))
+
 # [1.8.0](https://github.com/Fx64b/video-archiver/compare/0.1.7.0-BETA...0.1.8.0-BETA) (2025-10-25)
 
 
