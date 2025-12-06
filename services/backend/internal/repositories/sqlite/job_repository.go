@@ -20,10 +20,15 @@ func NewJobRepository(db *sql.DB) *JobRepository {
 }
 
 func (r *JobRepository) Create(job *domain.Job) error {
-	_, err := r.db.Exec(`
-        INSERT INTO jobs (job_id, url, status, progress, created_at, updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
-		job.ID, job.URL, job.Status, job.Progress, job.CreatedAt, job.UpdatedAt)
+	warningsJSON, err := json.Marshal(job.Warnings)
+	if err != nil {
+		return fmt.Errorf("marshal warnings: %w", err)
+	}
+
+	_, err = r.db.Exec(`
+        INSERT INTO jobs (job_id, url, status, progress, warnings, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		job.ID, job.URL, job.Status, job.Progress, string(warningsJSON), job.CreatedAt, job.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create job: %w", err)
 	}
@@ -32,11 +37,17 @@ func (r *JobRepository) Create(job *domain.Job) error {
 
 func (r *JobRepository) Update(job *domain.Job) error {
 	job.UpdatedAt = time.Now()
-	_, err := r.db.Exec(`
-        UPDATE jobs 
-        SET status = ?, progress = ?, updated_at = ? 
+
+	warningsJSON, err := json.Marshal(job.Warnings)
+	if err != nil {
+		return fmt.Errorf("marshal warnings: %w", err)
+	}
+
+	_, err = r.db.Exec(`
+        UPDATE jobs
+        SET status = ?, progress = ?, warnings = ?, updated_at = ?
         WHERE job_id = ?`,
-		job.Status, job.Progress, job.UpdatedAt, job.ID)
+		job.Status, job.Progress, string(warningsJSON), job.UpdatedAt, job.ID)
 	if err != nil {
 		return fmt.Errorf("update job: %w", err)
 	}
@@ -45,22 +56,33 @@ func (r *JobRepository) Update(job *domain.Job) error {
 
 func (r *JobRepository) GetByID(id string) (*domain.Job, error) {
 	job := &domain.Job{}
+	var warningsJSON sql.NullString
+
 	err := r.db.QueryRow(`
-        SELECT job_id, url, status, progress, created_at, updated_at 
-        FROM jobs 
+        SELECT job_id, url, status, progress, warnings, created_at, updated_at
+        FROM jobs
         WHERE job_id = ?`, id).
-		Scan(&job.ID, &job.URL, &job.Status, &job.Progress, &job.CreatedAt, &job.UpdatedAt)
+		Scan(&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get job by id: %w", err)
 	}
+
+	// Unmarshal warnings if present
+	if warningsJSON.Valid && warningsJSON.String != "" {
+		if err := json.Unmarshal([]byte(warningsJSON.String), &job.Warnings); err != nil {
+			log.WithError(err).Warn("Failed to unmarshal warnings")
+			job.Warnings = []string{}
+		}
+	}
+
 	return job, nil
 }
 
 func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 	rows, err := r.db.Query(`
-        SELECT job_id, url, status, progress, created_at, updated_at 
-        FROM jobs 
-        ORDER BY updated_at DESC 
+        SELECT job_id, url, status, progress, warnings, created_at, updated_at
+        FROM jobs
+        ORDER BY updated_at DESC
         LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get recent jobs: %w", err)
@@ -70,11 +92,22 @@ func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 	var jobs []*domain.Job
 	for rows.Next() {
 		job := &domain.Job{}
+		var warningsJSON sql.NullString
+
 		err := rows.Scan(&job.ID, &job.URL, &job.Status, &job.Progress,
-			&job.CreatedAt, &job.UpdatedAt)
+			&warningsJSON, &job.CreatedAt, &job.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
 		}
+
+		// Unmarshal warnings if present
+		if warningsJSON.Valid && warningsJSON.String != "" {
+			if err := json.Unmarshal([]byte(warningsJSON.String), &job.Warnings); err != nil {
+				log.WithError(err).Warn("Failed to unmarshal warnings")
+				job.Warnings = []string{}
+			}
+		}
+
 		jobs = append(jobs, job)
 	}
 	return jobs, nil
@@ -283,7 +316,7 @@ func (r *JobRepository) GetAllJobsWithMetadata() ([]*domain.JobWithMetadata, err
 
 func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 	rows, err := r.db.Query(`
-		SELECT job_id, url, status, progress, created_at, updated_at 
+		SELECT job_id, url, status, progress, warnings, created_at, updated_at
 		FROM jobs`)
 	if err != nil {
 		return nil, fmt.Errorf("get jobs: %w", err)
@@ -293,11 +326,22 @@ func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 	var jobs []*domain.Job
 	for rows.Next() {
 		job := &domain.Job{}
+		var warningsJSON sql.NullString
+
 		err := rows.Scan(&job.ID, &job.URL, &job.Status, &job.Progress,
-			&job.CreatedAt, &job.UpdatedAt)
+			&warningsJSON, &job.CreatedAt, &job.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
 		}
+
+		// Unmarshal warnings if present
+		if warningsJSON.Valid && warningsJSON.String != "" {
+			if err := json.Unmarshal([]byte(warningsJSON.String), &job.Warnings); err != nil {
+				log.WithError(err).Warn("Failed to unmarshal warnings")
+				job.Warnings = []string{}
+			}
+		}
+
 		jobs = append(jobs, job)
 	}
 	return jobs, nil
@@ -455,11 +499,11 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 
 	// Build the query using only validated table names and sort fields
 	query := `
-        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.created_at, jobs.updated_at, ` +
-		tableName + `.metadata_json 
-        FROM ` + tableName + ` 
-        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id 
-        ORDER BY ` + sortField + ` ` + orderDirection + ` 
+        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.warnings, jobs.created_at, jobs.updated_at, ` +
+		tableName + `.metadata_json
+        FROM ` + tableName + `
+        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id
+        ORDER BY ` + sortField + ` ` + orderDirection + `
         LIMIT ? OFFSET ?`
 
 	log.Debugf("Executing download query with limit=%d offset=%d", limit, offset)
@@ -479,13 +523,22 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 	for rows.Next() {
 		job := &domain.Job{}
 		var metadataJSON string
+		var warningsJSON sql.NullString
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON,
 			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("scan job row: %w", err)
+		}
+
+		// Unmarshal warnings if present
+		if warningsJSON.Valid && warningsJSON.String != "" {
+			if err := json.Unmarshal([]byte(warningsJSON.String), &job.Warnings); err != nil {
+				log.WithError(err).Warn("Failed to unmarshal warnings")
+				job.Warnings = []string{}
+			}
 		}
 
 		// Unmarshal metadata based on content type
@@ -565,9 +618,9 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
             FROM video_memberships
             WHERE video_job_id = ?
         )
-        SELECT j.job_id, j.url, j.status, j.progress, j.created_at, j.updated_at, 
+        SELECT j.job_id, j.url, j.status, j.progress, j.warnings, j.created_at, j.updated_at,
                pt.membership_type,
-               CASE 
+               CASE
                    WHEN pt.membership_type = 'playlist' THEN p.metadata_json
                    WHEN pt.membership_type = 'channel' THEN c.metadata_json
                    ELSE NULL
@@ -589,14 +642,23 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
 		job := &domain.Job{}
 		var membershipType string
 		var metadataJSON sql.NullString
+		var warningsJSON sql.NullString
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON,
 			&job.CreatedAt, &job.UpdatedAt, &membershipType, &metadataJSON,
 		)
 
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
+		}
+
+		// Unmarshal warnings if present
+		if warningsJSON.Valid && warningsJSON.String != "" {
+			if err := json.Unmarshal([]byte(warningsJSON.String), &job.Warnings); err != nil {
+				log.WithError(err).Warn("Failed to unmarshal warnings")
+				job.Warnings = []string{}
+			}
 		}
 
 		jobWithMetadata := &domain.JobWithMetadata{
@@ -630,7 +692,7 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
 
 func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWithMetadata, error) {
 	rows, err := r.db.Query(`
-        SELECT j.job_id, j.url, j.status, j.progress, j.created_at, j.updated_at, 
+        SELECT j.job_id, j.url, j.status, j.progress, j.warnings, j.created_at, j.updated_at,
                v.metadata_json
         FROM jobs j
         JOIN video_memberships vm ON j.job_id = vm.video_job_id
@@ -648,14 +710,23 @@ func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWit
 	for rows.Next() {
 		job := &domain.Job{}
 		var metadataJSON string
+		var warningsJSON sql.NullString
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON,
 			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
 		)
 
 		if err != nil {
 			return nil, err
+		}
+
+		// Unmarshal warnings if present
+		if warningsJSON.Valid && warningsJSON.String != "" {
+			if err := json.Unmarshal([]byte(warningsJSON.String), &job.Warnings); err != nil {
+				log.WithError(err).Warn("Failed to unmarshal warnings")
+				job.Warnings = []string{}
+			}
 		}
 
 		var videoMetadata domain.VideoMetadata

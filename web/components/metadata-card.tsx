@@ -14,7 +14,7 @@ import {
     Metadata,
     ProgressUpdate,
 } from '@/types'
-import { AlertTriangle, CircleCheck, Clock, User, X } from 'lucide-react'
+import { AlertTriangle, CircleCheck, Clock, User, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 
 import React, { useState } from 'react'
@@ -44,6 +44,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
     job,
 }) => {
     const [isCancelling, setIsCancelling] = useState(false)
+    const [showWarnings, setShowWarnings] = useState(false)
     const thumbnailUrl = getThumbnailUrl(metadata)
     const title = getTitle(metadata)
 
@@ -61,6 +62,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
     const isCancelled = 'status' in job && job.status === JobStatusCancelled
     const isInProgress = 'status' in job && (job.status === JobStatusInProgress || job.status === JobStatusPending)
     const canCancel = isInProgress && !isCancelling && !isFailed && !isCancelled
+    const hasWarnings = 'warnings' in job && job.warnings && job.warnings.length > 0
 
     const handleCancel = async () => {
         if (!('jobID' in job)) return
@@ -238,6 +240,41 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                             </div>
                         </div>
                         <Progress value={getJobProgress()} className="mt-2" />
+
+                        {/* Warnings Section */}
+                        {hasWarnings && (
+                            <div className="mt-4">
+                                <button
+                                    onClick={() => setShowWarnings(!showWarnings)}
+                                    className="flex w-full items-center justify-between rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-600 transition-colors hover:bg-yellow-500/20 dark:text-yellow-500"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <span className="font-medium">
+                                            {job.warnings!.length} warning{job.warnings!.length !== 1 ? 's' : ''} detected
+                                        </span>
+                                    </div>
+                                    {showWarnings ? (
+                                        <ChevronUp className="h-4 w-4" />
+                                    ) : (
+                                        <ChevronDown className="h-4 w-4" />
+                                    )}
+                                </button>
+                                {showWarnings && (
+                                    <div className="mt-2 space-y-2 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3">
+                                        {job.warnings!.map((warning, index) => (
+                                            <div
+                                                key={index}
+                                                className="flex items-start gap-2 text-sm text-muted-foreground"
+                                            >
+                                                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-600 dark:text-yellow-500" />
+                                                <span className="break-words">{warning}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </CardContent>
                 </div>
             </div>

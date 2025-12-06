@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS jobs (
                                     is_playlist BOOLEAN DEFAULT FALSE,
                                     status TEXT,
                                     progress REAL,
+                                    warnings TEXT,
                                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
