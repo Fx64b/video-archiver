@@ -346,14 +346,29 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		return fmt.Errorf("failed to start download: %w", err)
 	}
 
+	// Capture stderr to detect failed videos
+	var stderrBuf bytes.Buffer
+	stderrReader := io.TeeReader(stderr, &stderrBuf)
+
 	// Track progress in separate goroutines
 	go s.trackProgress(stdout, job.ID, string(domain.JobTypeVideo))
-	go s.trackProgress(stderr, job.ID, string(domain.JobTypeVideo))
+	go s.trackProgress(stderrReader, job.ID, string(domain.JobTypeVideo))
 
 	// Wait for command to complete
 	if err := downloadCmd.Wait(); err != nil {
-		return fmt.Errorf("download command failed: %w", err)
+		// With --ignore-errors, yt-dlp won't fail even if some videos fail
+		// But we still log if there's a complete failure
+		log.WithError(err).Warn("Download command completed with error (may be partial failure)")
 	}
+	// Process failed videos from stderr
+	failedVideos := s.parseFailedVideos(stderrBuf.String())
+	if len(failedVideos) > 0 {
+		log.Warnf("Detected %d failed videos during playlist download", len(failedVideos))
+		for _, fv := range failedVideos {
+			log.Warnf("Failed video: ID=%s, Error=%s", fv.ID, fv.ErrorMessage)
+		}
+	}
+
 	// Process the archive file to get the downloaded video IDs
 	log.Debugf("Processing archive file: %s", archiveFile)
 	downloadedIDs, err := s.processArchiveFile(archiveFile)
@@ -522,6 +537,145 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		}
 	}
 
+	// Process failed videos and create virtual jobs with error status
+	if len(failedVideos) > 0 {
+		log.Infof("Creating virtual jobs for %d failed videos", len(failedVideos))
+
+		// Determine membership type
+		membershipType := "unknown"
+		switch metadataModel.(type) {
+		case *domain.PlaylistMetadata:
+			membershipType = "playlist"
+		case *domain.ChannelMetadata:
+			membershipType = "channel"
+		}
+
+		for _, failedVideo := range failedVideos {
+			videoJobID := failedVideo.ID
+
+			// Check if a job already exists for this video
+			existingJob, err := s.jobs.GetByID(videoJobID)
+			if err == nil && existingJob != nil {
+				log.Debugf("Job already exists for failed video %s, skipping", videoJobID)
+				continue
+			}
+
+			// Try to get video title from enhanced metadata if available
+			videoTitle := failedVideo.Title
+			if videoTitle == "" {
+				// Look for the video in the playlist/channel items
+				switch m := metadataModel.(type) {
+				case *domain.PlaylistMetadata:
+					for _, item := range m.Items {
+						if item.ID == failedVideo.ID {
+							videoTitle = item.Title
+							failedVideo.Title = item.Title
+							break
+						}
+					}
+				case *domain.ChannelMetadata:
+					for _, item := range m.RecentVideos {
+						if item.ID == failedVideo.ID {
+							videoTitle = item.Title
+							failedVideo.Title = item.Title
+							break
+						}
+					}
+				}
+			}
+
+			if videoTitle == "" {
+				videoTitle = fmt.Sprintf("Video %s", failedVideo.ID)
+			}
+
+			// Create a virtual job with error status
+			videoJob := domain.Job{
+				ID:        videoJobID,
+				URL:       fmt.Sprintf("https://%s.com/watch?v=%s", failedVideo.Extractor, failedVideo.ID),
+				Status:    domain.JobStatusError,
+				Progress:  0.0,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+
+			log.Debugf("Creating virtual error job for failed video: ID=%s, Title=%s, Error=%s",
+				videoJobID, videoTitle, failedVideo.ErrorMessage)
+
+			// Create the job
+			if err := s.jobs.Create(&videoJob); err != nil {
+				log.WithError(err).Warnf("Failed to create virtual error job for video %s", videoJobID)
+				continue
+			}
+
+			// Create minimal metadata for failed video
+			failedMetadata := &domain.VideoMetadata{
+				ID:          failedVideo.ID,
+				Title:       videoTitle,
+				Description: fmt.Sprintf("Failed to download: %s", failedVideo.ErrorMessage),
+				Type:        "video",
+			}
+
+			// Try to enrich with metadata from playlist items if available
+			switch m := metadataModel.(type) {
+			case *domain.PlaylistMetadata:
+				for _, item := range m.Items {
+					if item.ID == failedVideo.ID {
+						failedMetadata.Title = item.Title
+						failedMetadata.Description = item.Description
+						failedMetadata.Thumbnail = item.Thumbnail
+						failedMetadata.Duration = item.Duration
+						failedMetadata.DurationString = item.DurationString
+						failedMetadata.Channel = item.Channel
+						failedMetadata.ChannelID = item.ChannelID
+						failedMetadata.ChannelURL = item.ChannelURL
+						failedMetadata.ViewCount = item.ViewCount
+						failedMetadata.LikeCount = item.LikeCount
+						// Append error message to description
+						if failedMetadata.Description != "" {
+							failedMetadata.Description += "\n\n"
+						}
+						failedMetadata.Description += fmt.Sprintf("[Download Failed: %s]", failedVideo.ErrorMessage)
+						break
+					}
+				}
+			case *domain.ChannelMetadata:
+				for _, item := range m.RecentVideos {
+					if item.ID == failedVideo.ID {
+						failedMetadata.Title = item.Title
+						failedMetadata.Description = item.Description
+						failedMetadata.Thumbnail = item.Thumbnail
+						failedMetadata.Duration = item.Duration
+						failedMetadata.DurationString = item.DurationString
+						failedMetadata.Channel = item.Channel
+						failedMetadata.ChannelID = item.ChannelID
+						failedMetadata.ChannelURL = item.ChannelURL
+						failedMetadata.ViewCount = item.ViewCount
+						failedMetadata.LikeCount = item.LikeCount
+						// Append error message to description
+						if failedMetadata.Description != "" {
+							failedMetadata.Description += "\n\n"
+						}
+						failedMetadata.Description += fmt.Sprintf("[Download Failed: %s]", failedVideo.ErrorMessage)
+						break
+					}
+				}
+			}
+
+			// Store the metadata
+			if err := s.jobs.StoreMetadata(videoJobID, failedMetadata); err != nil {
+				log.WithError(err).Warnf("Failed to store metadata for failed video %s", videoJobID)
+				continue
+			}
+
+			// Link the failed video to the playlist/channel
+			if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
+				log.WithError(err).Warnf("Failed to link failed video %s to %s %s", videoJobID, membershipType, job.ID)
+			} else {
+				log.Debugf("Successfully linked failed video %s to %s %s", videoJobID, membershipType, job.ID)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -562,6 +716,43 @@ func (s *Service) processArchiveFile(archiveFile string) (map[string][]string, e
 
 	log.Debugf("Processed archive file, found %d extractors", len(result))
 	return result, nil
+}
+
+type FailedVideo struct {
+	ID           string
+	Extractor    string
+	ErrorMessage string
+	Title        string
+}
+
+// parseFailedVideos extracts failed video information from yt-dlp stderr output
+func (s *Service) parseFailedVideos(stderrOutput string) []FailedVideo {
+	var failedVideos []FailedVideo
+
+	// Common yt-dlp error patterns:
+	// ERROR: [youtube] videoID: Video unavailable
+	// ERROR: [youtube] videoID: Private video. Sign in if you've been granted access to this video
+	// ERROR: [youtube] videoID: This video is unavailable
+	errorPattern := regexp.MustCompile(`ERROR:\s*\[([^\]]+)\]\s*([^:]+):\s*(.+)`)
+
+	lines := strings.Split(stderrOutput, "\n")
+	for _, line := range lines {
+		if !strings.Contains(line, "ERROR:") {
+			continue
+		}
+
+		matches := errorPattern.FindStringSubmatch(line)
+		if len(matches) >= 4 {
+			failedVideo := FailedVideo{
+				Extractor:    matches[1],
+				ID:           strings.TrimSpace(matches[2]),
+				ErrorMessage: strings.TrimSpace(matches[3]),
+			}
+			failedVideos = append(failedVideos, failedVideo)
+		}
+	}
+
+	return failedVideos
 }
 
 func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath string) error {

@@ -48,6 +48,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Get("/recent", h.HandleRecent)
 	r.Get("/job/{id}", h.HandleGetJob)
 	r.Get("/job/{id}/parents", h.HandleGetJobParents)
+	r.Get("/job/{id}/videos", h.HandleGetJobVideos)
 	r.Get("/statistics", h.HandleGetStatistics)
 	r.Get("/downloads/{type}", h.HandleGetDownloads)
 	r.Get("/video/{jobID}", h.HandleServeVideo)
@@ -247,6 +248,36 @@ func (h *Handler) HandleGetJobParents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{Message: parents}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) HandleGetJobVideos(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	log.WithField("jobID", jobID).Info("Received request for job videos")
+
+	if jobID == "" {
+		log.Warn("Missing job ID in request")
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	jobRepo := h.downloadService.GetRepository()
+	videos, err := jobRepo.GetVideosForParent(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get videos for parent")
+		http.Error(w, "Failed to get videos for parent", http.StatusInternalServerError)
+		return
+	}
+
+	// Return empty array if no videos found (not an error)
+	if videos == nil {
+		videos = []*domain.JobWithMetadata{}
+	}
+
+	log.WithField("jobID", jobID).WithField("count", len(videos)).Info("Returning videos for parent")
+
+	resp := Response{Message: videos}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
