@@ -74,6 +74,7 @@ type ProgressState struct {
 	RetryError        string             // Current retry error message
 	IsStuck           bool               // Flag if download is stuck retrying
 	HasError          bool               // Flag if download encountered an error
+	Warnings          []string           // Collected warnings/errors during download
 }
 
 // ProgressTracker handles robust progress tracking
@@ -100,6 +101,7 @@ func NewProgressTracker(service *Service, jobID, jobType string) *ProgressTracke
 			RawProgress:    make(map[string]float64),
 			CurrentStreamType: make(map[string]string),
 			VideoProgress: make(map[string]float64),
+			Warnings:      make([]string, 0),
 		},
 		service:        service,
 		updateThrottle: 100 * time.Millisecond, // 0.1 seconds max for more responsive updates
@@ -415,6 +417,25 @@ func (pt *ProgressTracker) handleSpecialCases(line string) {
 	// Check for error messages
 	if errorPattern.MatchString(line) || fileEmptyPattern.MatchString(line) {
 		pt.state.HasError = true
+
+		// Extract the error message (remove "ERROR: " prefix if present)
+		warningMsg := line
+		if strings.HasPrefix(line, "ERROR: ") {
+			warningMsg = strings.TrimPrefix(line, "ERROR: ")
+		}
+
+		// Add to warnings list if not already present
+		isDuplicate := false
+		for _, w := range pt.state.Warnings {
+			if w == warningMsg {
+				isDuplicate = true
+				break
+			}
+		}
+		if !isDuplicate {
+			pt.state.Warnings = append(pt.state.Warnings, warningMsg)
+		}
+
 		log.WithFields(log.Fields{
 			"jobID": pt.state.JobID,
 			"error": line,
@@ -616,6 +637,7 @@ func (pt *ProgressTracker) broadcastUpdate() {
 		RetryCount:           pt.state.RetryCount,
 		MaxRetries:           pt.state.MaxRetries,
 		RetryError:           pt.state.RetryError,
+		Warnings:             pt.state.Warnings,
 	}
 
 	pt.service.hub.broadcast <- update
@@ -631,6 +653,7 @@ func (pt *ProgressTracker) broadcastUpdate() {
 			"contentType":        pt.state.ContentType,
 			"isRetrying":         update.IsRetrying,
 			"retryCount":         update.RetryCount,
+			"warningCount":       len(update.Warnings),
 		}).Debug("Progress update broadcast")
 	}
 }
@@ -645,6 +668,7 @@ func (pt *ProgressTracker) updateDatabase() {
 			return
 		}
 		job.Status = domain.JobStatusError
+		job.Warnings = pt.state.Warnings
 		if err := pt.service.jobs.Update(job); err != nil {
 			log.WithError(err).Error("Failed to mark stuck job as failed")
 		}
@@ -664,6 +688,7 @@ func (pt *ProgressTracker) updateJobProgress(jobID string, progress float64) err
 	}
 
 	job.Progress = progress
+	job.Warnings = pt.state.Warnings
 	return pt.service.jobs.Update(job)
 }
 

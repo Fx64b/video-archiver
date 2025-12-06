@@ -14,6 +14,7 @@ export interface Job {
   status: JobStatus;
   progress: number /* float64 */;
   custom_quality?: number /* int */;
+  warnings?: string[];
   created_at: string /* RFC3339 */;
   updated_at: string /* RFC3339 */;
 }
@@ -43,6 +44,7 @@ export interface ProgressUpdate {
   retryCount?: number /* int */;
   maxRetries?: number /* int */;
   retryError?: string;
+  warnings?: string[];
 }
 export const DownloadPhaseMetadata = "metadata";
 export const DownloadPhaseVideo = "video";
