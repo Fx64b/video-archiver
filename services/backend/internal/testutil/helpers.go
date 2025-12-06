@@ -25,6 +25,7 @@ func CreateTestDB(t *testing.T) *sql.DB {
 		url TEXT NOT NULL,
 		status TEXT NOT NULL,
 		progress REAL NOT NULL,
+		warnings TEXT,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
 	);
@@ -78,6 +79,7 @@ func CreateTestJob(id, url string) *domain.Job {
 		URL:       url,
 		Status:    domain.JobStatusPending,
 		Progress:  0,
+		Warnings:  []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
