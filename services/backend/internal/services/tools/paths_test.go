@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -54,36 +55,107 @@ func TestOrderedExtensions(t *testing.T) {
 	}
 }
 
-func TestCandidateInputPaths(t *testing.T) {
-	meta := &domain.VideoMetadata{Uploader: "Some Uploader", Title: "My Video", Extension: "mkv"}
-	paths, err := candidateInputPaths("/downloads", meta)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestCandidateDirs(t *testing.T) {
+	meta := &domain.VideoMetadata{Uploader: "Some Uploader", Channel: "Some Channel"}
+	dirs := candidateDirs("/downloads", meta)
+	if dirs[0] != filepath.Join("/downloads", "Some Uploader") {
+		t.Errorf("first dir = %q, want uploader dir", dirs[0])
 	}
-	want := filepath.Join("/downloads", "Some Uploader", "My Video.mkv")
-	if paths[0] != want {
-		t.Errorf("first candidate = %q, want %q", paths[0], want)
+	if len(dirs) != 2 || dirs[1] != filepath.Join("/downloads", "Some Channel") {
+		t.Errorf("expected channel dir as fallback, got %v", dirs)
 	}
 
-	// Falls back to channel when uploader is empty.
-	meta = &domain.VideoMetadata{Channel: "Chan", Title: "T", Extension: "mp4"}
-	paths, _ = candidateInputPaths("/downloads", meta)
-	if !strings.Contains(paths[0], filepath.Join("Chan", "T.mp4")) {
-		t.Errorf("expected channel fallback in %q", paths[0])
+	// Uploader == Channel deduplicates to a single dir.
+	meta = &domain.VideoMetadata{Uploader: "Fireship", Channel: "Fireship"}
+	if dirs := candidateDirs("/downloads", meta); len(dirs) != 1 {
+		t.Errorf("expected deduplicated single dir, got %v", dirs)
+	}
+
+	// Empty uploader/channel falls back to Unknown, still within base.
+	meta = &domain.VideoMetadata{}
+	dirs = candidateDirs("/downloads", meta)
+	if len(dirs) != 1 || !strings.HasPrefix(dirs[0], filepath.Clean("/downloads")) {
+		t.Errorf("unexpected fallback dirs: %v", dirs)
 	}
 }
 
-func TestCandidateInputPathsTraversal(t *testing.T) {
-	meta := &domain.VideoMetadata{Uploader: "../../etc", Title: "../passwd", Extension: "mp4"}
-	// Sanitization neutralizes separators, so this must stay within the base.
-	paths, err := candidateInputPaths("/downloads", meta)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestNormalizeForMatch(t *testing.T) {
+	tests := map[string]string{
+		"Google's AI endgame… at I/O 2026": "googlesaiendgameatio2026",
+		"10 weird OSS projects...":         "10weirdossprojects",
+		"  Mixed CASE 99 ":                 "mixedcase99",
+		"":                                 "",
 	}
-	for _, p := range paths {
-		if !strings.HasPrefix(p, filepath.Clean("/downloads")) {
-			t.Errorf("path escaped base: %q", p)
+	for in, want := range tests {
+		if got := normalizeForMatch(in); got != want {
+			t.Errorf("normalizeForMatch(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestResolveVideoFileSanitizationMismatch reproduces the reported failure: the
+// title contains characters ('/', '…', a curly quote) and the file on disk has a
+// different extension than the metadata hint. Exact reconstruction fails but the
+// normalized directory scan must still find the file.
+func TestResolveVideoFileSanitizationMismatch(t *testing.T) {
+	downloads := t.TempDir()
+	dir := filepath.Join(downloads, "Fireship")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// On-disk: curly apostrophe, ellipsis, '/'→'_', and a .webm extension.
+	onDisk := "Google’s AI endgame is here… everything you missed at I_O 2026.webm"
+	target := filepath.Join(dir, onDisk)
+	if err := os.WriteFile(target, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := &domain.VideoMetadata{
+		Uploader:  "Fireship",
+		Title:     "Google’s AI endgame is here… everything you missed at I/O 2026",
+		Extension: "mp4", // wrong hint on purpose
+	}
+	got, err := ResolveVideoFile(downloads, meta)
+	if err != nil {
+		t.Fatalf("ResolveVideoFile: %v", err)
+	}
+	if got != target {
+		t.Errorf("ResolveVideoFile = %q, want %q", got, target)
+	}
+}
+
+func TestResolveVideoFileExactAndTrailingDots(t *testing.T) {
+	downloads := t.TempDir()
+	dir := filepath.Join(downloads, "Fireship")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Trailing dots are stripped by sanitizeFilename but kept by yt-dlp on disk.
+	onDisk := filepath.Join(dir, "10 weird OSS projects you need right now....mp4")
+	if err := os.WriteFile(onDisk, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta := &domain.VideoMetadata{Uploader: "Fireship", Title: "10 weird OSS projects you need right now...", Extension: "mp4"}
+	got, err := ResolveVideoFile(downloads, meta)
+	if err != nil || got != onDisk {
+		t.Fatalf("ResolveVideoFile = %q, %v; want %q", got, err, onDisk)
+	}
+}
+
+func TestResolveVideoFileNotFound(t *testing.T) {
+	downloads := t.TempDir()
+	meta := &domain.VideoMetadata{Uploader: "Nobody", Title: "Nope", Extension: "mp4"}
+	if _, err := ResolveVideoFile(downloads, meta); err == nil {
+		t.Error("expected error when no file exists")
+	}
+}
+
+func TestResolveVideoFileTraversalSafe(t *testing.T) {
+	downloads := t.TempDir()
+	meta := &domain.VideoMetadata{Uploader: "../../etc", Title: "../passwd", Extension: "mp4"}
+	// Should not find anything outside the base and must not error-escape.
+	if _, err := ResolveVideoFile(downloads, meta); err == nil {
+		t.Error("expected not-found error for traversal-style names")
 	}
 }
 

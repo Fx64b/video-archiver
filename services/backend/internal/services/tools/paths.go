@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -39,31 +40,28 @@ func sanitizeFilename(name string) string {
 	return cleaned
 }
 
-// candidateInputPaths returns the possible on-disk locations for a downloaded
-// video, most likely first. Downloads are stored as
-// <downloadPath>/<uploader>/<title>.<ext>. The metadata extension is tried
-// first, followed by the other known video extensions.
-func candidateInputPaths(downloadPath string, meta *domain.VideoMetadata) ([]string, error) {
-	uploader := meta.Uploader
-	if uploader == "" {
-		uploader = meta.Channel
-	}
-	uploader = sanitizeFilename(uploader)
-	title := sanitizeFilename(meta.Title)
-
-	dir := filepath.Join(downloadPath, uploader)
-
-	exts := orderedExtensions(meta.Extension)
-	paths := make([]string, 0, len(exts))
+// candidateDirs returns the directories a downloaded video may live in. Downloads
+// are written under the uploader (yt-dlp template %(uploader)s); the channel name
+// is tried as a fallback since some metadata records it separately.
+func candidateDirs(downloadPath string, meta *domain.VideoMetadata) []string {
 	base := filepath.Clean(downloadPath)
-	for _, ext := range exts {
-		p := filepath.Clean(filepath.Join(dir, title+"."+ext))
-		if err := ensureWithin(base, p); err != nil {
-			return nil, err
+	var dirs []string
+	seen := map[string]bool{}
+	for _, name := range []string{meta.Uploader, meta.Channel} {
+		if name == "" {
+			continue
 		}
-		paths = append(paths, p)
+		dir := filepath.Clean(filepath.Join(base, sanitizeFilename(name)))
+		if ensureWithin(base, dir) != nil || seen[dir] {
+			continue
+		}
+		dirs = append(dirs, dir)
+		seen[dir] = true
 	}
-	return paths, nil
+	if len(dirs) == 0 {
+		dirs = append(dirs, filepath.Join(base, "Unknown"))
+	}
+	return dirs
 }
 
 // orderedExtensions returns the metadata extension first (if known and valid)
@@ -95,6 +93,92 @@ func ensureWithin(base, target string) error {
 		return fmt.Errorf("invalid path: %q escapes %q", target, base)
 	}
 	return nil
+}
+
+// normalizeForMatch reduces a name to lowercase alphanumerics so titles can be
+// compared regardless of how punctuation/unicode was sanitized on disk. This is
+// what makes file lookup robust against yt-dlp's filename rules (e.g. '/', '…',
+// curly quotes, trailing dots).
+func normalizeForMatch(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// findVideoInDir scans dir for a video file whose name matches title after
+// normalization. It prefers an exact normalized match, then falls back to a
+// prefix match (tolerating any trailing format suffix yt-dlp may leave).
+func findVideoInDir(dir, title string) (string, bool) {
+	target := normalizeForMatch(title)
+	if target == "" {
+		return "", false
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+
+	var prefixMatch string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(name)), ".")
+		if !contains(videoFileExtensions, ext) {
+			continue
+		}
+		stem := normalizeForMatch(strings.TrimSuffix(name, filepath.Ext(name)))
+		if stem == target {
+			return filepath.Join(dir, name), true
+		}
+		if prefixMatch == "" && strings.HasPrefix(stem, target) {
+			prefixMatch = filepath.Join(dir, name)
+		}
+	}
+	if prefixMatch != "" {
+		return prefixMatch, true
+	}
+	return "", false
+}
+
+// ResolveVideoFile locates the on-disk file for a downloaded video. Downloads are
+// written by yt-dlp as <downloadPath>/<uploader>/<title>.<ext>, but yt-dlp's
+// filename sanitization does not match a naive reconstruction for titles with
+// characters like '/', '…' or curly quotes, and the container extension is not
+// guaranteed. ResolveVideoFile tries the reconstructed paths first, then falls
+// back to scanning the directory and matching the title with normalization.
+func ResolveVideoFile(downloadPath string, meta *domain.VideoMetadata) (string, error) {
+	base := filepath.Clean(downloadPath)
+	dirs := candidateDirs(downloadPath, meta)
+	title := sanitizeFilename(meta.Title)
+	exts := orderedExtensions(meta.Extension)
+
+	// Fast path: exact reconstructed file names.
+	for _, dir := range dirs {
+		for _, ext := range exts {
+			p := filepath.Clean(filepath.Join(dir, title+"."+ext))
+			if ensureWithin(base, p) != nil {
+				continue
+			}
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				return p, nil
+			}
+		}
+	}
+
+	// Robust path: scan the directory and match the title by normalization.
+	for _, dir := range dirs {
+		if p, ok := findVideoInDir(dir, meta.Title); ok {
+			return p, nil
+		}
+	}
+
+	return "", fmt.Errorf("video file for %q not found on disk", meta.Title)
 }
 
 // outputExtension determines the extension of the produced file for a job.

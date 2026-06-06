@@ -275,12 +275,8 @@ func TestResolveVideoPath(t *testing.T) {
 	_ = jobRepo.Create(job)
 	_ = jobRepo.StoreMetadata("v1", meta)
 
-	// Create the file where candidateInputPaths expects it.
-	candidates, err := candidateInputPaths(svc.downloadPath, meta)
-	if err != nil {
-		t.Fatalf("candidateInputPaths: %v", err)
-	}
-	target := candidates[0]
+	// Place the file where the resolver expects it (uploader/title.ext).
+	target := filepath.Join(svc.downloadPath, sanitizeFilename(meta.Uploader), sanitizeFilename(meta.Title)+"."+meta.Extension)
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}

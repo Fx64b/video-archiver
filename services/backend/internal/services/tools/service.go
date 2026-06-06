@@ -285,7 +285,7 @@ func (s *Service) expandInputFiles(job *domain.ToolsJob) ([]string, error) {
 	}
 }
 
-// resolveVideoPath maps a video job ID to the first existing file on disk.
+// resolveVideoPath maps a video job ID to the file on disk.
 func (s *Service) resolveVideoPath(jobID string) (string, error) {
 	jwm, err := s.jobRepo.GetJobWithMetadata(jobID)
 	if err != nil {
@@ -299,23 +299,11 @@ func (s *Service) resolveVideoPath(jobID string) (string, error) {
 		return "", fmt.Errorf("job %s is not a video", jobID)
 	}
 
-	candidates, err := candidateInputPaths(s.downloadPath, meta)
+	path, err := ResolveVideoFile(s.downloadPath, meta)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("job %s: %w", jobID, err)
 	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
-		}
-	}
-	// Last resort: glob the uploader directory for the title.
-	if len(candidates) > 0 {
-		pattern := strings.TrimSuffix(candidates[0], filepath.Ext(candidates[0])) + ".*"
-		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
-			return matches[0], nil
-		}
-	}
-	return "", fmt.Errorf("video file for job %s not found on disk", jobID)
+	return path, nil
 }
 
 // runOperation builds and executes ffmpeg for a single (non-workflow) operation.
