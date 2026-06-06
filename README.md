@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> This project is currently being rebuilt. I created this project a long time ago and the techstack and architecture is terrible. Expect frequent, breaking updates.
+
 # Video Archiver
 
 A self-hosted YouTube video archiver with a modern web interface. Download, manage, and organize your YouTube videos, playlists, and channels locally.
