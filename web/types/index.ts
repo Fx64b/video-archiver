@@ -210,10 +210,18 @@ export const OpTypeExtractAudio: ToolsOperationType = "extract_audio";
 export const OpTypeAdjustQuality: ToolsOperationType = "adjust_quality";
 export const OpTypeRotate: ToolsOperationType = "rotate";
 export const OpTypeWorkflow: ToolsOperationType = "workflow";
+/**
+ * ToolsInputType describes how InputFiles should be interpreted.
+ */
 export type ToolsInputType = string;
 export const InputTypeVideos: ToolsInputType = "videos";
 export const InputTypePlaylist: ToolsInputType = "playlist";
 export const InputTypeChannel: ToolsInputType = "channel";
+/**
+ * ToolsJob represents a single media-processing job operating on already
+ * downloaded videos. InputFiles holds download job IDs (videos, or a single
+ * playlist/channel that is expanded into its videos).
+ */
 export interface ToolsJob {
   id: string;
   operation_type: ToolsOperationType;
@@ -227,8 +235,8 @@ export interface ToolsJob {
   created_at: string /* RFC3339 */;
   updated_at: string /* RFC3339 */;
   completed_at?: string /* RFC3339 */;
-  estimated_size?: number /* int64 */; // Bytes
-  actual_size?: number /* int64 */; // Bytes
+  estimated_size?: number /* int64 */;
+  actual_size?: number /* int64 */;
 }
 export interface TrimParameters {
   start_time: string; // HH:MM:SS(.ms) or seconds
@@ -272,6 +280,10 @@ export interface WorkflowStep {
   parameters: { [key: string]: any};
   output_name?: string;
 }
+/**
+ * ToolsProgressUpdate is broadcast over the WebSocket as a job runs. The Type
+ * field lets the frontend route the message without fragile field sniffing.
+ */
 export interface ToolsProgressUpdate {
   type: string; // always "tools-progress"
   jobID: string;

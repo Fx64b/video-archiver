@@ -24,7 +24,7 @@ COPY --from=denoland/deno:bin-2.1.4 /deno /usr/local/bin/deno
 
 # Install runtime dependencies
 RUN apk add --no-cache ffmpeg python3 curl gcompat libstdc++ \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/download/2025.03.31/yt-dlp -o /usr/local/bin/yt-dlp \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/download/2026.03.17/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp /usr/local/bin/deno
 
 # Create non-root user and setup directories
