@@ -210,15 +210,19 @@ export const OpTypeExtractAudio: ToolsOperationType = "extract_audio";
 export const OpTypeAdjustQuality: ToolsOperationType = "adjust_quality";
 export const OpTypeRotate: ToolsOperationType = "rotate";
 export const OpTypeWorkflow: ToolsOperationType = "workflow";
+export type ToolsInputType = string;
+export const InputTypeVideos: ToolsInputType = "videos";
+export const InputTypePlaylist: ToolsInputType = "playlist";
+export const InputTypeChannel: ToolsInputType = "channel";
 export interface ToolsJob {
   id: string;
   operation_type: ToolsOperationType;
   status: ToolsJobStatus;
   progress: number /* float64 */; // 0-100
-  input_files: string[]; // Job IDs (videos, playlists, or channels)
-  input_type: string; // "videos", "playlist", "channel"
-  output_file: string; // Generated file path
-  parameters: { [key: string]: any}; // Operation-specific params
+  input_files: string[];
+  input_type: ToolsInputType;
+  output_file: string;
+  parameters: { [key: string]: any};
   error_message?: string;
   created_at: string /* RFC3339 */;
   updated_at: string /* RFC3339 */;
@@ -226,64 +230,56 @@ export interface ToolsJob {
   estimated_size?: number /* int64 */; // Bytes
   actual_size?: number /* int64 */; // Bytes
 }
-/**
- * Operation-specific parameter structures
- */
 export interface TrimParameters {
-  start_time: string; // HH:MM:SS or seconds
-  end_time: string; // HH:MM:SS or seconds
-  re_encode: boolean; // Force re-encode or stream copy
+  start_time: string; // HH:MM:SS(.ms) or seconds
+  end_time: string; // HH:MM:SS(.ms) or seconds
+  re_encode: boolean; // Re-encode for frame-accurate cuts
 }
 export interface ConcatParameters {
-  output_format: string; // mp4, mkv, etc.
-  re_encode: boolean; // Force re-encode if codecs differ
-  file_order: string[]; // Explicit ordering of input files
-  sort_by: string; // For channel: upload_date, title, duration
-  order: string; // asc or desc
+  output_format: string; // mp4, mkv, webm
+  re_encode: boolean; // Re-encode if codecs differ
+  file_order: string[]; // Explicit ordering by job ID
 }
 export interface ConvertParameters {
   output_format: string; // mp4, webm, mkv, avi, mov
-  video_codec: string; // h264, h265, vp9, etc.
-  audio_codec: string; // aac, mp3, opus, etc.
-  bitrate: string; // e.g., "2M", "5M"
-  preserve_quality: boolean; // Use original quality settings
+  video_codec: string; // libx264, libx265, libvpx-vp9, copy
+  audio_codec: string; // aac, libmp3lame, libopus, copy
+  bitrate: string; // e.g. "2M", "5M"
 }
 export interface ExtractAudioParameters {
   output_format: string; // mp3, aac, flac, wav, ogg
-  bitrate: string; // e.g., "128k", "320k"
-  sample_rate: number /* int */; // e.g., 44100, 48000
+  bitrate: string; // e.g. "128k", "320k"
+  sample_rate: number /* int */; // e.g. 44100, 48000
 }
 export interface AdjustQualityParameters {
-  resolution: string; // 480p, 720p, 1080p, etc.
-  bitrate: string; // Target bitrate
+  resolution: string; // 480p, 720p, 1080p, ...
+  bitrate: string; // optional target bitrate
   crf: number /* int */; // Constant Rate Factor (0-51)
-  two_pass: boolean; // Use two-pass encoding
+  two_pass: boolean; // Two-pass encoding (requires bitrate)
 }
 export interface RotateParameters {
-  rotation: number /* int */; // 90, 180, 270 degrees
-  flip_h: boolean; // Flip horizontal
-  flip_v: boolean; // Flip vertical
+  rotation: number /* int */; // 0, 90, 180, 270
+  flip_h: boolean; // Horizontal flip
+  flip_v: boolean; // Vertical flip
 }
 export interface WorkflowParameters {
-  steps: WorkflowStep[]; // Ordered list of operations
-  keep_intermediate_files: boolean; // Save intermediate outputs
-  stop_on_error: boolean; // Stop workflow if step fails
+  steps: WorkflowStep[];
+  keep_intermediate_files: boolean;
+  stop_on_error: boolean;
 }
 export interface WorkflowStep {
-  operation: ToolsOperationType; // Operation type for this step
-  parameters: { [key: string]: any}; // Parameters for this operation
-  output_name?: string; // Custom name for output
+  operation: ToolsOperationType;
+  parameters: { [key: string]: any};
+  output_name?: string;
 }
-/**
- * Progress update for WebSocket
- */
 export interface ToolsProgressUpdate {
+  type: string; // always "tools-progress"
   jobID: string;
   status: ToolsJobStatus;
   progress: number /* float64 */;
-  current_step: string; // e.g., "Analyzing", "Encoding", "Finalizing"
-  time_elapsed: number /* int */; // Seconds
-  time_remaining: number /* int */; // Estimated seconds
+  current_step: string;
+  time_elapsed: number /* int */; // seconds
+  time_remaining: number /* int */; // estimated seconds
   error?: string;
 }
 
