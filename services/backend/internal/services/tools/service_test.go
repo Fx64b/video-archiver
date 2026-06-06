@@ -301,6 +301,34 @@ func TestResolveVideoPath(t *testing.T) {
 	}
 }
 
+func TestResolveOutputFile(t *testing.T) {
+	svc, _, _ := newTestService(t, testutil.NewMockJobRepository())
+
+	// Valid output inside the processed dir.
+	good := filepath.Join(svc.processedPath, "out.mp4")
+	if err := os.WriteFile(good, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := svc.ResolveOutputFile(&domain.ToolsJob{OutputFile: good}); err != nil || got != good {
+		t.Errorf("ResolveOutputFile(good) = %q, %v", got, err)
+	}
+
+	// Empty output file.
+	if _, err := svc.ResolveOutputFile(&domain.ToolsJob{}); err == nil {
+		t.Error("expected error for empty output file")
+	}
+
+	// Path escaping the processed directory is rejected.
+	if _, err := svc.ResolveOutputFile(&domain.ToolsJob{OutputFile: filepath.Join(svc.processedPath, "..", "escape.mp4")}); err == nil {
+		t.Error("expected traversal to be rejected")
+	}
+
+	// Missing file.
+	if _, err := svc.ResolveOutputFile(&domain.ToolsJob{OutputFile: filepath.Join(svc.processedPath, "missing.mp4")}); err == nil {
+		t.Error("expected error for missing file")
+	}
+}
+
 func TestOrderConcatInputs(t *testing.T) {
 	inputs := []resolvedInput{{jobID: "a", path: "a.mp4"}, {jobID: "b", path: "b.mp4"}, {jobID: "c", path: "c.mp4"}}
 

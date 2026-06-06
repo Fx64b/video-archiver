@@ -107,6 +107,24 @@ func (s *Service) GetJobByID(id string) (*domain.ToolsJob, error) {
 	return s.toolsRepo.GetByID(id)
 }
 
+// ResolveOutputFile returns the validated absolute path of a completed job's
+// output file, guarding against any path that escapes the processed directory.
+func (s *Service) ResolveOutputFile(job *domain.ToolsJob) (string, error) {
+	if job.OutputFile == "" {
+		return "", fmt.Errorf("job has no output file")
+	}
+	base := filepath.Clean(s.processedPath)
+	path := filepath.Clean(job.OutputFile)
+	if err := ensureWithin(base, path); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return "", fmt.Errorf("output file not found")
+	}
+	return path, nil
+}
+
 // Submit validates and enqueues a job. Validation happens here so the API can
 // reject bad requests synchronously instead of failing asynchronously.
 func (s *Service) Submit(job *domain.ToolsJob) error {

@@ -1,24 +1,34 @@
 'use client'
 
-import Link from 'next/link'
+import useToolsState from '@/store/toolsState'
 import {
-    Scissors,
-    Layers,
+    ChevronRight,
     FileAudio,
-    Settings2,
-    RotateCw,
     FileVideo,
+    Layers,
+    RotateCw,
+    Scissors,
+    Settings2,
     Workflow,
-    ChevronRight
 } from 'lucide-react'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
+
+import { useToolsWebSocket } from '@/hooks/useToolsWebSocket'
+
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card'
+
+import ProcessedResults from './ProcessedResults'
 import ProgressTracker from './ProgressTracker'
 import VideoSelector from './VideoSelector'
-import { useToolsWebSocket } from '@/hooks/useToolsWebSocket'
-import useToolsState from '@/store/toolsState'
 
 interface ToolCard {
     title: string
@@ -32,49 +42,50 @@ const TOOLS: ToolCard[] = [
     {
         title: 'Trim Video',
         description: 'Cut and trim videos to specific time ranges',
-        icon: <Scissors className="w-5 h-5" />,
+        icon: <Scissors className="h-5 w-5" />,
         href: '/tools/trim',
         minSelection: 1,
     },
     {
         title: 'Concatenate Videos',
         description: 'Merge multiple videos into a single file',
-        icon: <Layers className="w-5 h-5" />,
+        icon: <Layers className="h-5 w-5" />,
         href: '/tools/concat',
         minSelection: 2,
     },
     {
         title: 'Extract Audio',
         description: 'Extract audio tracks from videos in various formats',
-        icon: <FileAudio className="w-5 h-5" />,
+        icon: <FileAudio className="h-5 w-5" />,
         href: '/tools/extract-audio',
         minSelection: 1,
     },
     {
         title: 'Convert Format',
-        description: 'Convert videos between different formats (MP4, WebM, etc.)',
-        icon: <FileVideo className="w-5 h-5" />,
+        description:
+            'Convert videos between different formats (MP4, WebM, etc.)',
+        icon: <FileVideo className="h-5 w-5" />,
         href: '/tools/convert',
         minSelection: 1,
     },
     {
         title: 'Adjust Quality',
         description: 'Change video resolution and bitrate',
-        icon: <Settings2 className="w-5 h-5" />,
+        icon: <Settings2 className="h-5 w-5" />,
         href: '/tools/quality',
         minSelection: 1,
     },
     {
         title: 'Rotate Video',
         description: 'Rotate videos by 90, 180, or 270 degrees',
-        icon: <RotateCw className="w-5 h-5" />,
+        icon: <RotateCw className="h-5 w-5" />,
         href: '/tools/rotate',
         minSelection: 1,
     },
     {
         title: 'Create Workflow',
         description: 'Chain multiple operations together in a custom workflow',
-        icon: <Workflow className="w-5 h-5" />,
+        icon: <Workflow className="h-5 w-5" />,
         href: '/tools/workflow',
         minSelection: 1,
     },
@@ -91,14 +102,15 @@ export default function ToolsContent() {
         <div className="flex min-h-screen w-full flex-col gap-8">
             {/* Header */}
             <div>
-                <h1 className="text-3xl font-bold mb-2">Video Tools</h1>
+                <h1 className="mb-2 text-3xl font-bold">Video Tools</h1>
                 <p className="text-muted-foreground">
                     Select videos below, then choose a tool to process them
                 </p>
             </div>
 
             {/* Active Jobs Progress */}
-            {Array.from(useToolsState.getState().activeJobs.values()).length > 0 && (
+            {Array.from(useToolsState.getState().activeJobs.values()).length >
+                0 && (
                 <section>
                     <ProgressTracker showCompleted={false} maxItems={3} />
                 </section>
@@ -112,7 +124,8 @@ export default function ToolsContent() {
                             <div>
                                 <CardTitle>Select Videos</CardTitle>
                                 <CardDescription>
-                                    Choose videos, playlists, or channels to process
+                                    Choose videos, playlists, or channels to
+                                    process
                                 </CardDescription>
                             </div>
                             {hasSelection && (
@@ -136,7 +149,7 @@ export default function ToolsContent() {
             <section>
                 <div className="mb-4">
                     <h2 className="text-xl font-semibold">Choose Tool</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-muted-foreground mt-1 text-sm">
                         {hasSelection
                             ? `${selectedInputs.length} item${selectedInputs.length === 1 ? '' : 's'} selected - click a tool to continue`
                             : 'Select videos above to enable tools'}
@@ -146,26 +159,33 @@ export default function ToolsContent() {
                 {!hasSelection && (
                     <Alert className="mb-6">
                         <AlertDescription>
-                            Please select one or more videos above to get started
+                            Please select one or more videos above to get
+                            started
                         </AlertDescription>
                     </Alert>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {TOOLS.map((tool) => {
-                        const isDisabled = !hasSelection || selectedInputs.length < (tool.minSelection || 1)
+                        const isDisabled =
+                            !hasSelection ||
+                            selectedInputs.length < (tool.minSelection || 1)
 
                         return (
                             <Link
                                 key={tool.href}
                                 href={isDisabled ? '#' : tool.href}
-                                className={isDisabled ? 'pointer-events-none' : ''}
+                                className={
+                                    isDisabled ? 'pointer-events-none' : ''
+                                }
                             >
-                                <Card className={`h-full transition-all cursor-pointer border ${
-                                    isDisabled
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : 'hover:border-primary hover:shadow-md'
-                                }`}>
+                                <Card
+                                    className={`h-full cursor-pointer border transition-all ${
+                                        isDisabled
+                                            ? 'cursor-not-allowed opacity-50'
+                                            : 'hover:border-primary hover:shadow-md'
+                                    }`}
+                                >
                                     <CardHeader className="pb-3">
                                         <div className="flex items-start justify-between">
                                             <div className="flex items-center gap-3">
@@ -177,17 +197,19 @@ export default function ToolsContent() {
                                                 </CardTitle>
                                             </div>
                                             {!isDisabled && (
-                                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                                <ChevronRight className="text-muted-foreground h-4 w-4" />
                                             )}
                                         </div>
-                                        <CardDescription className="text-sm mt-2">
+                                        <CardDescription className="mt-2 text-sm">
                                             {tool.description}
                                         </CardDescription>
-                                        {tool.minSelection && tool.minSelection > 1 && (
-                                            <p className="text-xs text-muted-foreground mt-2">
-                                                Requires {tool.minSelection}+ videos
-                                            </p>
-                                        )}
+                                        {tool.minSelection &&
+                                            tool.minSelection > 1 && (
+                                                <p className="text-muted-foreground mt-2 text-xs">
+                                                    Requires {tool.minSelection}
+                                                    + videos
+                                                </p>
+                                            )}
                                     </CardHeader>
                                 </Card>
                             </Link>
@@ -196,17 +218,33 @@ export default function ToolsContent() {
                 </div>
             </section>
 
+            {/* Processed Files */}
+            <section>
+                <ProcessedResults />
+            </section>
+
             {/* Quick Tips */}
             <section>
                 <Card className="bg-muted/50 border-muted">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-base">Quick Tips</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-1.5 text-sm text-muted-foreground">
-                        <p>• Select individual videos, entire playlists, or whole channels as input</p>
-                        <p>• Use workflows to chain multiple operations together</p>
-                        <p>• Processed files are saved to <code className="bg-background px-1 py-0.5 rounded text-xs">data/processed</code></p>
-                        <p>• Monitor progress in the Active Jobs section above</p>
+                    <CardContent className="text-muted-foreground space-y-1.5 text-sm">
+                        <p>
+                            • Select individual videos, entire playlists, or
+                            whole channels as input
+                        </p>
+                        <p>
+                            • Use workflows to chain multiple operations
+                            together
+                        </p>
+                        <p>
+                            • Completed results appear in the Processed Files
+                            section, ready to download
+                        </p>
+                        <p>
+                            • Monitor progress in the Active Jobs section above
+                        </p>
                     </CardContent>
                 </Card>
             </section>

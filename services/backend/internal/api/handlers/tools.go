@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"github.com/go-chi/chi"
@@ -25,6 +27,7 @@ func (h *ToolsHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{operation}", h.HandleSubmit)
 		r.Get("/jobs", h.HandleListJobs)
 		r.Get("/jobs/{id}", h.HandleGetJob)
+		r.Get("/jobs/{id}/output", h.HandleServeOutput)
 		r.Delete("/jobs/{id}", h.HandleCancelJob)
 	})
 }
@@ -172,6 +175,40 @@ func (h *ToolsHandler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, Response{Message: job})
+}
+
+// HandleServeOutput streams the produced file of a completed job as a download.
+func (h *ToolsHandler) HandleServeOutput(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	if jobID == "" {
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	job, err := h.toolsService.GetJobByID(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get tools job")
+		http.Error(w, "Failed to get job", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+	if job.Status != domain.ToolsJobStatusComplete {
+		http.Error(w, "Job output is not available yet", http.StatusConflict)
+		return
+	}
+
+	path, err := h.toolsService.ResolveOutputFile(job)
+	if err != nil {
+		log.WithError(err).WithField("job_id", jobID).Warn("Tools output file not found")
+		http.Error(w, "Output file not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(path)))
+	http.ServeFile(w, r, path)
 }
 
 func (h *ToolsHandler) HandleCancelJob(w http.ResponseWriter, r *http.Request) {

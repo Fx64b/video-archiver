@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -197,6 +199,75 @@ func TestHandleGetAndCancelJob(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("missing job status = %d, want 404", rec.Code)
+	}
+}
+
+func TestHandleServeOutput(t *testing.T) {
+	toolsRepo := newInMemoryToolsRepo()
+	processedDir := t.TempDir()
+	svc := tools.NewService(&tools.Config{
+		ToolsRepository: toolsRepo,
+		JobRepository:   testutil.NewMockJobRepository(),
+		DownloadPath:    t.TempDir(),
+		ProcessedPath:   processedDir,
+		Concurrency:     1,
+	})
+	h := NewToolsHandler(svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	// A completed job with a real output file is downloadable.
+	outputPath := filepath.Join(processedDir, "concat_out.mp4")
+	if err := os.WriteFile(outputPath, []byte("video-bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	done := &domain.ToolsJob{
+		ID:            "done1",
+		OperationType: domain.OpTypeConcat,
+		Status:        domain.ToolsJobStatusComplete,
+		OutputFile:    outputPath,
+	}
+	_ = toolsRepo.Create(done)
+
+	req := httptest.NewRequest(http.MethodGet, "/tools/jobs/done1/output", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != "video-bytes" {
+		t.Errorf("unexpected body: %q", rec.Body.String())
+	}
+	if cd := rec.Header().Get("Content-Disposition"); cd == "" {
+		t.Error("expected Content-Disposition header")
+	}
+
+	// A pending job has no output yet.
+	pending := &domain.ToolsJob{ID: "pending1", Status: domain.ToolsJobStatusProcessing}
+	_ = toolsRepo.Create(pending)
+	req = httptest.NewRequest(http.MethodGet, "/tools/jobs/pending1/output", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("pending output status = %d, want 409", rec.Code)
+	}
+
+	// Completed job whose file is missing on disk.
+	missing := &domain.ToolsJob{ID: "missing1", Status: domain.ToolsJobStatusComplete, OutputFile: filepath.Join(processedDir, "gone.mp4")}
+	_ = toolsRepo.Create(missing)
+	req = httptest.NewRequest(http.MethodGet, "/tools/jobs/missing1/output", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("missing file status = %d, want 404", rec.Code)
+	}
+
+	// Unknown job.
+	req = httptest.NewRequest(http.MethodGet, "/tools/jobs/nope/output", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown job status = %d, want 404", rec.Code)
 	}
 }
 

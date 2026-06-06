@@ -102,15 +102,24 @@ export async function getToolJob(jobId: string): Promise<ToolsJob> {
 
 export async function listToolJobs(
     page = 1,
-    limit = 20
+    limit = 20,
+    status?: string
 ): Promise<PaginatedJobs> {
     const url = new URL(`${BASE}/tools/jobs`)
     url.searchParams.set('page', String(page))
     url.searchParams.set('limit', String(limit))
+    if (status) {
+        url.searchParams.set('status', status)
+    }
     const res = await fetch(url.toString())
     if (!res.ok) {
         throw new Error(await parseError(res))
     }
     const data: ToolsResponse<PaginatedJobs> = await res.json()
     return data.message
+}
+
+/** URL that streams a completed job's produced file as a download. */
+export function toolOutputUrl(jobId: string): string {
+    return `${BASE}/tools/jobs/${jobId}/output`
 }
