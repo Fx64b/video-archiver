@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { SERVER_URL } from '@/lib/env'
+import { ensureMinimumDelay } from '@/lib/loading'
 
 import { ChannelsGrid } from '@/components/downloads/ChannelsGrid'
 import { PaginationControls } from '@/components/downloads/PaginationControls'
@@ -100,6 +101,9 @@ export default function DownloadsContent() {
             setLoading(true)
             setError(null)
 
+            // Keep the skeleton visible long enough to avoid a flash
+            const start = Date.now()
+
             try {
                 const url = new URL(`${SERVER_URL}/downloads/${activeTab}`)
                 url.searchParams.append('page', String(currentPage))
@@ -117,7 +121,6 @@ export default function DownloadsContent() {
                         limit: pageSize,
                         total_pages: 1,
                     })
-                    setLoading(false)
                     return
                 }
 
@@ -151,6 +154,7 @@ export default function DownloadsContent() {
                     total_pages: 1,
                 })
             } finally {
+                await ensureMinimumDelay(start)
                 setLoading(false)
             }
         }

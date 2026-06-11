@@ -19,6 +19,9 @@ interface ToolsState {
     // Selected inputs for processing
     selectedInputs: SelectedInput[]
 
+    // Optional user-chosen name for the output file of the next submitted job
+    outputName: string
+
     // UI state
     isProcessing: boolean
     currentOperation: string | null
@@ -39,6 +42,9 @@ interface ToolsState {
     clearSelectedInputs: () => void
     isInputSelected: (id: string) => boolean
 
+    // Actions - Output naming
+    setOutputName: (name: string) => void
+
     // Actions - UI state
     setIsProcessing: (value: boolean) => void
     setCurrentOperation: (operation: string | null) => void
@@ -50,6 +56,7 @@ const useToolsState = create<ToolsState>((set, get) => ({
     jobProgress: new Map<string, ToolsProgressUpdate>(),
     jobHistory: [],
     selectedInputs: [],
+    outputName: '',
     isProcessing: false,
     currentOperation: null,
 
@@ -145,6 +152,9 @@ const useToolsState = create<ToolsState>((set, get) => ({
     clearSelectedInputs: () => set({ selectedInputs: [] }),
 
     isInputSelected: (id) => get().selectedInputs.some((i) => i.id === id),
+
+    // Output naming actions
+    setOutputName: (name) => set({ outputName: name }),
 
     // UI state actions
     setIsProcessing: (value) => set({ isProcessing: value }),

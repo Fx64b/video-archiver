@@ -11,8 +11,13 @@ import { useNavigate } from 'react-router-dom'
  */
 export function useToolSubmit(operation: ToolOperation) {
     const navigate = useNavigate()
-    const { selectedInputs, clearSelectedInputs, addActiveJob } =
-        useToolsState()
+    const {
+        selectedInputs,
+        clearSelectedInputs,
+        addActiveJob,
+        outputName,
+        setOutputName,
+    } = useToolsState()
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -26,13 +31,15 @@ export function useToolSubmit(operation: ToolOperation) {
             setIsSubmitting(true)
             setError(null)
             try {
+                const name = outputName.trim()
                 const job = await submitTool(
                     operation,
                     selectedInputs.map((i) => ({ id: i.id, type: i.type })),
-                    parameters
+                    name ? { ...parameters, output_name: name } : parameters
                 )
                 addActiveJob(job)
                 clearSelectedInputs()
+                setOutputName('')
                 navigate('/tools')
             } catch (err) {
                 setError(
@@ -42,7 +49,15 @@ export function useToolSubmit(operation: ToolOperation) {
                 setIsSubmitting(false)
             }
         },
-        [operation, selectedInputs, addActiveJob, clearSelectedInputs, navigate]
+        [
+            operation,
+            selectedInputs,
+            addActiveJob,
+            clearSelectedInputs,
+            outputName,
+            setOutputName,
+            navigate,
+        ]
     )
 
     return { submit, isSubmitting, error, setError }

@@ -1,9 +1,11 @@
 import { Statistics } from '@/types'
-import { AlertCircle, RefreshCw } from 'lucide-react'
+import { AlertCircle, MonitorDown, RefreshCw } from 'lucide-react'
 
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { SERVER_URL } from '@/lib/env'
+import { ensureMinimumDelay } from '@/lib/loading'
 
 import { DownloadsChart } from '@/components/dashboard/DownloadsChart'
 import { StorageChart } from '@/components/dashboard/StorageChart'
@@ -21,6 +23,9 @@ export default function Dashboard() {
         setLoading(true)
         setError('')
 
+        // Keep the skeleton visible long enough to avoid a flash
+        const start = Date.now()
+
         try {
             const response = await fetch(`${SERVER_URL}/statistics`)
             if (!response.ok) {
@@ -32,6 +37,7 @@ export default function Dashboard() {
             console.error('Failed to load statistics:', err)
             setError('Failed to load statistics.')
         } finally {
+            await ensureMinimumDelay(start)
             setLoading(false)
         }
     }, [])
@@ -51,6 +57,15 @@ export default function Dashboard() {
             </CardContent>
         </Card>
     )
+
+    const isEmpty =
+        !loading &&
+        !error &&
+        (!statistics ||
+            Number(statistics.total_videos) +
+                Number(statistics.total_playlists) +
+                Number(statistics.total_channels) ===
+                0)
 
     return (
         <div className="flex min-h-screen w-full flex-col gap-8 p-8 pb-20 font-[family-name:var(--font-geist-sans)] sm:p-20">
@@ -82,19 +97,37 @@ export default function Dashboard() {
                 </Alert>
             )}
 
-            <main className="grid w-full grid-cols-1 gap-4 md:grid-cols-2">
-                {loading ? (
-                    <>
-                        {renderChartSkeleton()}
-                        {renderChartSkeleton()}
-                    </>
-                ) : (
-                    <>
-                        <DownloadsChart statistics={statistics} />
-                        <StorageChart statistics={statistics} />
-                    </>
-                )}
-            </main>
+            {isEmpty ? (
+                <Card>
+                    <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
+                        <MonitorDown className="text-muted-foreground h-10 w-10" />
+                        <div>
+                            <p className="font-medium">No downloads yet</p>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                                Statistics will show up here once you archive
+                                your first video
+                            </p>
+                        </div>
+                        <Button asChild>
+                            <Link to="/">Archive a video</Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+            ) : (
+                <main className="grid w-full grid-cols-1 gap-4 md:grid-cols-2">
+                    {loading ? (
+                        <>
+                            {renderChartSkeleton()}
+                            {renderChartSkeleton()}
+                        </>
+                    ) : (
+                        <>
+                            <DownloadsChart statistics={statistics} />
+                            <StorageChart statistics={statistics} />
+                        </>
+                    )}
+                </main>
+            )}
         </div>
     )
 }

@@ -12,9 +12,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-// Type for metadata with video_count (used in playlists and channels)
-interface MetadataWithVideoCount {
+// Loose view on metadata counts: channels report video_count, playlists
+// report playlist_count (with items as a fallback).
+interface MetadataWithCounts {
     video_count?: number
+    playlist_count?: number
+    items?: unknown[]
     title?: string
     thumbnail?: string
     duration_string?: string
@@ -186,14 +189,17 @@ export default function VideoSelector({
                         )}
                         {activeTab === 'playlists' && (
                             <p className="text-muted-foreground text-sm">
-                                {(item.metadata as MetadataWithVideoCount)
-                                    .video_count || 0}{' '}
+                                {(item.metadata as MetadataWithCounts)
+                                    .playlist_count ||
+                                    (item.metadata as MetadataWithCounts).items
+                                        ?.length ||
+                                    0}{' '}
                                 videos
                             </p>
                         )}
                         {activeTab === 'channels' && (
                             <p className="text-muted-foreground text-sm">
-                                {(item.metadata as MetadataWithVideoCount)
+                                {(item.metadata as MetadataWithCounts)
                                     .video_count || 0}{' '}
                                 videos
                             </p>

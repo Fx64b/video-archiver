@@ -200,12 +200,55 @@ func outputExtension(op domain.ToolsOperationType, params map[string]any) string
 }
 
 // generateOutputPath builds a unique output path inside processedPath for a job.
+// A user-supplied "output_name" parameter takes precedence over the generated
+// name; the job's short ID is appended if that name is already taken.
 func generateOutputPath(processedPath string, op domain.ToolsOperationType, jobID string, params map[string]any) string {
 	timestamp := time.Now().Format("20060102_150405")
 	shortID := jobID
 	if len(shortID) > 8 {
 		shortID = shortID[:8]
 	}
-	name := fmt.Sprintf("%s_%s_%s.%s", op, timestamp, shortID, outputExtension(op, params))
+	ext := outputExtension(op, params)
+
+	if custom, ok := params["output_name"].(string); ok {
+		if name := sanitizeOutputName(custom, ext); name != "" {
+			path := filepath.Join(processedPath, name+"."+ext)
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				return path
+			}
+			return filepath.Join(processedPath, name+"_"+shortID+"."+ext)
+		}
+	}
+
+	name := fmt.Sprintf("%s_%s_%s.%s", op, timestamp, shortID, ext)
 	return filepath.Join(processedPath, name)
+}
+
+// outputNameExtensions are extensions stripped from a user-supplied output name
+// so "clip.mp4" does not turn into "clip.mp4.mp4".
+var outputNameExtensions = []string{"mp4", "mkv", "webm", "avi", "mov", "mp3", "aac", "flac", "wav", "ogg"}
+
+// sanitizeOutputName turns a user-supplied output name into a safe file stem:
+// directory components and filesystem-unsafe characters are removed, a known
+// media extension (or the target extension) is stripped, and the length capped.
+func sanitizeOutputName(name, targetExt string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	name = sanitizeFilename(name)
+	if name == "Unknown" {
+		return ""
+	}
+
+	lower := strings.ToLower(name)
+	for _, ext := range append([]string{targetExt}, outputNameExtensions...) {
+		if suffix := "." + ext; strings.HasSuffix(lower, suffix) {
+			name = name[:len(name)-len(suffix)]
+			break
+		}
+	}
+
+	name = strings.Trim(name, " .")
+	if len(name) > 100 {
+		name = strings.Trim(name[:100], " .")
+	}
+	return name
 }

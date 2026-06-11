@@ -1,7 +1,7 @@
 import { cancelToolJob } from '@/services/toolsApi'
 import useToolsState from '@/store/toolsState'
 import { ToolsJob, ToolsProgressUpdate } from '@/types'
-import { CheckCircle2, Clock, Loader2, Pause, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Loader2, Pause, X, XCircle } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -74,8 +74,8 @@ export default function ProgressTracker({
         const isActive = job.status === 'processing'
         const isCompleted = job.status === 'complete'
         const hasFailed = job.status === 'failed'
-
-        if (!showCompleted && isCompleted) return null
+        const isFinished =
+            isCompleted || hasFailed || job.status === 'cancelled'
 
         return (
             <Card key={job.id} className={compact ? 'shadow-sm' : ''}>
@@ -102,6 +102,17 @@ export default function ProgressTracker({
                             <Badge variant={getStatusBadgeVariant(job.status)}>
                                 {job.status}
                             </Badge>
+                            {isFinished && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Dismiss"
+                                    onClick={() => removeActiveJob(job.id)}
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            )}
                             {isActive && (
                                 <Button
                                     variant="ghost"
@@ -155,10 +166,19 @@ export default function ProgressTracker({
                     )}
 
                     {/* Error message */}
-                    {hasFailed && progress?.error && (
+                    {hasFailed && (
                         <div className="bg-destructive/10 text-destructive mt-3 rounded p-2 text-xs">
-                            {progress.error}
+                            {progress?.error ||
+                                job.error_message ||
+                                'Processing failed for an unknown reason.'}
                         </div>
+                    )}
+
+                    {/* Completed hint */}
+                    {isCompleted && (
+                        <p className="text-muted-foreground mt-3 text-xs">
+                            Done — the output is ready in Processed Files below.
+                        </p>
                     )}
 
                     {/* Input files info */}
@@ -181,11 +201,14 @@ export default function ProgressTracker({
     }
 
     // Convert Map to array and sort by creation time (most recent first)
-    const jobsArray = Array.from(activeJobs.values()).sort((a, b) => {
-        return (
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )
-    })
+    const jobsArray = Array.from(activeJobs.values())
+        .filter((job) => showCompleted || job.status !== 'complete')
+        .sort((a, b) => {
+            return (
+                new Date(b.created_at).getTime() -
+                new Date(a.created_at).getTime()
+            )
+        })
 
     // Limit number of items
     const displayJobs = jobsArray.slice(0, maxItems)

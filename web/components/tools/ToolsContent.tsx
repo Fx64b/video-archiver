@@ -106,10 +106,10 @@ export default function ToolsContent() {
                 </p>
             </div>
 
-            {/* Active Jobs Progress */}
+            {/* Active Jobs Progress (completed/failed jobs stay visible until dismissed) */}
             {activeJobs.size > 0 && (
                 <section>
-                    <ProgressTracker showCompleted={false} maxItems={3} />
+                    <ProgressTracker showCompleted maxItems={3} />
                 </section>
             )}
 

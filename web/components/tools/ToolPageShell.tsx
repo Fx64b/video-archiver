@@ -14,6 +14,8 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface ToolPageShellProps {
     title: string
@@ -52,7 +54,8 @@ export default function ToolPageShell({
     tips,
 }: ToolPageShellProps) {
     const navigate = useNavigate()
-    const { selectedInputs, clearSelectedInputs } = useToolsState()
+    const { selectedInputs, clearSelectedInputs, outputName, setOutputName } =
+        useToolsState()
 
     // Send the user back to the dashboard if they arrive without a selection
     // (e.g. on a hard refresh, since the selection lives in memory).
@@ -103,6 +106,23 @@ export default function ToolPageShell({
                         </CardHeader>
                         <CardContent className="space-y-4">
                             {children}
+                            <div className="space-y-2 border-t pt-4">
+                                <Label htmlFor="output-name">
+                                    Output file name (optional)
+                                </Label>
+                                <Input
+                                    id="output-name"
+                                    placeholder="e.g. my-clip"
+                                    value={outputName}
+                                    onChange={(e) =>
+                                        setOutputName(e.target.value)
+                                    }
+                                />
+                                <p className="text-muted-foreground text-xs">
+                                    The file extension is added automatically.
+                                    Leave empty for a generated name.
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
                     {tips}

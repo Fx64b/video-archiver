@@ -108,8 +108,13 @@ const WORKFLOW_PRESETS = {
 
 export default function WorkflowPage() {
     const navigate = useNavigate()
-    const { selectedInputs, clearSelectedInputs, addActiveJob } =
-        useToolsState()
+    const {
+        selectedInputs,
+        clearSelectedInputs,
+        addActiveJob,
+        outputName,
+        setOutputName,
+    } = useToolsState()
 
     const [steps, setSteps] = useState<WorkflowStep[]>([])
     const [keepIntermediateFiles, setKeepIntermediateFiles] = useState(true)
@@ -172,10 +177,14 @@ export default function WorkflowPage() {
                     steps,
                     keep_intermediate_files: keepIntermediateFiles,
                     stop_on_error: stopOnError,
+                    ...(outputName.trim()
+                        ? { output_name: outputName.trim() }
+                        : {}),
                 }
             )
             addActiveJob(job)
             clearSelectedInputs()
+            setOutputName('')
             setSteps([])
             navigate('/tools')
         } catch (err) {
@@ -509,6 +518,25 @@ export default function WorkflowPage() {
                                     checked={stopOnError}
                                     onCheckedChange={setStopOnError}
                                 />
+                            </div>
+                            <div className="space-y-2 border-t pt-4">
+                                <Label
+                                    htmlFor="output-name"
+                                    className="text-sm"
+                                >
+                                    Output file name (optional)
+                                </Label>
+                                <Input
+                                    id="output-name"
+                                    placeholder="e.g. my-clip"
+                                    value={outputName}
+                                    onChange={(e) =>
+                                        setOutputName(e.target.value)
+                                    }
+                                />
+                                <p className="text-muted-foreground text-xs">
+                                    The file extension is added automatically.
+                                </p>
                             </div>
                         </CardContent>
                     </Card>

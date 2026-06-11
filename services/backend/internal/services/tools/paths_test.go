@@ -200,3 +200,50 @@ func TestGenerateOutputPath(t *testing.T) {
 		t.Errorf("expected short job id in name: %q", path)
 	}
 }
+
+func TestGenerateOutputPathCustomName(t *testing.T) {
+	dir := t.TempDir()
+
+	path := generateOutputPath(dir, domain.OpTypeConvert, "abcdef1234567890", map[string]any{
+		"output_format": "webm",
+		"output_name":   "My Holiday Clip",
+	})
+	if got, want := filepath.Base(path), "My Holiday Clip.webm"; got != want {
+		t.Errorf("custom name = %q, want %q", got, want)
+	}
+
+	// An existing file with the same name must not be overwritten.
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	collided := generateOutputPath(dir, domain.OpTypeConvert, "abcdef1234567890", map[string]any{
+		"output_format": "webm",
+		"output_name":   "My Holiday Clip",
+	})
+	if got, want := filepath.Base(collided), "My Holiday Clip_abcdef12.webm"; got != want {
+		t.Errorf("collision name = %q, want %q", got, want)
+	}
+}
+
+func TestSanitizeOutputName(t *testing.T) {
+	tests := []struct {
+		in   string
+		ext  string
+		want string
+	}{
+		{"My Clip", "mp4", "My Clip"},
+		{"clip.mp4", "mp4", "clip"},
+		{"clip.mkv", "mp4", "clip"},
+		{"../../etc/passwd", "mp4", "passwd"},
+		{"a/b\\c:d", "mp4", "b_c_d"},
+		{"  spaced  ", "mp4", "spaced"},
+		{"...", "mp4", ""},
+		{"", "mp4", ""},
+		{"v1.2 final", "mp4", "v1.2 final"},
+	}
+	for _, tt := range tests {
+		if got := sanitizeOutputName(tt.in, tt.ext); got != tt.want {
+			t.Errorf("sanitizeOutputName(%q, %q) = %q, want %q", tt.in, tt.ext, got, tt.want)
+		}
+	}
+}
