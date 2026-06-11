@@ -5,6 +5,8 @@
 *.so
 *.dylib
 main
+api
+video-archiver
 
 # Test binary, built with `go test -c`
 *.test
@@ -41,7 +43,14 @@ data/
 *.db-wal
 
 # Logs
+logs/
 *.log
+
+# Code generation tooling (the image doesn't need it)
+generated/
+tygo.yaml
+Makefile
+TESTING.md
 
 # OS files
 .DS_Store
