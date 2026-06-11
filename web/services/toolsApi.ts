@@ -93,6 +93,13 @@ export async function cancelToolJob(jobId: string): Promise<void> {
     }
 }
 
+/**
+ * Delete a finished job: the backend removes its record and the output file.
+ * Same endpoint as cancel — the backend cancels running jobs and deletes
+ * finished ones.
+ */
+export const deleteToolJob = cancelToolJob
+
 export async function getToolJob(jobId: string): Promise<ToolsJob> {
     const res = await fetch(`${BASE}/tools/jobs/${jobId}`)
     if (!res.ok) {
@@ -124,4 +131,9 @@ export async function listToolJobs(
 /** URL that streams a completed job's produced file as a download. */
 export function toolOutputUrl(jobId: string): string {
     return `${BASE}/tools/jobs/${jobId}/output`
+}
+
+/** URL that streams the file inline, for in-browser preview/playback. */
+export function toolOutputPreviewUrl(jobId: string): string {
+    return `${BASE}/tools/jobs/${jobId}/output?inline=1`
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/metadata"
+	"video-archiver/internal/services/tools"
 )
 
 type Config struct {
@@ -132,6 +133,61 @@ func (s *Service) CancelJob(id string) error {
 
 	log.WithField("job_id", id).Info("Download job cancelled")
 	return nil
+}
+
+// DeleteJob removes a download from the library: the database records and, for
+// videos, the media file on disk. A still-running job is cancelled first.
+// Deleting a playlist or channel removes only the parent record — the videos it
+// contains remain individually downloaded jobs.
+func (s *Service) DeleteJob(id string) error {
+	jwm, err := s.jobs.GetJobWithMetadata(id)
+	if err != nil {
+		return fmt.Errorf("get job: %w", err)
+	}
+	if jwm == nil || jwm.Job == nil {
+		return fmt.Errorf("job not found")
+	}
+
+	if jwm.Job.Status == domain.JobStatusPending || jwm.Job.Status == domain.JobStatusInProgress {
+		if err := s.CancelJob(id); err != nil {
+			log.WithError(err).WithField("job_id", id).Warn("Failed to cancel job before deletion")
+		}
+	}
+
+	if meta, ok := jwm.Metadata.(*domain.VideoMetadata); ok && meta != nil {
+		s.removeVideoFiles(meta)
+	}
+
+	if err := s.jobs.DeleteJob(id); err != nil {
+		return fmt.Errorf("delete job records: %w", err)
+	}
+
+	log.WithField("job_id", id).Info("Download job deleted")
+	return nil
+}
+
+// removeVideoFiles deletes a video's media file and its yt-dlp sidecar files
+// (.info.json etc.) from disk. Missing files are not an error — the library
+// record should be removable even if the file is already gone.
+func (s *Service) removeVideoFiles(meta *domain.VideoMetadata) {
+	path, err := tools.ResolveVideoFile(s.config.DownloadPath, meta)
+	if err != nil {
+		log.WithField("title", meta.Title).Debug("No media file found to delete")
+		return
+	}
+
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.WithError(err).WithField("path", path).Warn("Failed to delete video file")
+	} else {
+		log.WithField("path", path).Info("Deleted video file")
+	}
+
+	stem := strings.TrimSuffix(path, filepath.Ext(path))
+	for _, sidecar := range []string{stem + ".info.json", stem + ".description", stem + ".webp", stem + ".jpg"} {
+		if err := os.Remove(sidecar); err == nil {
+			log.WithField("path", sidecar).Debug("Deleted sidecar file")
+		}
+	}
 }
 
 func (s *Service) GetRepository() domain.JobRepository {
@@ -447,8 +503,6 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 			log.Debugf("Extractor %s has %d videos: %v", extractor, len(ids), ids)
 		}
 	}
-
-	// TODO: Determine the membership type based on metadata type
 
 	// Scan for downloaded video metadata files in the output directory
 	// Note: outputPath contains yt-dlp template variables like %(uploader)s, so we need to use the actual download path

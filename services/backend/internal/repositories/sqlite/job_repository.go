@@ -114,16 +114,22 @@ func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 }
 
 func (r *JobRepository) StoreMetadata(jobID string, metadata domain.Metadata) error {
+	var err error
 	switch m := metadata.(type) {
 	case *domain.VideoMetadata:
-		return r.storeVideoMetadata(jobID, m)
+		err = r.storeVideoMetadata(jobID, m)
 	case *domain.PlaylistMetadata:
-		return r.storePlaylistMetadata(jobID, m)
+		err = r.storePlaylistMetadata(jobID, m)
 	case *domain.ChannelMetadata:
-		return r.storeChannelMetadata(jobID, m)
+		err = r.storeChannelMetadata(jobID, m)
 	default:
 		return fmt.Errorf("unsupported metadata type: %T", metadata)
 	}
+	if err != nil {
+		return err
+	}
+	r.applyAutoTags(jobID, metadata)
+	return nil
 }
 
 func (r *JobRepository) storeVideoMetadata(jobID string, metadata *domain.VideoMetadata) error {
@@ -254,9 +260,16 @@ func (r *JobRepository) GetJobWithMetadata(jobID string) (*domain.JobWithMetadat
 		// Continue without metadata
 	}
 
+	tags, err := r.GetTagsForJob(jobID)
+	if err != nil {
+		log.WithError(err).Warnf("Could not retrieve tags for job %s", jobID)
+		tags = nil
+	}
+
 	return &domain.JobWithMetadata{
 		Job:      job,
 		Metadata: metadata,
+		Tags:     tags,
 	}, nil
 }
 
@@ -418,13 +431,20 @@ func (r *JobRepository) getMetadataForJob(jobID string) (domain.Metadata, error)
 	}
 }
 
-func (r *JobRepository) GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*domain.JobWithMetadata, int, error) {
+func (r *JobRepository) GetMetadataByType(contentType string, opts domain.MetadataQuery) ([]*domain.JobWithMetadata, int, error) {
+	page := opts.Page
+	limit := opts.Limit
+	sortBy := opts.SortBy
+	order := opts.Order
+
 	log.WithFields(log.Fields{
 		"contentType": contentType,
 		"page":        page,
 		"limit":       limit,
 		"sortBy":      sortBy,
 		"order":       order,
+		"search":      opts.Search,
+		"tag":         opts.Tag,
 	}).Debug("Getting metadata by type")
 
 	if page < 1 {
@@ -488,11 +508,40 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 		sortField = "jobs.created_at"
 	}
 
+	// Optional filters. Search matches the title and the channel name stored
+	// inside the metadata JSON; tag narrows to jobs carrying the named tag.
+	// Both are parameterized — only validated identifiers are interpolated.
+	titleColumn := tableName + ".title"
+	if contentType == "channels" {
+		titleColumn = "channels.name"
+	}
+
+	var conditions []string
+	var filterArgs []any
+	if search := strings.TrimSpace(opts.Search); search != "" {
+		pattern := "%" + escapeLike(search) + "%"
+		conditions = append(conditions, `(`+titleColumn+` LIKE ? ESCAPE '\'
+            OR json_extract(`+tableName+`.metadata_json, '$.channel') LIKE ? ESCAPE '\'
+            OR json_extract(`+tableName+`.metadata_json, '$.uploader') LIKE ? ESCAPE '\')`)
+		filterArgs = append(filterArgs, pattern, pattern, pattern)
+	}
+	if tag := strings.TrimSpace(opts.Tag); tag != "" {
+		conditions = append(conditions, `EXISTS (
+            SELECT 1 FROM job_tags jt JOIN tags t ON t.id = jt.tag_id
+            WHERE jt.job_id = jobs.job_id AND t.name = ? COLLATE NOCASE)`)
+		filterArgs = append(filterArgs, tag)
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
 	// Get total count first using specific validated table name
 	var totalCount int
-	countQuery := "SELECT COUNT(*) FROM " + tableName + " JOIN jobs ON " + tableName + ".job_id = jobs.job_id"
+	countQuery := "SELECT COUNT(*) FROM " + tableName + " JOIN jobs ON " + tableName + ".job_id = jobs.job_id" + whereClause
 
-	err := r.db.QueryRow(countQuery).Scan(&totalCount)
+	err := r.db.QueryRow(countQuery, filterArgs...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count %s: %w", contentType, err)
 	}
@@ -502,12 +551,13 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
         SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.warnings, jobs.created_at, jobs.updated_at, ` +
 		tableName + `.metadata_json
         FROM ` + tableName + `
-        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id
+        JOIN jobs ON ` + tableName + `.job_id = jobs.job_id` +
+		whereClause + `
         ORDER BY ` + sortField + ` ` + orderDirection + `
         LIMIT ? OFFSET ?`
 
 	log.Debugf("Executing download query with limit=%d offset=%d", limit, offset)
-	rows, err := r.db.Query(query, limit, offset)
+	rows, err := r.db.Query(query, append(append([]any{}, filterArgs...), limit, offset)...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query %s: %w", contentType, err)
 	}
@@ -573,6 +623,10 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 		})
 	}
 
+	if err := r.attachTags(result); err != nil {
+		log.WithError(err).Warn("Failed to attach tags to listing")
+	}
+
 	log.WithFields(log.Fields{
 		"contentType": contentType,
 		"resultCount": len(result),
@@ -580,6 +634,63 @@ func (r *JobRepository) GetMetadataByType(contentType string, page int, limit in
 	}).Debug("Fetched metadata by type")
 
 	return result, totalCount, nil
+}
+
+// escapeLike escapes LIKE wildcards in user input so a search for "100%" does
+// not match everything.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+// attachTags loads the tags for a page of jobs in one query and assigns them.
+func (r *JobRepository) attachTags(items []*domain.JobWithMetadata) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	ids := make([]any, 0, len(items))
+	placeholders := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.Job == nil {
+			continue
+		}
+		ids = append(ids, item.Job.ID)
+		placeholders = append(placeholders, "?")
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	rows, err := r.db.Query(`
+        SELECT jt.job_id, t.id, t.name, jt.source
+        FROM job_tags jt
+        JOIN tags t ON t.id = jt.tag_id
+        WHERE jt.job_id IN (`+strings.Join(placeholders, ",")+`)
+        ORDER BY jt.source ASC, t.name COLLATE NOCASE ASC`, ids...)
+	if err != nil {
+		return fmt.Errorf("load tags: %w", err)
+	}
+	defer rows.Close()
+
+	tagsByJob := map[string][]domain.Tag{}
+	for rows.Next() {
+		var jobID string
+		var tag domain.Tag
+		if err := rows.Scan(&jobID, &tag.ID, &tag.Name, &tag.Source); err != nil {
+			return fmt.Errorf("scan tag: %w", err)
+		}
+		tagsByJob[jobID] = append(tagsByJob[jobID], tag)
+	}
+
+	for _, item := range items {
+		if item.Job != nil {
+			item.Tags = tagsByJob[item.Job.ID]
+		}
+	}
+	return rows.Err()
 }
 
 func (r *JobRepository) AddVideoToParent(videoJobID, parentJobID, membershipType string) error {

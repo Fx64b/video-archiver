@@ -1,5 +1,7 @@
+import { deleteDownload } from '@/services/libraryApi'
 import { ChannelMetadata, JobWithMetadata, PlaylistItem } from '@/types'
-import { ArrowLeft, Calendar, Play, Users, Video } from 'lucide-react'
+import { ArrowLeft, Calendar, Play, Trash2, Users, Video } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -9,6 +11,7 @@ import { SERVER_URL } from '@/lib/env'
 import { getThumbnailUrl } from '@/lib/metadata'
 import { formatBytes, formatSubscriberNumber } from '@/lib/utils'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,6 +23,18 @@ export default function ChannelDetailPage() {
     const [channel, setChannel] = useState<JobWithMetadata | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [deleteOpen, setDeleteOpen] = useState(false)
+
+    const handleDelete = async () => {
+        if (!id) return
+        try {
+            await deleteDownload(id)
+            toast.success('Channel deleted')
+            navigate('/downloads?type=channels')
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to delete')
+        }
+    }
 
     useEffect(() => {
         const fetchChannel = async () => {
@@ -91,14 +106,30 @@ export default function ChannelDetailPage() {
     return (
         <div className="container mx-auto max-w-6xl p-6">
             {/* Header */}
-            <div className="mb-6">
+            <div className="mb-6 flex items-center justify-between">
                 <Link to="/downloads?type=channels">
                     <Button variant="ghost" className="gap-2">
                         <ArrowLeft className="h-4 w-4" />
                         Back to Channels
                     </Button>
                 </Link>
+                <Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive gap-2"
+                    onClick={() => setDeleteOpen(true)}
+                >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                </Button>
             </div>
+
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                title="Delete this channel?"
+                description="The channel entry is removed from your library. The videos it contains stay downloaded and remain available individually."
+                onConfirm={handleDelete}
+            />
 
             {/* Channel header */}
             <Card className="mb-8">

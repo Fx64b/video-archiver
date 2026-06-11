@@ -63,6 +63,22 @@ func CreateTestDB(t *testing.T) *sql.DB {
 		FOREIGN KEY(parent_job_id) REFERENCES jobs(job_id),
 		UNIQUE(video_job_id, parent_job_id)
 	);
+
+	CREATE TABLE IF NOT EXISTS tags (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS job_tags (
+		job_id TEXT NOT NULL,
+		tag_id INTEGER NOT NULL,
+		source TEXT NOT NULL DEFAULT 'user',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (job_id, tag_id),
+		FOREIGN KEY (job_id) REFERENCES jobs (job_id),
+		FOREIGN KEY (tag_id) REFERENCES tags (id)
+	);
 	`
 
 	if _, err := db.Exec(schema); err != nil {
@@ -183,6 +199,7 @@ type MockJobRepository struct {
 	metadata map[string]domain.Metadata
 	parents  map[string][]*domain.JobWithMetadata
 	videos   map[string][]*domain.JobWithMetadata
+	tags     map[string][]domain.Tag
 }
 
 // NewMockJobRepository creates a new mock repository
@@ -192,6 +209,7 @@ func NewMockJobRepository() *MockJobRepository {
 		metadata: make(map[string]domain.Metadata),
 		parents:  make(map[string][]*domain.JobWithMetadata),
 		videos:   make(map[string][]*domain.JobWithMetadata),
+		tags:     make(map[string][]domain.Tag),
 	}
 }
 
@@ -306,7 +324,7 @@ func (m *MockJobRepository) CountChannels() (int, error) {
 	return count, nil
 }
 
-func (m *MockJobRepository) GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*domain.JobWithMetadata, int, error) {
+func (m *MockJobRepository) GetMetadataByType(contentType string, opts domain.MetadataQuery) ([]*domain.JobWithMetadata, int, error) {
 	result := make([]*domain.JobWithMetadata, 0)
 	for id, meta := range m.metadata {
 		var matches bool
@@ -353,4 +371,67 @@ func (m *MockJobRepository) GetVideosForParent(parentJobID string) ([]*domain.Jo
 
 func (m *MockJobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWithMetadata, error) {
 	return m.parents[videoJobID], nil
+}
+
+func (m *MockJobRepository) DeleteJob(jobID string) error {
+	delete(m.jobs, jobID)
+	delete(m.metadata, jobID)
+	delete(m.parents, jobID)
+	delete(m.videos, jobID)
+	delete(m.tags, jobID)
+	return nil
+}
+
+func (m *MockJobRepository) ListTags() ([]domain.Tag, error) {
+	counts := map[string]int{}
+	for _, tags := range m.tags {
+		for _, tag := range tags {
+			counts[tag.Name]++
+		}
+	}
+	result := make([]domain.Tag, 0, len(counts))
+	var id int64 = 1
+	for name, count := range counts {
+		result = append(result, domain.Tag{ID: id, Name: name, Count: count})
+		id++
+	}
+	return result, nil
+}
+
+func (m *MockJobRepository) GetTagsForJob(jobID string) ([]domain.Tag, error) {
+	return m.tags[jobID], nil
+}
+
+func (m *MockJobRepository) AddTagsToJob(jobID string, names []string, source string) ([]domain.Tag, error) {
+	existing := map[string]bool{}
+	for _, tag := range m.tags[jobID] {
+		existing[tag.Name] = true
+	}
+	for _, name := range names {
+		if name == "" || existing[name] {
+			continue
+		}
+		existing[name] = true
+		m.tags[jobID] = append(m.tags[jobID], domain.Tag{
+			ID:     int64(len(m.tags[jobID]) + 1),
+			Name:   name,
+			Source: source,
+		})
+	}
+	return m.tags[jobID], nil
+}
+
+func (m *MockJobRepository) RemoveTagFromJob(jobID string, tagID int64) error {
+	tags := m.tags[jobID]
+	for i, tag := range tags {
+		if tag.ID == tagID {
+			m.tags[jobID] = append(tags[:i], tags[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *MockJobRepository) BackfillAutoTags() error {
+	return nil
 }
