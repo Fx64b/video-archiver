@@ -1,13 +1,9 @@
-'use client'
-
 import useToolsState from '@/store/toolsState'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
 
 import { ReactNode, useEffect } from 'react'
-
-import Image from 'next/image'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -55,16 +51,16 @@ export default function ToolPageShell({
     children,
     tips,
 }: ToolPageShellProps) {
-    const router = useRouter()
+    const navigate = useNavigate()
     const { selectedInputs, clearSelectedInputs } = useToolsState()
 
     // Send the user back to the dashboard if they arrive without a selection
     // (e.g. on a hard refresh, since the selection lives in memory).
     useEffect(() => {
         if (selectedInputs.length === 0) {
-            router.push('/tools')
+            navigate('/tools')
         }
-    }, [selectedInputs.length, router])
+    }, [selectedInputs.length, navigate])
 
     if (selectedInputs.length === 0) {
         return null
@@ -74,13 +70,13 @@ export default function ToolPageShell({
 
     const handleCancel = () => {
         clearSelectedInputs()
-        router.push('/tools')
+        navigate('/tools')
     }
 
     return (
         <div className="flex min-h-screen w-full flex-col gap-6">
             <div className="flex items-center gap-4">
-                <Link href="/tools">
+                <Link to="/tools">
                     <Button variant="ghost" size="icon">
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
@@ -132,12 +128,10 @@ export default function ToolPageShell({
                                         <CardContent className="p-0">
                                             {input.thumbnail && (
                                                 <div className="relative aspect-video">
-                                                    <Image
+                                                    <img
                                                         src={input.thumbnail}
                                                         alt={input.title}
-                                                        fill
-                                                        className="object-cover"
-                                                        unoptimized
+                                                        className="absolute inset-0 h-full w-full object-cover"
                                                     />
                                                 </div>
                                             )}

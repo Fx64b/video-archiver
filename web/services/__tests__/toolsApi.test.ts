@@ -10,15 +10,15 @@ describe('toolsApi', () => {
 
     afterEach(() => {
         global.fetch = originalFetch
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
-    function mockFetch(impl: jest.Mock) {
+    function mockFetch(impl: ReturnType<typeof vi.fn>) {
         global.fetch = impl as unknown as typeof fetch
     }
 
     it('submits to the correct URL and unwraps the message envelope', async () => {
-        const fetchMock = jest.fn().mockResolvedValue({
+        const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             json: async () => ({
                 message: { id: 'job-1', operation_type: 'trim' },
@@ -43,7 +43,7 @@ describe('toolsApi', () => {
     })
 
     it('passes a playlist as a single parent ID', async () => {
-        const fetchMock = jest.fn().mockResolvedValue({
+        const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             json: async () => ({ message: { id: 'job-2' } }),
         })
@@ -58,7 +58,7 @@ describe('toolsApi', () => {
     })
 
     it('throws with the server error text on failure', async () => {
-        const fetchMock = jest.fn().mockResolvedValue({
+        const fetchMock = vi.fn().mockResolvedValue({
             ok: false,
             status: 400,
             text: async () => 'end_time must be greater than start_time',
@@ -71,7 +71,7 @@ describe('toolsApi', () => {
     })
 
     it('cancels a job via DELETE', async () => {
-        const fetchMock = jest.fn().mockResolvedValue({ ok: true })
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true })
         mockFetch(fetchMock)
 
         await cancelToolJob('job-9')
@@ -81,7 +81,7 @@ describe('toolsApi', () => {
     })
 
     it('lists jobs and unwraps the paginated message', async () => {
-        const fetchMock = jest.fn().mockResolvedValue({
+        const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             json: async () => ({
                 message: {

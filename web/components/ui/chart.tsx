@@ -1,5 +1,3 @@
-'use client'
-
 import * as RechartsPrimitive from 'recharts'
 
 import * as React from 'react'

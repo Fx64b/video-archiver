@@ -2,8 +2,7 @@ import { ChannelMetadata, JobWithMetadata } from '@/types'
 import { format } from 'date-fns'
 import { User } from 'lucide-react'
 
-import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useNavigate } from 'react-router-dom'
 
 import { getThumbnailUrl } from '@/lib/metadata'
 import { formatBytes, formatSubscriberNumber } from '@/lib/utils'
@@ -21,7 +20,7 @@ interface ChannelsGridProps {
 }
 
 export function ChannelsGrid({ items }: ChannelsGridProps) {
-    const router = useRouter()
+    const navigate = useNavigate()
 
     if (!items.length) {
         return <p className="py-8 text-center">No channels found</p>
@@ -47,20 +46,19 @@ export function ChannelsGrid({ items }: ChannelsGridProps) {
                         key={item.job?.id || i}
                         className="hover:border-primary cursor-pointer border transition-all hover:shadow-md"
                         onClick={() =>
-                            router.push(`/downloads/channel/${item.job?.id}`)
+                            navigate(`/downloads/channel/${item.job?.id}`)
                         }
                     >
                         <CardHeader>
                             <div className="flex items-center gap-3">
                                 <div className="bg-muted relative h-10 w-10 overflow-hidden rounded-full">
                                     {thumbnailUrl ? (
-                                        <Image
+                                        <img
                                             src={thumbnailUrl}
                                             alt={
                                                 channelName || 'Channel avatar'
                                             }
-                                            fill
-                                            className="object-cover"
+                                            className="absolute inset-0 h-full w-full object-cover"
                                         />
                                     ) : (
                                         <div className="absolute inset-0 flex items-center justify-center">

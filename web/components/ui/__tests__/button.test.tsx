@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+
 import { Button } from '../button'
 
 describe('Button', () => {
@@ -10,7 +11,7 @@ describe('Button', () => {
 
     it('should handle click events', async () => {
         const user = userEvent.setup()
-        const handleClick = jest.fn()
+        const handleClick = vi.fn()
 
         render(<Button onClick={handleClick}>Click me</Button>)
 
@@ -78,7 +79,11 @@ describe('Button', () => {
     })
 
     it('should apply icon size', () => {
-        render(<Button size="icon" aria-label="Icon button">X</Button>)
+        render(
+            <Button size="icon" aria-label="Icon button">
+                X
+            </Button>
+        )
         const button = screen.getByLabelText('Icon button')
 
         expect(button).toHaveClass('size-9')
@@ -93,9 +98,13 @@ describe('Button', () => {
 
     it('should be disabled when disabled prop is true', async () => {
         const user = userEvent.setup()
-        const handleClick = jest.fn()
+        const handleClick = vi.fn()
 
-        render(<Button disabled onClick={handleClick}>Disabled</Button>)
+        render(
+            <Button disabled onClick={handleClick}>
+                Disabled
+            </Button>
+        )
         const button = screen.getByText('Disabled')
 
         expect(button).toBeDisabled()

@@ -39,7 +39,10 @@ export function SortControls({
         <div className="mb-4 flex items-center gap-2">
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        className="flex items-center gap-2"
+                    >
                         <span>{getCurrentSortLabel()}</span>
                         <ChevronDown className="h-4 w-4" />
                     </Button>

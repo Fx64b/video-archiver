@@ -1,8 +1,7 @@
 import { JobStatusError, JobWithMetadata, VideoMetadata } from '@/types'
 import { AlertTriangle, Film, Play } from 'lucide-react'
 
-import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useNavigate } from 'react-router-dom'
 
 import { getThumbnailUrl } from '@/lib/metadata'
 import {
@@ -27,7 +26,7 @@ interface VideosGridProps {
 }
 
 export function VideosGrid({ items }: VideosGridProps) {
-    const router = useRouter()
+    const navigate = useNavigate()
 
     if (!items.length) {
         return <p className="py-8 text-center">No videos found</p>
@@ -48,7 +47,7 @@ export function VideosGrid({ items }: VideosGridProps) {
                         key={item.job?.id || i}
                         className="hover:border-primary relative cursor-pointer overflow-hidden border pt-0 transition-all hover:shadow-md"
                         onClick={() =>
-                            router.push(`/downloads/video/${item.job?.id}`)
+                            navigate(`/downloads/video/${item.job?.id}`)
                         }
                     >
                         {isFailed && (
@@ -60,11 +59,10 @@ export function VideosGrid({ items }: VideosGridProps) {
                         )}
                         <div className="bg-muted relative aspect-video">
                             {thumbnailUrl ? (
-                                <Image
+                                <img
                                     src={thumbnailUrl}
                                     alt={metadata?.title || 'Video thumbnail'}
-                                    fill
-                                    className="object-cover"
+                                    className="absolute inset-0 h-full w-full object-cover"
                                 />
                             ) : (
                                 <div className="absolute inset-0 flex items-center justify-center">

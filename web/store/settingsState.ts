@@ -2,6 +2,8 @@ import { Settings } from '@/types'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import { SERVER_URL } from '@/lib/env'
+
 interface SettingsState {
     settings: Settings | null
     isLoading: boolean
@@ -17,7 +19,7 @@ interface SettingsState {
 
 const useSettingsState = create<SettingsState>()(
     persist(
-        (set, get) => ({
+        (set) => ({
             settings: null,
             isLoading: false,
             error: null,
@@ -25,9 +27,7 @@ const useSettingsState = create<SettingsState>()(
             fetchSettings: async () => {
                 set({ isLoading: true, error: null })
                 try {
-                    const response = await fetch(
-                        `${process.env.NEXT_PUBLIC_SERVER_URL}/settings`
-                    )
+                    const response = await fetch(`${SERVER_URL}/settings`)
                     if (!response.ok) {
                         throw new Error('Failed to fetch settings')
                     }
@@ -51,20 +51,17 @@ const useSettingsState = create<SettingsState>()(
             ) => {
                 set({ isLoading: true, error: null })
                 try {
-                    const response = await fetch(
-                        `${process.env.NEXT_PUBLIC_SERVER_URL}/settings`,
-                        {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                theme,
-                                download_quality: downloadQuality,
-                                concurrent_downloads: concurrentDownloads,
-                            }),
-                        }
-                    )
+                    const response = await fetch(`${SERVER_URL}/settings`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            theme,
+                            download_quality: downloadQuality,
+                            concurrent_downloads: concurrentDownloads,
+                        }),
+                    })
                     if (!response.ok) {
                         throw new Error('Failed to update settings')
                     }

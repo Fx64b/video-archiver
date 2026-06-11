@@ -1,5 +1,3 @@
-'use client'
-
 import { VideoMetadata } from '@/types'
 import {
     Maximize2,
@@ -12,6 +10,7 @@ import {
 
 import { useEffect, useRef, useState } from 'react'
 
+import { SERVER_URL } from '@/lib/env'
 import { formatSeconds } from '@/lib/utils'
 
 import { Button } from '@/components/ui/button'
@@ -38,7 +37,7 @@ export default function VideoPlayer({
     const [, setIsFullscreen] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const videoUrl = `${process.env.NEXT_PUBLIC_SERVER_URL}/video/${jobId}`
+    const videoUrl = `${SERVER_URL}/video/${jobId}`
 
     useEffect(() => {
         const video = videoRef.current

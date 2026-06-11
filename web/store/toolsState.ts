@@ -60,7 +60,7 @@ const useToolsState = create<ToolsState>((set, get) => ({
             newActiveJobs.set(job.id, job)
             return {
                 activeJobs: newActiveJobs,
-                isProcessing: newActiveJobs.size > 0
+                isProcessing: newActiveJobs.size > 0,
             }
         }),
 

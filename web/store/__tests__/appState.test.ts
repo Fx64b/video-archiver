@@ -1,5 +1,6 @@
 import { VideoMetadata } from '@/types'
 import { act, renderHook } from '@testing-library/react'
+
 import useAppState from '../appState'
 
 describe('appState store', () => {
@@ -151,17 +152,15 @@ describe('appState store', () => {
                 result.current.setRecentMetadata('job-2', metadata2)
             })
 
-            expect(result.current.getRecentMetadata('job-1')).toEqual(
-                metadata1
-            )
-            expect(result.current.getRecentMetadata('job-2')).toEqual(
-                metadata2
-            )
+            expect(result.current.getRecentMetadata('job-1')).toEqual(metadata1)
+            expect(result.current.getRecentMetadata('job-2')).toEqual(metadata2)
         })
 
         it('should return undefined for non-existent metadata', () => {
             const { result } = renderHook(() => useAppState())
-            expect(result.current.getRecentMetadata('non-existent')).toBeUndefined()
+            expect(
+                result.current.getRecentMetadata('non-existent')
+            ).toBeUndefined()
         })
 
         it('should update existing metadata', () => {
@@ -181,17 +180,13 @@ describe('appState store', () => {
                 result.current.setRecentMetadata('job-1', metadata1)
             })
 
-            expect(result.current.getRecentMetadata('job-1')).toEqual(
-                metadata1
-            )
+            expect(result.current.getRecentMetadata('job-1')).toEqual(metadata1)
 
             act(() => {
                 result.current.setRecentMetadata('job-1', metadata2)
             })
 
-            expect(result.current.getRecentMetadata('job-1')).toEqual(
-                metadata2
-            )
+            expect(result.current.getRecentMetadata('job-1')).toEqual(metadata2)
         })
     })
 })

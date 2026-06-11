@@ -1,5 +1,3 @@
-'use client'
-
 import { listToolJobs, toolOutputUrl } from '@/services/toolsApi'
 import useWebSocketStore from '@/services/websocket'
 import { ToolsJob } from '@/types'

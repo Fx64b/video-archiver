@@ -1,8 +1,5 @@
-import {
-    ChannelMetadata,
-    PlaylistMetadata,
-    VideoMetadata,
-} from '@/types'
+import { ChannelMetadata, PlaylistMetadata, VideoMetadata } from '@/types'
+
 import {
     getThumbnailUrl,
     getTitle,
@@ -42,7 +39,7 @@ describe('metadata', () => {
                 _type: 'playlist',
                 id: 'test-id',
                 title: 'Test Playlist',
-            } as PlaylistMetadata
+            } as unknown as PlaylistMetadata
 
             expect(isVideoMetadata(metadata)).toBe(false)
         })
@@ -54,7 +51,7 @@ describe('metadata', () => {
                 _type: 'playlist',
                 id: 'test-id',
                 title: 'Test Playlist',
-            } as PlaylistMetadata
+            } as unknown as PlaylistMetadata
 
             expect(isPlaylistMetadata(metadata)).toBe(true)
         })
@@ -62,7 +59,7 @@ describe('metadata', () => {
         it('should return true for metadata with items but not video_count', () => {
             const metadata = {
                 items: [],
-            } as PlaylistMetadata
+            } as unknown as PlaylistMetadata
 
             expect(isPlaylistMetadata(metadata)).toBe(true)
         })
@@ -76,7 +73,7 @@ describe('metadata', () => {
             const metadata = {
                 items: [],
                 video_count: 100,
-            } as ChannelMetadata
+            } as unknown as ChannelMetadata
 
             expect(isPlaylistMetadata(metadata)).toBe(false)
         })
@@ -88,7 +85,7 @@ describe('metadata', () => {
                 _type: 'channel',
                 id: 'test-id',
                 channel: 'Test Channel',
-            } as ChannelMetadata
+            } as unknown as ChannelMetadata
 
             expect(isChannelMetadata(metadata)).toBe(true)
         })
@@ -96,7 +93,7 @@ describe('metadata', () => {
         it('should return true for metadata with video_count property', () => {
             const metadata = {
                 video_count: 100,
-            } as ChannelMetadata
+            } as unknown as ChannelMetadata
 
             expect(isChannelMetadata(metadata)).toBe(true)
         })
@@ -139,10 +136,18 @@ describe('metadata', () => {
                 _type: 'channel',
                 id: 'test-id',
                 thumbnails: [
-                    { url: 'https://example.com/rect.jpg', width: 100, height: 50 },
-                    { url: 'https://example.com/square.jpg', width: 100, height: 100 },
+                    {
+                        url: 'https://example.com/rect.jpg',
+                        width: 100,
+                        height: 50,
+                    },
+                    {
+                        url: 'https://example.com/square.jpg',
+                        width: 100,
+                        height: 100,
+                    },
                 ],
-            } as ChannelMetadata
+            } as unknown as ChannelMetadata
 
             expect(getThumbnailUrl(metadata)).toBe(
                 'https://example.com/square.jpg'
@@ -154,10 +159,18 @@ describe('metadata', () => {
                 _type: 'channel',
                 id: 'test-id',
                 thumbnails: [
-                    { url: 'https://example.com/rect1.jpg', width: 100, height: 50 },
-                    { url: 'https://example.com/rect2.jpg', width: 200, height: 100 },
+                    {
+                        url: 'https://example.com/rect1.jpg',
+                        width: 100,
+                        height: 50,
+                    },
+                    {
+                        url: 'https://example.com/rect2.jpg',
+                        width: 200,
+                        height: 100,
+                    },
                 ],
-            } as ChannelMetadata
+            } as unknown as ChannelMetadata
 
             expect(getThumbnailUrl(metadata)).toBe(
                 'https://example.com/rect1.jpg'
@@ -169,9 +182,13 @@ describe('metadata', () => {
                 _type: 'playlist',
                 id: 'test-id',
                 thumbnails: [
-                    { url: 'https://example.com/playlist-thumb.jpg', width: 100, height: 100 },
+                    {
+                        url: 'https://example.com/playlist-thumb.jpg',
+                        width: 100,
+                        height: 100,
+                    },
                 ],
-            } as PlaylistMetadata
+            } as unknown as PlaylistMetadata
 
             expect(getThumbnailUrl(metadata)).toBe(
                 'https://example.com/playlist-thumb.jpg'
@@ -182,7 +199,7 @@ describe('metadata', () => {
             const metadata: PlaylistMetadata = {
                 _type: 'playlist',
                 id: 'test-id',
-            } as PlaylistMetadata
+            } as unknown as PlaylistMetadata
 
             expect(getThumbnailUrl(metadata)).toBe(null)
         })
@@ -218,7 +235,7 @@ describe('metadata', () => {
                 _type: 'playlist',
                 id: 'test-id',
                 title: 'My Playlist',
-            } as PlaylistMetadata
+            } as unknown as PlaylistMetadata
 
             expect(getTitle(metadata)).toBe('My Playlist')
         })
@@ -227,7 +244,7 @@ describe('metadata', () => {
             const metadata: PlaylistMetadata = {
                 _type: 'playlist',
                 id: 'test-id',
-            } as PlaylistMetadata
+            } as unknown as PlaylistMetadata
 
             expect(getTitle(metadata)).toBe('Untitled Playlist')
         })
@@ -237,7 +254,7 @@ describe('metadata', () => {
                 _type: 'channel',
                 id: 'test-id',
                 channel: 'My Channel',
-            } as ChannelMetadata
+            } as unknown as ChannelMetadata
 
             expect(getTitle(metadata)).toBe('My Channel')
         })
@@ -246,7 +263,7 @@ describe('metadata', () => {
             const metadata: ChannelMetadata = {
                 _type: 'channel',
                 id: 'test-id',
-            } as ChannelMetadata
+            } as unknown as ChannelMetadata
 
             expect(getTitle(metadata)).toBe('Unnamed Channel')
         })

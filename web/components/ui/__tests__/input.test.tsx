@@ -1,7 +1,7 @@
-import React from 'react'
-
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+
+import React from 'react'
 
 import { Input } from '../input'
 
@@ -23,7 +23,7 @@ describe('Input', () => {
 
     it('should handle onChange event', async () => {
         const user = userEvent.setup()
-        const handleChange = jest.fn()
+        const handleChange = vi.fn()
 
         render(<Input onChange={handleChange} placeholder="Enter text" />)
 
@@ -56,13 +56,22 @@ describe('Input', () => {
 
     it('should handle different input types', () => {
         const { rerender } = render(<Input type="text" placeholder="Text" />)
-        expect(screen.getByPlaceholderText('Text')).toHaveAttribute('type', 'text')
+        expect(screen.getByPlaceholderText('Text')).toHaveAttribute(
+            'type',
+            'text'
+        )
 
         rerender(<Input type="password" placeholder="Password" />)
-        expect(screen.getByPlaceholderText('Password')).toHaveAttribute('type', 'password')
+        expect(screen.getByPlaceholderText('Password')).toHaveAttribute(
+            'type',
+            'password'
+        )
 
         rerender(<Input type="email" placeholder="Email" />)
-        expect(screen.getByPlaceholderText('Email')).toHaveAttribute('type', 'email')
+        expect(screen.getByPlaceholderText('Email')).toHaveAttribute(
+            'type',
+            'email'
+        )
     })
 
     it('should have default styling classes', () => {

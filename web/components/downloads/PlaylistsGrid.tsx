@@ -2,8 +2,7 @@ import { JobWithMetadata, PlaylistMetadata } from '@/types'
 import { format } from 'date-fns'
 import { Film, List } from 'lucide-react'
 
-import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useNavigate } from 'react-router-dom'
 
 import { formatSubscriberNumber } from '@/lib/utils'
 
@@ -20,7 +19,7 @@ interface PlaylistsGridProps {
 }
 
 export function PlaylistsGrid({ items }: PlaylistsGridProps) {
-    const router = useRouter()
+    const navigate = useNavigate()
 
     if (!items.length) {
         return <p className="py-8 text-center">No playlists found</p>
@@ -45,7 +44,7 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                         key={item.job?.id || i}
                         className="hover:border-primary cursor-pointer border transition-all hover:shadow-md"
                         onClick={() =>
-                            router.push(`/downloads/playlist/${item.job?.id}`)
+                            navigate(`/downloads/playlist/${item.job?.id}`)
                         }
                     >
                         <CardHeader>
@@ -69,14 +68,13 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                                                   className="bg-muted relative aspect-video overflow-hidden rounded-md"
                                               >
                                                   {video.thumbnail ? (
-                                                      <Image
+                                                      <img
                                                           src={video.thumbnail}
                                                           alt={
                                                               video.title ||
                                                               `Video ${j + 1}`
                                                           }
-                                                          fill
-                                                          className="object-cover"
+                                                          className="absolute inset-0 h-full w-full object-cover"
                                                       />
                                                   ) : (
                                                       <div className="absolute inset-0 flex items-center justify-center">
@@ -99,14 +97,13 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                                                 key={j}
                                                 className="relative aspect-video overflow-hidden rounded-md"
                                             >
-                                                <Image
+                                                <img
                                                     src={
                                                         metadata.thumbnails[0]
                                                             .url
                                                     }
                                                     alt={`Video thumbnail`}
-                                                    fill
-                                                    className="object-cover"
+                                                    className="absolute inset-0 h-full w-full object-cover"
                                                 />
                                             </div>
                                         ))

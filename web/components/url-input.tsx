@@ -1,11 +1,11 @@
-'use client'
-
 import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
 import { AlertCircle, Check, LoaderCircle, Settings, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
+
+import { SERVER_URL } from '@/lib/env'
 
 import { AlertDestructive } from '@/components/alert-destructive'
 import { Badge } from '@/components/ui/badge'
@@ -26,7 +26,6 @@ export function UrlInput() {
     const [dotIndex, setDotIndex] = useState(0) // for reconnecting dots . .. ...
     const [customQuality, setCustomQuality] = useState<number | null>(null)
 
-    const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL
     const setIsDownloading = useAppState((state) => state.setIsDownloading)
     const isDownloading = useAppState((state) => state.isDownloading)
     const isConnected = useWebSocketStore((state) => state.isConnected)

@@ -22,10 +22,7 @@ export function PaginationControls({
     if (totalPages <= 1) return null
 
     const maxPagesToShow = 5
-    const startPage = Math.max(
-        1,
-        currentPage - Math.floor(maxPagesToShow / 2)
-    )
+    const startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2))
     const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1)
 
     const pages = []

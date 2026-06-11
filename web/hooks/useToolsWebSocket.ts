@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
 import useWebSocketStore from '@/services/websocket'
 import useToolsState from '@/store/toolsState'
 import { ToolsProgressUpdate } from '@/types'
+
+import { useEffect } from 'react'
 
 /**
  * Hook to integrate WebSocket tools progress updates with the tools state
@@ -13,9 +14,12 @@ export function useToolsWebSocket() {
 
     useEffect(() => {
         // Subscribe to tools progress updates
-        const unsubscribe = subscribe('tools-progress', (data: ToolsProgressUpdate) => {
-            updateJobProgress(data)
-        })
+        const unsubscribe = subscribe(
+            'tools-progress',
+            (data: ToolsProgressUpdate) => {
+                updateJobProgress(data)
+            }
+        )
 
         // Cleanup on unmount
         return () => {

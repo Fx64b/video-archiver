@@ -13,8 +13,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Frontend Development
 - `cd web && pnpm install` - Install dependencies
-- `cd web && pnpm dev` - Start Next.js development server
-- `cd web && pnpm build` - Build the frontend for production
+- `cd web && pnpm dev` - Start Vite development server
+- `cd web && pnpm build` - Typecheck and build the frontend for production
+- `cd web && pnpm preview` - Serve the production build locally
+- `cd web && pnpm test` - Run Vitest test suite
 - `cd web && pnpm lint` - Run ESLint
 - `cd web && pnpm format` - Format code with Prettier
 
@@ -28,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Project Structure
 - **Monorepo** with separate backend and frontend services
 - **Backend**: Go service at `services/backend/` with Chi router, SQLite database
-- **Frontend**: Next.js 15 app at `web/` with TypeScript, shadcn/ui components
+- **Frontend**: Vite + React SPA at `web/` with TypeScript, shadcn/ui components
 - **Real-time updates**: WebSocket connection between backend and frontend
 - **State management**: Zustand store at `web/store/appState.ts`
 
@@ -41,10 +43,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **API endpoints**: REST API for job management and metadata retrieval
 
 ### Frontend Architecture
-- **Next.js App Router** with TypeScript
+- **Vite + React SPA** with TypeScript and React Router (routes in `web/src/App.tsx`)
+- **Entry points**: `web/index.html`, `web/src/main.tsx`; pages in `web/src/pages/`
 - **Dashboard layout**: Sidebar navigation with multiple pages
 - **Component structure**: shadcn/ui components in `web/components/ui/`
-- **Pages**: Dashboard, Downloads, Channels, Settings, Tools
+- **Pages**: Overview, Dashboard, Downloads, Settings, Tools
 - **Real-time updates**: WebSocket integration for download progress
 - **State management**: Zustand for global app state
 
@@ -63,7 +66,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Technology Stack
 - **Backend**: Go 1.23+ with Chi router, SQLite, yt-dlp, ffmpeg
-- **Frontend**: Next.js 15, TypeScript, shadcn/ui, Zustand, WebSocket
+- **Frontend**: Vite 6, React 19, TypeScript, shadcn/ui, Zustand, React Router, WebSocket
 - **Development**: Docker Compose for orchestration
 
 ### Progress Tracking Implementation
@@ -74,7 +77,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Environment Configuration
 - Backend: `DEBUG`, `DOWNLOAD_PATH`, `DATABASE_PATH`, `PORT`, `WS_PORT`
-- Frontend: `NEXT_PUBLIC_SERVER_URL`, `NEXT_PUBLIC_SERVER_URL_WS`
+- Frontend: `VITE_SERVER_URL`, `VITE_SERVER_URL_WS` (baked in at build time, see `web/lib/env.ts`)
 - Default development URLs: Backend on :8080, WebSocket on :8081, Frontend on :3000
 
 ## Future Improvements

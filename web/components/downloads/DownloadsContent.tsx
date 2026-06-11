@@ -1,11 +1,10 @@
-'use client'
-
 import { JobWithMetadata } from '@/types'
 import { AlertCircle } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { SERVER_URL } from '@/lib/env'
 
 import { ChannelsGrid } from '@/components/downloads/ChannelsGrid'
 import { PaginationControls } from '@/components/downloads/PaginationControls'
@@ -49,9 +48,7 @@ const SORT_OPTIONS: Record<string, SortOption[]> = {
 }
 
 export default function DownloadsContent() {
-    const router = useRouter()
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
+    const [searchParams, setSearchParams] = useSearchParams()
 
     // Parse query params with defaults
     const activeTab = searchParams.get('type') || 'videos'
@@ -66,7 +63,7 @@ export default function DownloadsContent() {
 
     // Update URL query params
     const updateUrlParams = (params: Record<string, string | number>) => {
-        const newParams = new URLSearchParams(searchParams.toString())
+        const newParams = new URLSearchParams(searchParams)
 
         Object.entries(params).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
@@ -74,7 +71,7 @@ export default function DownloadsContent() {
             }
         })
 
-        router.push(`${pathname}?${newParams.toString()}`)
+        setSearchParams(newParams)
     }
 
     // Handle tab change
@@ -104,9 +101,7 @@ export default function DownloadsContent() {
             setError(null)
 
             try {
-                const url = new URL(
-                    `${process.env.NEXT_PUBLIC_SERVER_URL}/downloads/${activeTab}`
-                )
+                const url = new URL(`${SERVER_URL}/downloads/${activeTab}`)
                 url.searchParams.append('page', String(currentPage))
                 url.searchParams.append('limit', String(pageSize))
                 url.searchParams.append('sort_by', sortBy)

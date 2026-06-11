@@ -1,5 +1,3 @@
-'use client'
-
 import useToolsState from '@/store/toolsState'
 import {
     ChevronRight,
@@ -12,7 +10,7 @@ import {
     Workflow,
 } from 'lucide-react'
 
-import Link from 'next/link'
+import { Link } from 'react-router-dom'
 
 import { useToolsWebSocket } from '@/hooks/useToolsWebSocket'
 
@@ -173,7 +171,7 @@ export default function ToolsContent() {
                         return (
                             <Link
                                 key={tool.href}
-                                href={isDisabled ? '#' : tool.href}
+                                to={isDisabled ? '#' : tool.href}
                                 className={
                                     isDisabled ? 'pointer-events-none' : ''
                                 }

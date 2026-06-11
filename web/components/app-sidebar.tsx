@@ -1,5 +1,3 @@
-'use client'
-
 import {
     ChartArea,
     GitBranch,
@@ -9,10 +7,7 @@ import {
     Wrench,
 } from 'lucide-react'
 
-import { useEffect, useState } from 'react'
-
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { Link, useLocation } from 'react-router-dom'
 
 import {
     Sidebar,
@@ -56,22 +51,7 @@ const items = [
 ]
 
 export function AppSidebar() {
-    const pathname = usePathname()
-    const [version, setVersion] = useState<string | null>(null)
-
-    useEffect(() => {
-        const fetchVersion = async () => {
-            try {
-                const response = await fetch('/api/info')
-                const data = await response.json()
-                setVersion(data.info.version)
-            } catch (error) {
-                console.error('Failed to fetch version:', error)
-            }
-        }
-
-        fetchVersion()
-    }, [])
+    const { pathname } = useLocation()
 
     const isActive = (url: string) =>
         url === '/' ? pathname === '/' : pathname.startsWith(url)
@@ -93,7 +73,7 @@ export function AppSidebar() {
                                         asChild
                                         isActive={isActive(item.url)}
                                     >
-                                        <Link href={item.url}>
+                                        <Link to={item.url}>
                                             <item.icon />
                                             <span>{item.title}</span>
                                         </Link>
@@ -106,15 +86,14 @@ export function AppSidebar() {
             </SidebarContent>
             <SidebarFooter>
                 <SidebarGroupLabel className={'gap-x-4'}>
-                    {version && (
-                        <p className={'text-md'}>version {version}-BETA</p>
-                    )}
-                    <Link
-                        target={'_blank'}
-                        href={'https://github.com/Fx64b/video-archiver'}
+                    <p className={'text-md'}>version {__APP_VERSION__}-BETA</p>
+                    <a
+                        target="_blank"
+                        rel="noreferrer"
+                        href="https://github.com/Fx64b/video-archiver"
                     >
                         <GitBranch size={20} />
-                    </Link>
+                    </a>
                 </SidebarGroupLabel>
             </SidebarFooter>
         </Sidebar>

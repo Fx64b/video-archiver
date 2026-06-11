@@ -6,7 +6,6 @@ import {
     DownloadPhaseVideo,
     Job,
     JobStatusCancelled,
-    JobStatusComplete,
     JobStatusError,
     JobStatusInProgress,
     JobStatusPending,
@@ -14,13 +13,20 @@ import {
     Metadata,
     ProgressUpdate,
 } from '@/types'
-import { AlertTriangle, CircleCheck, Clock, User, X, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+    AlertTriangle,
+    ChevronDown,
+    ChevronUp,
+    CircleCheck,
+    Clock,
+    User,
+    X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import React, { useState } from 'react'
 
-import Image from 'next/image'
-
+import { SERVER_URL } from '@/lib/env'
 import {
     getThumbnailUrl,
     getTitle,
@@ -60,9 +66,12 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
     const isRetrying = 'isRetrying' in job && job.isRetrying
     const isFailed = 'status' in job && job.status === JobStatusError
     const isCancelled = 'status' in job && job.status === JobStatusCancelled
-    const isInProgress = 'status' in job && (job.status === JobStatusInProgress || job.status === JobStatusPending)
+    const isInProgress =
+        'status' in job &&
+        (job.status === JobStatusInProgress || job.status === JobStatusPending)
     const canCancel = isInProgress && !isCancelling && !isFailed && !isCancelled
-    const hasWarnings = 'warnings' in job && job.warnings && job.warnings.length > 0
+    const hasWarnings =
+        'warnings' in job && job.warnings && job.warnings.length > 0
 
     const handleCancel = async () => {
         if (!('jobID' in job)) return
@@ -70,7 +79,7 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
         setIsCancelling(true)
         try {
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_SERVER_URL}/download/${job.jobID}`,
+                `${SERVER_URL}/download/${job.jobID}`,
                 {
                     method: 'DELETE',
                 }
@@ -92,12 +101,14 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
         <Card className="relative w-full">
             <div className="flex items-center">
                 {(isRetrying || isFailed) && (
-                    <div className="absolute right-4 top-4">
-                        <AlertTriangle className={`h-6 w-6 ${isFailed ? 'text-destructive' : 'text-yellow-500'}`} />
+                    <div className="absolute top-4 right-4">
+                        <AlertTriangle
+                            className={`h-6 w-6 ${isFailed ? 'text-destructive' : 'text-yellow-500'}`}
+                        />
                     </div>
                 )}
                 {canCancel && (
-                    <div className="absolute right-4 top-4">
+                    <div className="absolute top-4 right-4">
                         <Button
                             variant="ghost"
                             size="icon"
@@ -115,12 +126,10 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                         <div
                             className={`relative ${isChannel ? 'h-36 w-36' : 'h-36 w-64'}`}
                         >
-                            <Image
+                            <img
                                 src={thumbnailUrl}
                                 alt={title}
-                                fill
-                                className={`ml-4 ${isChannel ? 'rounded-full' : 'rounded-lg'} object-cover`}
-                                sizes="(max-width: 768px) 100vw, 192px"
+                                className={`absolute inset-0 ml-4 h-full w-full ${isChannel ? 'rounded-full' : 'rounded-lg'} object-cover`}
                             />
                         </div>
                     ) : (
@@ -181,12 +190,12 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                             </p>
                             <div>
                                 {isCancelled ? (
-                                    <div className="flex gap-2 text-muted-foreground">
+                                    <div className="text-muted-foreground flex gap-2">
                                         <span>Download Cancelled</span>
                                         <X />
                                     </div>
                                 ) : isFailed ? (
-                                    <div className="flex gap-2 text-destructive">
+                                    <div className="text-destructive flex gap-2">
                                         <span>Download Failed</span>
                                         <AlertTriangle />
                                     </div>
@@ -194,7 +203,8 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                     <span className="text-yellow-600">
                                         Retrying ({job.retryCount || 0}/
                                         {job.maxRetries || 3})
-                                        {job.retryError && `: ${job.retryError}`}
+                                        {job.retryError &&
+                                            `: ${job.retryError}`}
                                     </span>
                                 ) : job.progress === 100 &&
                                   ('jobType' in job
@@ -245,13 +255,19 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                         {hasWarnings && (
                             <div className="mt-4">
                                 <button
-                                    onClick={() => setShowWarnings(!showWarnings)}
+                                    onClick={() =>
+                                        setShowWarnings(!showWarnings)
+                                    }
                                     className="flex w-full items-center justify-between rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-600 transition-colors hover:bg-yellow-500/20 dark:text-yellow-500"
                                 >
                                     <div className="flex items-center gap-2">
                                         <AlertTriangle className="h-4 w-4" />
                                         <span className="font-medium">
-                                            {job.warnings!.length} warning{job.warnings!.length !== 1 ? 's' : ''} detected
+                                            {job.warnings!.length} warning
+                                            {job.warnings!.length !== 1
+                                                ? 's'
+                                                : ''}{' '}
+                                            detected
                                         </span>
                                     </div>
                                     {showWarnings ? (
@@ -265,10 +281,12 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                         {job.warnings!.map((warning, index) => (
                                             <div
                                                 key={index}
-                                                className="flex items-start gap-2 text-sm text-muted-foreground"
+                                                className="text-muted-foreground flex items-start gap-2 text-sm"
                                             >
                                                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-600 dark:text-yellow-500" />
-                                                <span className="break-words">{warning}</span>
+                                                <span className="break-words">
+                                                    {warning}
+                                                </span>
                                             </div>
                                         ))}
                                     </div>

@@ -4,6 +4,8 @@ import { JobWithMetadata } from '@/types'
 
 import React, { useCallback, useEffect, useState } from 'react'
 
+import { SERVER_URL } from '@/lib/env'
+
 import { MetadataCard } from '@/components/metadata-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,7 +18,7 @@ const Recent: React.FC = () => {
     const onReconnect = useWebSocketStore((state) => state.onReconnect)
 
     const fetchRecentJobs = useCallback(() => {
-        fetch(process.env.NEXT_PUBLIC_SERVER_URL + '/recent')
+        fetch(SERVER_URL + '/recent')
             .then((res) => {
                 if (!res.ok) {
                     setMessage('No recent jobs found.')

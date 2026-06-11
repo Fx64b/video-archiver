@@ -2,8 +2,7 @@ import { ToolOperation, submitTool } from '@/services/toolsApi'
 import useToolsState from '@/store/toolsState'
 
 import { useCallback, useState } from 'react'
-
-import { useRouter } from 'next/navigation'
+import { useNavigate } from 'react-router-dom'
 
 /**
  * useToolSubmit encapsulates the shared submit flow for every tool page:
@@ -11,7 +10,7 @@ import { useRouter } from 'next/navigation'
  * selection and return to the tools dashboard.
  */
 export function useToolSubmit(operation: ToolOperation) {
-    const router = useRouter()
+    const navigate = useNavigate()
     const { selectedInputs, clearSelectedInputs, addActiveJob } =
         useToolsState()
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -34,7 +33,7 @@ export function useToolSubmit(operation: ToolOperation) {
                 )
                 addActiveJob(job)
                 clearSelectedInputs()
-                router.push('/tools')
+                navigate('/tools')
             } catch (err) {
                 setError(
                     err instanceof Error ? err.message : 'An error occurred'
@@ -43,7 +42,7 @@ export function useToolSubmit(operation: ToolOperation) {
                 setIsSubmitting(false)
             }
         },
-        [operation, selectedInputs, addActiveJob, clearSelectedInputs, router]
+        [operation, selectedInputs, addActiveJob, clearSelectedInputs, navigate]
     )
 
     return { submit, isSubmitting, error, setError }

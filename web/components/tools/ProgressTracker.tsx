@@ -1,5 +1,3 @@
-'use client'
-
 import { cancelToolJob } from '@/services/toolsApi'
 import useToolsState from '@/store/toolsState'
 import { ToolsJob, ToolsProgressUpdate } from '@/types'
