@@ -130,6 +130,24 @@ export function VideosGrid({ items }: VideosGridProps) {
                                         : 'Unknown size'}
                                 </Badge>
                             </div>
+                            {item.tags && item.tags.length > 0 && (
+                                <div className="mt-2 flex items-center gap-1 overflow-hidden">
+                                    {item.tags.slice(0, 3).map((tag) => (
+                                        <Badge
+                                            key={tag.id}
+                                            variant="secondary"
+                                            className="max-w-28 truncate text-xs"
+                                        >
+                                            {tag.name}
+                                        </Badge>
+                                    ))}
+                                    {item.tags.length > 3 && (
+                                        <span className="text-muted-foreground text-xs">
+                                            +{item.tags.length - 3}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 )

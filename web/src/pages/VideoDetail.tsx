@@ -1,4 +1,5 @@
-import { JobStatusError, JobWithMetadata, VideoMetadata } from '@/types'
+import { deleteDownload } from '@/services/libraryApi'
+import { JobStatusError, JobWithMetadata, Tag, VideoMetadata } from '@/types'
 import {
     AlertTriangle,
     ArrowLeft,
@@ -6,16 +7,20 @@ import {
     Eye,
     List,
     ThumbsUp,
+    Trash2,
     User,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useParams } from 'react-router-dom'
 
 import { SERVER_URL } from '@/lib/env'
 import { formatBytes, formatSeconds, formatSubscriberNumber } from '@/lib/utils'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { TagEditor } from '@/components/tag-editor'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,10 +29,24 @@ import VideoPlayer from '@/components/video-player'
 
 export default function VideoDetailPage() {
     const { id } = useParams()
+    const navigate = useNavigate()
     const [video, setVideo] = useState<JobWithMetadata | null>(null)
     const [parents, setParents] = useState<JobWithMetadata[]>([])
+    const [tags, setTags] = useState<Tag[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [deleteOpen, setDeleteOpen] = useState(false)
+
+    const handleDelete = async () => {
+        if (!id) return
+        try {
+            await deleteDownload(id)
+            toast.success('Download deleted')
+            navigate('/downloads')
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to delete')
+        }
+    }
 
     useEffect(() => {
         const fetchVideo = async () => {
@@ -41,7 +60,9 @@ export default function VideoDetailPage() {
                 }
 
                 const data = await response.json()
-                setVideo(data.message || data)
+                const job: JobWithMetadata = data.message || data
+                setVideo(job)
+                setTags(job.tags || [])
             } catch (err) {
                 console.error('Video fetch error:', err)
                 setError(err instanceof Error ? err.message : 'Unknown error')
@@ -126,13 +147,31 @@ export default function VideoDetailPage() {
                         Back to Downloads
                     </Button>
                 </Link>
-                {isFailed && (
-                    <div className="text-destructive flex items-center gap-2">
-                        <AlertTriangle className="h-5 w-5" />
-                        <span className="font-medium">Download Failed</span>
-                    </div>
-                )}
+                <div className="flex items-center gap-4">
+                    {isFailed && (
+                        <div className="text-destructive flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5" />
+                            <span className="font-medium">Download Failed</span>
+                        </div>
+                    )}
+                    <Button
+                        variant="outline"
+                        className="text-destructive hover:text-destructive gap-2"
+                        onClick={() => setDeleteOpen(true)}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                    </Button>
+                </div>
             </div>
+
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                title="Delete this download?"
+                description="The video file will be removed from disk along with its metadata and tags. This cannot be undone."
+                onConfirm={handleDelete}
+            />
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 {/* Main content */}
@@ -388,36 +427,20 @@ export default function VideoDetailPage() {
                     </Card>
 
                     {/* Tags */}
-                    {metadata?.tags && metadata.tags.length > 0 && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Tags</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex flex-wrap gap-2">
-                                    {metadata.tags
-                                        .slice(0, 10)
-                                        .map((tag, index) => (
-                                            <Badge
-                                                key={index}
-                                                variant="secondary"
-                                                className="text-xs"
-                                            >
-                                                {tag}
-                                            </Badge>
-                                        ))}
-                                    {metadata.tags.length > 10 && (
-                                        <Badge
-                                            variant="outline"
-                                            className="text-xs"
-                                        >
-                                            +{metadata.tags.length - 10} more
-                                        </Badge>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-lg">Tags</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {id && (
+                                <TagEditor
+                                    jobId={id}
+                                    tags={tags}
+                                    onChange={setTags}
+                                />
+                            )}
+                        </CardContent>
+                    </Card>
 
                     {/* Technical info */}
                     <Card>

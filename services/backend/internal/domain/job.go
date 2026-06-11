@@ -37,10 +37,26 @@ type JobRepository interface {
 	CountVideos() (int, error)
 	CountPlaylists() (int, error)
 	CountChannels() (int, error)
-	GetMetadataByType(contentType string, page int, limit int, sortBy string, order string) ([]*JobWithMetadata, int, error)
+	GetMetadataByType(contentType string, opts MetadataQuery) ([]*JobWithMetadata, int, error)
 	AddVideoToParent(videoJobID, parentJobID, membershipType string) error
 	GetVideosForParent(parentJobID string) ([]*JobWithMetadata, error)
 	GetParentsForVideo(videoJobID string) ([]*JobWithMetadata, error)
+	DeleteJob(jobID string) error
+	ListTags() ([]Tag, error)
+	GetTagsForJob(jobID string) ([]Tag, error)
+	AddTagsToJob(jobID string, names []string, source string) ([]Tag, error)
+	RemoveTagFromJob(jobID string, tagID int64) error
+	BackfillAutoTags() error
+}
+
+// MetadataQuery holds the listing options for GetMetadataByType.
+type MetadataQuery struct {
+	Page   int
+	Limit  int
+	SortBy string
+	Order  string
+	Search string // case-insensitive match against title/channel
+	Tag    string // only items carrying this tag
 }
 
 type JobType string
@@ -55,6 +71,7 @@ const (
 type JobWithMetadata struct {
 	Job      *Job     `json:"job"`
 	Metadata Metadata `json:"metadata,omitempty"`
+	Tags     []Tag    `json:"tags,omitempty"`
 }
 
 type ProgressUpdate struct {

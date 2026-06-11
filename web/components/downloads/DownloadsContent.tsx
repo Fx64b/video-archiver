@@ -8,11 +8,13 @@ import { SERVER_URL } from '@/lib/env'
 import { ensureMinimumDelay } from '@/lib/loading'
 
 import { ChannelsGrid } from '@/components/downloads/ChannelsGrid'
+import { LibraryFilters } from '@/components/downloads/LibraryFilters'
 import { PaginationControls } from '@/components/downloads/PaginationControls'
 import { PlaylistsGrid } from '@/components/downloads/PlaylistsGrid'
 import { SortControls } from '@/components/downloads/SortControls'
 import { VideosGrid } from '@/components/downloads/VideosGrid'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -57,18 +59,22 @@ export default function DownloadsContent() {
     const pageSize = Number(searchParams.get('limit')) || 20
     const sortBy = searchParams.get('sort_by') || 'created_at'
     const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc'
+    const search = searchParams.get('search') || ''
+    const tag = searchParams.get('tag') || ''
 
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [data, setData] = useState<PaginatedResponse | null>(null)
 
-    // Update URL query params
+    // Update URL query params; empty values remove the param
     const updateUrlParams = (params: Record<string, string | number>) => {
         const newParams = new URLSearchParams(searchParams)
 
         Object.entries(params).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
+            if (value !== undefined && value !== null && value !== '') {
                 newParams.set(key, String(value))
+            } else {
+                newParams.delete(key)
             }
         })
 
@@ -78,6 +84,15 @@ export default function DownloadsContent() {
     // Handle tab change
     const handleTabChange = (value: string) => {
         updateUrlParams({ type: value, page: 1 })
+    }
+
+    // Handle search and tag filter changes
+    const handleSearchChange = (value: string) => {
+        updateUrlParams({ search: value, page: 1 })
+    }
+
+    const handleTagChange = (value: string) => {
+        updateUrlParams({ tag: value, page: 1 })
     }
 
     // Handle sort change
@@ -110,6 +125,12 @@ export default function DownloadsContent() {
                 url.searchParams.append('limit', String(pageSize))
                 url.searchParams.append('sort_by', sortBy)
                 url.searchParams.append('order', order)
+                if (search) {
+                    url.searchParams.append('search', search)
+                }
+                if (tag) {
+                    url.searchParams.append('tag', tag)
+                }
 
                 const response = await fetch(url.toString())
 
@@ -160,7 +181,7 @@ export default function DownloadsContent() {
         }
 
         fetchDownloads()
-    }, [activeTab, currentPage, pageSize, sortBy, order])
+    }, [activeTab, currentPage, pageSize, sortBy, order, search, tag])
 
     const renderLoadingState = () => (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -219,6 +240,13 @@ export default function DownloadsContent() {
                     )}
                 </div>
 
+                <LibraryFilters
+                    search={search}
+                    tag={tag}
+                    onSearchChange={handleSearchChange}
+                    onTagChange={handleTagChange}
+                />
+
                 {error && (
                     <Alert variant="destructive" className="mb-6">
                         <AlertCircle className="h-4 w-4" />
@@ -229,6 +257,24 @@ export default function DownloadsContent() {
 
                 {loading ? (
                     renderLoadingState()
+                ) : !data?.items.length && (search || tag) ? (
+                    <div className="text-muted-foreground py-12 text-center">
+                        <p className="mb-4">
+                            No {activeTab} match your filters
+                        </p>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                updateUrlParams({
+                                    search: '',
+                                    tag: '',
+                                    page: 1,
+                                })
+                            }
+                        >
+                            Clear filters
+                        </Button>
+                    </div>
                 ) : (
                     <>
                         <TabsContent value="videos">

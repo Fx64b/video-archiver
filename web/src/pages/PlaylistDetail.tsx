@@ -1,3 +1,4 @@
+import { deleteDownload } from '@/services/libraryApi'
 import { JobWithMetadata, PlaylistMetadata, VideoMetadata } from '@/types'
 import {
     AlertTriangle,
@@ -5,9 +6,11 @@ import {
     Eye,
     List,
     Play,
+    Trash2,
     User,
     XCircle,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -17,6 +20,7 @@ import { SERVER_URL } from '@/lib/env'
 import { getThumbnailUrl } from '@/lib/metadata'
 import { formatSubscriberNumber } from '@/lib/utils'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -28,6 +32,18 @@ export default function PlaylistDetailPage() {
     const [videos, setVideos] = useState<JobWithMetadata[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [deleteOpen, setDeleteOpen] = useState(false)
+
+    const handleDelete = async () => {
+        if (!id) return
+        try {
+            await deleteDownload(id)
+            toast.success('Playlist deleted')
+            navigate('/downloads?type=playlists')
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to delete')
+        }
+    }
 
     useEffect(() => {
         const fetchPlaylist = async () => {
@@ -118,14 +134,30 @@ export default function PlaylistDetailPage() {
     return (
         <div className="container mx-auto max-w-6xl p-6">
             {/* Header */}
-            <div className="mb-6">
+            <div className="mb-6 flex items-center justify-between">
                 <Link to="/downloads?type=playlists">
                     <Button variant="ghost" className="gap-2">
                         <ArrowLeft className="h-4 w-4" />
                         Back to Playlists
                     </Button>
                 </Link>
+                <Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive gap-2"
+                    onClick={() => setDeleteOpen(true)}
+                >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                </Button>
             </div>
+
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                title="Delete this playlist?"
+                description="The playlist entry is removed from your library. The videos it contains stay downloaded and remain available individually."
+                onConfirm={handleDelete}
+            />
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 {/* Main content - Video list */}
