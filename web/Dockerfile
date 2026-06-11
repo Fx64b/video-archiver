@@ -1,6 +1,10 @@
-# Base image with pnpm pre-installed
+# Base image with pnpm pre-installed.
+# Pin pnpm to the 10.x line that matches the lockfile (lockfileVersion 9.0).
+# `pnpm@latest` now resolves to pnpm 11, which ignores the `pnpm` field in
+# package.json and fails the production install on sharp's build script
+# (ERR_PNPM_IGNORED_BUILDS). Pinning keeps the image build reproducible.
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 
 # Install dependencies only when needed

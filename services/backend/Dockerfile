@@ -17,10 +17,15 @@ RUN CGO_ENABLED=1 go build -o main ./cmd/api
 
 FROM alpine:latest
 
+# Deno is required by recent yt-dlp versions to solve YouTube's JavaScript
+# challenges (nsig / PO tokens). The official Deno binary is built against
+# glibc, so gcompat + libstdc++ let it run on Alpine's musl libc.
+COPY --from=denoland/deno:bin-2.1.4 /deno /usr/local/bin/deno
+
 # Install runtime dependencies
-RUN apk add --no-cache ffmpeg python3 curl \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/download/2025.03.31/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod +x /usr/local/bin/yt-dlp
+RUN apk add --no-cache ffmpeg python3 curl gcompat libstdc++ \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/download/2026.03.17/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod +x /usr/local/bin/yt-dlp /usr/local/bin/deno
 
 # Create non-root user and setup directories
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

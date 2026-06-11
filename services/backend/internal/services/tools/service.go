@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,80 +14,82 @@ import (
 	"video-archiver/internal/domain"
 )
 
-type Config struct {
-	ToolsRepository    domain.ToolsRepository
-	JobRepository      domain.JobRepository
-	SettingsRepository domain.SettingsRepository
-	DownloadPath       string
-	ProcessedPath      string
-	Concurrency        int
+// Broadcaster pushes messages to connected WebSocket clients. The download
+// service's hub satisfies this interface, letting tools progress travel over
+// the same /ws connection the frontend already uses.
+type Broadcaster interface {
+	Broadcast(update interface{})
 }
 
-// activeJob tracks a running job and its cancellation function
-type activeJob struct {
-	job    *domain.ToolsJob
-	cancel context.CancelFunc
+type Config struct {
+	ToolsRepository domain.ToolsRepository
+	JobRepository   domain.JobRepository
+	Broadcaster     Broadcaster
+	FFmpeg          *FFmpeg
+	DownloadPath    string
+	ProcessedPath   string
+	Concurrency     int
 }
 
 type Service struct {
-	config         *Config
-	toolsRepo      domain.ToolsRepository
-	jobRepo        domain.JobRepository
-	settingsRepo   domain.SettingsRepository
-	queue          chan *domain.ToolsJob
-	wg             sync.WaitGroup
-	hub            *WebSocketHub
-	ctx            context.Context
-	cancel         context.CancelFunc
-	ffmpeg         *FFmpegWrapper
-	activeJobs     sync.Map // map[string]*activeJob
-	downloadPath   string
-	processedPath  string
+	toolsRepo     domain.ToolsRepository
+	jobRepo       domain.JobRepository
+	broadcaster   Broadcaster
+	ffmpeg        *FFmpeg
+	downloadPath  string
+	processedPath string
+	concurrency   int
+
+	queue      chan *domain.ToolsJob
+	activeJobs sync.Map // job ID -> context.CancelFunc
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
+}
+
+type resolvedInput struct {
+	jobID string
+	path  string
 }
 
 func NewService(config *Config) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
-	hub := NewWebSocketHub()
 
 	if config.ProcessedPath == "" {
 		config.ProcessedPath = "./data/processed"
 	}
+	if config.FFmpeg == nil {
+		config.FFmpeg = NewFFmpeg()
+	}
+	concurrency := config.Concurrency
+	if concurrency < 1 {
+		concurrency = 2
+	}
 
-	// Ensure processed directory exists
-	if err := os.MkdirAll(config.ProcessedPath, 0755); err != nil {
+	if err := os.MkdirAll(config.ProcessedPath, 0o755); err != nil {
 		log.WithError(err).Warn("Failed to create processed directory")
 	}
 
 	return &Service{
-		config:        config,
 		toolsRepo:     config.ToolsRepository,
 		jobRepo:       config.JobRepository,
-		settingsRepo:  config.SettingsRepository,
-		queue:         make(chan *domain.ToolsJob, 100),
-		hub:           hub,
-		ctx:           ctx,
-		cancel:        cancel,
-		ffmpeg:        NewFFmpegWrapper(),
+		broadcaster:   config.Broadcaster,
+		ffmpeg:        config.FFmpeg,
 		downloadPath:  config.DownloadPath,
 		processedPath: config.ProcessedPath,
+		concurrency:   concurrency,
+		queue:         make(chan *domain.ToolsJob, 100),
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 }
 
 func (s *Service) Start() error {
-	go s.hub.Run()
-
-	// Start worker pool
-	concurrency := s.config.Concurrency
-	if concurrency < 1 {
-		concurrency = 2 // Default: 2 concurrent tools jobs
-	}
-
-	for i := 0; i < concurrency; i++ {
+	for i := 0; i < s.concurrency; i++ {
 		s.wg.Add(1)
-		go s.processJobs()
+		go s.worker()
 	}
-
-	log.WithField("concurrency", concurrency).Info("Tools service started")
+	log.WithField("concurrency", s.concurrency).Info("Tools service started")
 	return nil
 }
 
@@ -100,36 +101,61 @@ func (s *Service) Stop() {
 	log.Info("Tools service stopped")
 }
 
-func (s *Service) GetHub() *WebSocketHub {
-	return s.hub
+func (s *Service) Repository() domain.ToolsRepository { return s.toolsRepo }
+
+func (s *Service) GetJobByID(id string) (*domain.ToolsJob, error) {
+	return s.toolsRepo.GetByID(id)
 }
 
-func (s *Service) GetRepository() domain.ToolsRepository {
-	return s.toolsRepo
+// ResolveOutputFile returns the validated absolute path of a completed job's
+// output file, guarding against any path that escapes the processed directory.
+func (s *Service) ResolveOutputFile(job *domain.ToolsJob) (string, error) {
+	if job.OutputFile == "" {
+		return "", fmt.Errorf("job has no output file")
+	}
+	base := filepath.Clean(s.processedPath)
+	path := filepath.Clean(job.OutputFile)
+	if err := ensureWithin(base, path); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return "", fmt.Errorf("output file not found")
+	}
+	return path, nil
 }
 
+// Submit validates and enqueues a job. Validation happens here so the API can
+// reject bad requests synchronously instead of failing asynchronously.
 func (s *Service) Submit(job *domain.ToolsJob) error {
+	if err := validateJob(job); err != nil {
+		return err
+	}
+
 	if job.ID == "" {
 		job.ID = uuid.New().String()
 	}
-
+	if job.InputType == "" {
+		job.InputType = domain.InputTypeVideos
+	}
+	now := time.Now()
 	job.Status = domain.ToolsJobStatusPending
 	job.Progress = 0
-	job.CreatedAt = time.Now()
-	job.UpdatedAt = time.Now()
+	job.CreatedAt = now
+	job.UpdatedAt = now
 
 	if err := s.toolsRepo.Create(job); err != nil {
 		return fmt.Errorf("create tools job: %w", err)
 	}
 
-	s.queue <- job
-	log.WithField("job_id", job.ID).WithField("operation", job.OperationType).Info("Tools job submitted")
+	select {
+	case s.queue <- job:
+	default:
+		return fmt.Errorf("tools queue is full")
+	}
 
+	log.WithFields(log.Fields{"job_id": job.ID, "operation": job.OperationType}).Info("Tools job submitted")
 	return nil
-}
-
-func (s *Service) GetJobByID(id string) (*domain.ToolsJob, error) {
-	return s.toolsRepo.GetByID(id)
 }
 
 func (s *Service) CancelJob(id string) error {
@@ -137,40 +163,32 @@ func (s *Service) CancelJob(id string) error {
 	if err != nil {
 		return fmt.Errorf("get job: %w", err)
 	}
-
 	if job == nil {
 		return fmt.Errorf("job not found")
 	}
-
 	if job.Status == domain.ToolsJobStatusComplete || job.Status == domain.ToolsJobStatusFailed {
-		return fmt.Errorf("cannot cancel completed or failed job")
+		return fmt.Errorf("cannot cancel a %s job", job.Status)
 	}
 
-	// Cancel the running FFmpeg process if it's active
-	if activeJobVal, ok := s.activeJobs.Load(id); ok {
-		if aj, ok := activeJobVal.(*activeJob); ok && aj.cancel != nil {
-			aj.cancel() // This will stop the FFmpeg process
-			log.WithField("job_id", id).Info("Cancelled running FFmpeg process")
+	if cancel, ok := s.activeJobs.Load(id); ok {
+		if fn, ok := cancel.(context.CancelFunc); ok {
+			fn()
 		}
 	}
 
 	job.Status = domain.ToolsJobStatusCancelled
 	now := time.Now()
 	job.CompletedAt = &now
-
 	if err := s.toolsRepo.Update(job); err != nil {
 		return fmt.Errorf("update job: %w", err)
 	}
-
-	s.sendProgress(job.ID, job.Status, 0, "Job cancelled", 0, 0)
-
+	s.broadcast(job, 0, "Cancelled", 0, 0)
 	log.WithField("job_id", id).Info("Tools job cancelled")
 	return nil
 }
 
-func (s *Service) processJobs() {
+func (s *Service) worker() {
 	defer s.wg.Done()
-
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -179,300 +197,362 @@ func (s *Service) processJobs() {
 			if !ok {
 				return
 			}
-
-			// Create cancellable context for this job
-			jobCtx, cancelFunc := context.WithCancel(s.ctx)
-
-			// Store job with cancel function
-			s.activeJobs.Store(job.ID, &activeJob{
-				job:    job,
-				cancel: cancelFunc,
-			})
-
+			jobCtx, cancel := context.WithCancel(s.ctx)
+			s.activeJobs.Store(job.ID, cancel)
 			s.processJob(jobCtx, job)
 			s.activeJobs.Delete(job.ID)
+			cancel()
 		}
 	}
 }
 
 func (s *Service) processJob(ctx context.Context, job *domain.ToolsJob) {
-	log.WithField("job_id", job.ID).WithField("operation", job.OperationType).Info("Processing tools job")
+	log.WithFields(log.Fields{"job_id": job.ID, "operation": job.OperationType}).Info("Processing tools job")
 
-	// Update status to processing
 	job.Status = domain.ToolsJobStatusProcessing
 	job.Progress = 0
 	if err := s.toolsRepo.Update(job); err != nil {
 		log.WithError(err).Error("Failed to update job status")
 		return
 	}
+	s.broadcast(job, 0, "Starting", 0, 0)
 
-	s.sendProgress(job.ID, job.Status, 0, "Starting...", 0, 0)
-
-	// Expand input files if needed (playlist/channel to videos)
-	inputFiles, err := s.expandInputFiles(job)
+	inputs, err := s.resolveInputs(job)
 	if err != nil {
-		s.failJob(job, fmt.Errorf("expand input files: %w", err))
+		s.failJob(job, err)
 		return
 	}
 
-	// Get actual file paths from job IDs
-	filePaths, err := s.resolveFilePaths(inputFiles)
+	var outputPath string
+	if job.OperationType == domain.OpTypeWorkflow {
+		outputPath, err = s.executeWorkflow(ctx, job, inputs)
+	} else {
+		outputPath = generateOutputPath(s.processedPath, job.OperationType, job.ID, job.Parameters)
+		err = s.runOperation(ctx, job, job.OperationType, job.Parameters, inputs, outputPath, s.progressCallback(job, stepLabel(job.OperationType)))
+	}
+
 	if err != nil {
-		s.failJob(job, fmt.Errorf("resolve file paths: %w", err))
+		// A cancellation is not a failure.
+		if ctx.Err() != nil {
+			log.WithField("job_id", job.ID).Info("Tools job cancelled mid-flight")
+			return
+		}
+		s.failJob(job, err)
 		return
 	}
 
-	// Generate output file path
-	outputPath, err := s.generateOutputPath(job)
-	if err != nil {
-		s.failJob(job, fmt.Errorf("generate output path: %w", err))
-		return
-	}
-
-	// Execute operation
-	var execErr error
-	switch job.OperationType {
-	case domain.OpTypeTrim:
-		execErr = s.executeTrim(job, filePaths[0], outputPath)
-	case domain.OpTypeConcat:
-		execErr = s.executeConcat(job, filePaths, outputPath)
-	case domain.OpTypeConvert:
-		execErr = s.executeConvert(job, filePaths[0], outputPath)
-	case domain.OpTypeExtractAudio:
-		execErr = s.executeExtractAudio(job, filePaths[0], outputPath)
-	case domain.OpTypeAdjustQuality:
-		execErr = s.executeAdjustQuality(job, filePaths[0], outputPath)
-	case domain.OpTypeRotate:
-		execErr = s.executeRotate(job, filePaths[0], outputPath)
-	case domain.OpTypeWorkflow:
-		execErr = s.executeWorkflow(job, filePaths)
-	default:
-		execErr = fmt.Errorf("unsupported operation type: %s", job.OperationType)
-	}
-
-	if execErr != nil {
-		s.failJob(job, execErr)
-		return
-	}
-
-	// Mark as complete
 	job.Status = domain.ToolsJobStatusComplete
 	job.Progress = 100
 	job.OutputFile = outputPath
 	now := time.Now()
 	job.CompletedAt = &now
-
-	// Get actual file size
-	if stat, err := os.Stat(outputPath); err == nil {
+	if stat, statErr := os.Stat(outputPath); statErr == nil {
 		job.ActualSize = stat.Size()
 	}
-
 	if err := s.toolsRepo.Update(job); err != nil {
 		log.WithError(err).Error("Failed to update completed job")
 		return
 	}
-
-	s.sendProgress(job.ID, job.Status, 100, "Complete", 0, 0)
-
-	log.WithField("job_id", job.ID).WithField("output", outputPath).Info("Tools job completed")
+	s.broadcast(job, 100, "Complete", 0, 0)
+	log.WithFields(log.Fields{"job_id": job.ID, "output": outputPath}).Info("Tools job completed")
 }
 
-func (s *Service) failJob(job *domain.ToolsJob, err error) {
-	log.WithError(err).WithField("job_id", job.ID).Error("Tools job failed")
-
-	job.Status = domain.ToolsJobStatusFailed
-	job.ErrorMessage = err.Error()
-	now := time.Now()
-	job.CompletedAt = &now
-
-	if updateErr := s.toolsRepo.Update(job); updateErr != nil {
-		log.WithError(updateErr).Error("Failed to update failed job")
+// resolveInputs expands playlist/channel jobs to their videos and resolves each
+// video job ID to an on-disk file path.
+func (s *Service) resolveInputs(job *domain.ToolsJob) ([]resolvedInput, error) {
+	jobIDs, err := s.expandInputFiles(job)
+	if err != nil {
+		return nil, err
+	}
+	if len(jobIDs) == 0 {
+		return nil, fmt.Errorf("no input videos found")
 	}
 
-	s.sendProgress(job.ID, job.Status, job.Progress, "Failed", 0, 0)
-}
-
-func (s *Service) sendProgress(jobID string, status domain.ToolsJobStatus, progress float64, step string, elapsed, remaining int) {
-	update := domain.ToolsProgressUpdate{
-		JobID:         jobID,
-		Status:        status,
-		Progress:      progress,
-		CurrentStep:   step,
-		TimeElapsed:   elapsed,
-		TimeRemaining: remaining,
+	resolved := make([]resolvedInput, 0, len(jobIDs))
+	for _, id := range jobIDs {
+		path, err := s.resolveVideoPath(id)
+		if err != nil {
+			return nil, err
+		}
+		resolved = append(resolved, resolvedInput{jobID: id, path: path})
 	}
-
-	s.hub.Broadcast(update)
+	return resolved, nil
 }
 
 func (s *Service) expandInputFiles(job *domain.ToolsJob) ([]string, error) {
 	switch job.InputType {
-	case "videos", "":
-		// Already individual video job IDs
+	case domain.InputTypeVideos, "":
 		return job.InputFiles, nil
-
-	case "playlist":
-		// Expand playlist to video IDs
+	case domain.InputTypePlaylist, domain.InputTypeChannel:
 		if len(job.InputFiles) != 1 {
-			return nil, fmt.Errorf("playlist input type requires exactly one playlist ID")
+			return nil, fmt.Errorf("%s input requires exactly one parent ID", job.InputType)
 		}
-
-		playlistJobID := job.InputFiles[0]
-		videos, err := s.jobRepo.GetVideosForParent(playlistJobID)
+		videos, err := s.jobRepo.GetVideosForParent(job.InputFiles[0])
 		if err != nil {
-			return nil, fmt.Errorf("get videos for playlist: %w", err)
+			return nil, fmt.Errorf("get videos for %s: %w", job.InputType, err)
 		}
-
-		videoIDs := make([]string, len(videos))
-		for i, v := range videos {
-			videoIDs[i] = v.Job.ID
+		ids := make([]string, 0, len(videos))
+		for _, v := range videos {
+			if v != nil && v.Job != nil {
+				ids = append(ids, v.Job.ID)
+			}
 		}
-
-		log.WithField("playlist_id", playlistJobID).WithField("video_count", len(videoIDs)).Info("Expanded playlist to videos")
-		return videoIDs, nil
-
-	case "channel":
-		// Expand channel to video IDs
-		if len(job.InputFiles) != 1 {
-			return nil, fmt.Errorf("channel input type requires exactly one channel ID")
-		}
-
-		channelJobID := job.InputFiles[0]
-
-		// Get all videos for the channel
-		// For now, get via parent relationship - in production would query by channel_id in metadata
-		videos, err := s.jobRepo.GetVideosForParent(channelJobID)
-		if err != nil {
-			return nil, fmt.Errorf("get videos for channel: %w", err)
-		}
-
-		videoIDs := make([]string, len(videos))
-		for i, v := range videos {
-			videoIDs[i] = v.Job.ID
-		}
-
-		log.WithField("channel_id", channelJobID).WithField("video_count", len(videoIDs)).Info("Expanded channel to videos")
-		return videoIDs, nil
-
+		return ids, nil
 	default:
-		return nil, fmt.Errorf("invalid input type: %s", job.InputType)
+		return nil, fmt.Errorf("invalid input type: %q", job.InputType)
 	}
 }
 
-func (s *Service) resolveFilePaths(jobIDs []string) ([]string, error) {
-	var paths []string
-
-	for _, jobID := range jobIDs {
-		jobWithMetadata, err := s.jobRepo.GetJobWithMetadata(jobID)
-		if err != nil {
-			return nil, fmt.Errorf("get job %s: %w", jobID, err)
-		}
-
-		if jobWithMetadata == nil || jobWithMetadata.Job == nil {
-			return nil, fmt.Errorf("job %s not found", jobID)
-		}
-
-		// Get video metadata
-		videoMeta, ok := jobWithMetadata.Metadata.(*domain.VideoMetadata)
-		if !ok {
-			return nil, fmt.Errorf("job %s is not a video", jobID)
-		}
-
-		// Construct file path
-		channelDir := videoMeta.Channel
-		if channelDir == "" {
-			channelDir = videoMeta.Uploader
-		}
-		if channelDir == "" {
-			channelDir = "Unknown"
-		}
-
-		title := videoMeta.Title
-		if title == "" {
-			title = "Unknown"
-		}
-
-		// Clean filename - sanitize BOTH channel directory and title to prevent path traversal
-		channelDir = cleanFilename(channelDir)
-		title = cleanFilename(title)
-
-		// Construct path and clean it to resolve any relative path components
-		filePath := filepath.Clean(filepath.Join(s.downloadPath, channelDir, title+".mp4"))
-
-		// Security: Validate the resolved path is still within the download directory
-		cleanDownloadPath := filepath.Clean(s.downloadPath)
-		if !strings.HasPrefix(filePath, cleanDownloadPath) {
-			return nil, fmt.Errorf("invalid file path: potential path traversal detected for job %s", jobID)
-		}
-
-		// Check if file exists
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("video file not found: %s", filePath)
-		}
-
-		paths = append(paths, filePath)
-	}
-
-	return paths, nil
-}
-
-func (s *Service) generateOutputPath(job *domain.ToolsJob) (string, error) {
-	// Generate unique filename
-	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("%s_%s_%s", job.OperationType, timestamp, job.ID[:8])
-
-	// Add appropriate extension based on operation
-	var ext string
-	switch job.OperationType {
-	case domain.OpTypeExtractAudio:
-		// Get format from parameters
-		if format, ok := job.Parameters["output_format"].(string); ok {
-			ext = "." + format
-		} else {
-			ext = ".mp3"
-		}
-	case domain.OpTypeConvert:
-		// Get format from parameters
-		if format, ok := job.Parameters["output_format"].(string); ok {
-			ext = "." + format
-		} else {
-			ext = ".mp4"
-		}
-	default:
-		ext = ".mp4"
-	}
-
-	filename += ext
-	return filepath.Join(s.processedPath, filename), nil
-}
-
-func cleanFilename(s string) string {
-	// Replace invalid filename characters
-	replacer := strings.NewReplacer(
-		"/", "_",
-		"\\", "_",
-		":", "_",
-		"*", "_",
-		"?", "_",
-		"\"", "_",
-		"<", "_",
-		">", "_",
-		"|", "_",
-	)
-	return replacer.Replace(s)
-}
-
-// Helper to parse parameters into specific types
-func parseParameters[T any](params map[string]any) (*T, error) {
-	data, err := json.Marshal(params)
+// resolveVideoPath maps a video job ID to the file on disk.
+func (s *Service) resolveVideoPath(jobID string) (string, error) {
+	jwm, err := s.jobRepo.GetJobWithMetadata(jobID)
 	if err != nil {
-		return nil, fmt.Errorf("marshal parameters: %w", err)
+		return "", fmt.Errorf("get job %s: %w", jobID, err)
+	}
+	if jwm == nil || jwm.Job == nil {
+		return "", fmt.Errorf("job %s not found", jobID)
+	}
+	meta, ok := jwm.Metadata.(*domain.VideoMetadata)
+	if !ok || meta == nil {
+		return "", fmt.Errorf("job %s is not a video", jobID)
 	}
 
-	var result T
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal parameters: %w", err)
+	path, err := ResolveVideoFile(s.downloadPath, meta)
+	if err != nil {
+		return "", fmt.Errorf("job %s: %w", jobID, err)
+	}
+	return path, nil
+}
+
+// runOperation builds and executes ffmpeg for a single (non-workflow) operation.
+func (s *Service) runOperation(ctx context.Context, job *domain.ToolsJob, op domain.ToolsOperationType, params map[string]any, inputs []resolvedInput, output string, progress ProgressFunc) error {
+	opArgs, totalDuration, cleanup, err := s.prepareOperation(op, params, inputs)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		return err
+	}
+	return s.ffmpeg.Run(ctx, opArgs, output, totalDuration, progress)
+}
+
+// prepareOperation produces the ffmpeg arguments and the expected total
+// duration (for progress) for an operation. The returned cleanup must be called
+// after ffmpeg finishes (it removes any temporary concat list file).
+func (s *Service) prepareOperation(op domain.ToolsOperationType, params map[string]any, inputs []resolvedInput) (args []string, totalDuration float64, cleanup func(), err error) {
+	if len(inputs) == 0 {
+		return nil, 0, nil, fmt.Errorf("operation requires at least one input")
+	}
+	primary := inputs[0].path
+
+	switch op {
+	case domain.OpTypeTrim:
+		p, perr := parseParameters[domain.TrimParameters](params)
+		if perr != nil {
+			return nil, 0, nil, perr
+		}
+		args, err = buildTrimArgs(primary, p)
+		if err == nil {
+			start, _ := parseTimecode(p.StartTime)
+			end, _ := parseTimecode(p.EndTime)
+			totalDuration = end - start
+		}
+
+	case domain.OpTypeConcat:
+		p, perr := parseParameters[domain.ConcatParameters](params)
+		if perr != nil {
+			return nil, 0, nil, perr
+		}
+		ordered := orderConcatInputs(inputs, p.FileOrder)
+		var listFile string
+		listFile, cleanup, err = s.writeConcatList(ordered)
+		if err != nil {
+			return nil, 0, cleanup, err
+		}
+		args, err = buildConcatArgs(listFile, p)
+		totalDuration = s.sumDurations(ordered)
+
+	case domain.OpTypeConvert:
+		p, perr := parseParameters[domain.ConvertParameters](params)
+		if perr != nil {
+			return nil, 0, nil, perr
+		}
+		args, err = buildConvertArgs(primary, p)
+		totalDuration = s.probeDuration(primary)
+
+	case domain.OpTypeExtractAudio:
+		p, perr := parseParameters[domain.ExtractAudioParameters](params)
+		if perr != nil {
+			return nil, 0, nil, perr
+		}
+		args, err = buildExtractAudioArgs(primary, p)
+		totalDuration = s.probeDuration(primary)
+
+	case domain.OpTypeAdjustQuality:
+		p, perr := parseParameters[domain.AdjustQualityParameters](params)
+		if perr != nil {
+			return nil, 0, nil, perr
+		}
+		args, err = buildAdjustQualityArgs(primary, p)
+		totalDuration = s.probeDuration(primary)
+
+	case domain.OpTypeRotate:
+		p, perr := parseParameters[domain.RotateParameters](params)
+		if perr != nil {
+			return nil, 0, nil, perr
+		}
+		args, err = buildRotateArgs(primary, p)
+		totalDuration = s.probeDuration(primary)
+
+	default:
+		return nil, 0, nil, fmt.Errorf("unsupported operation type: %q", op)
 	}
 
-	return &result, nil
+	return args, totalDuration, cleanup, err
+}
+
+func (s *Service) probeDuration(path string) float64 {
+	info, err := s.ffmpeg.Probe(path)
+	if err != nil {
+		log.WithError(err).WithField("path", path).Debug("Failed to probe duration")
+		return 0
+	}
+	return info.Duration
+}
+
+func (s *Service) sumDurations(inputs []resolvedInput) float64 {
+	var total float64
+	for _, in := range inputs {
+		total += s.probeDuration(in.path)
+	}
+	return total
+}
+
+// orderConcatInputs reorders resolved inputs by an explicit list of job IDs.
+// Inputs missing from fileOrder keep their original relative order at the end.
+func orderConcatInputs(inputs []resolvedInput, fileOrder []string) []resolvedInput {
+	if len(fileOrder) == 0 {
+		return inputs
+	}
+	byID := make(map[string]resolvedInput, len(inputs))
+	for _, in := range inputs {
+		byID[in.jobID] = in
+	}
+	ordered := make([]resolvedInput, 0, len(inputs))
+	used := make(map[string]bool, len(inputs))
+	for _, id := range fileOrder {
+		if in, ok := byID[id]; ok && !used[id] {
+			ordered = append(ordered, in)
+			used[id] = true
+		}
+	}
+	for _, in := range inputs {
+		if !used[in.jobID] {
+			ordered = append(ordered, in)
+		}
+	}
+	return ordered
+}
+
+// writeConcatList writes a temporary ffmpeg concat demuxer list file.
+func (s *Service) writeConcatList(inputs []resolvedInput) (string, func(), error) {
+	listFile := filepath.Join(os.TempDir(), fmt.Sprintf("concat_%s.txt", uuid.New().String()))
+	cleanup := func() { _ = os.Remove(listFile) }
+
+	var b strings.Builder
+	for _, in := range inputs {
+		abs, err := filepath.Abs(in.path)
+		if err != nil {
+			return "", cleanup, fmt.Errorf("absolute path: %w", err)
+		}
+		// Escape single quotes for the concat demuxer syntax.
+		escaped := strings.ReplaceAll(abs, "'", `'\''`)
+		fmt.Fprintf(&b, "file '%s'\n", escaped)
+	}
+	if err := os.WriteFile(listFile, []byte(b.String()), 0o644); err != nil {
+		return "", cleanup, fmt.Errorf("write concat list: %w", err)
+	}
+	return listFile, cleanup, nil
+}
+
+func (s *Service) failJob(job *domain.ToolsJob, err error) {
+	log.WithError(err).WithField("job_id", job.ID).Error("Tools job failed")
+	job.Status = domain.ToolsJobStatusFailed
+	job.ErrorMessage = err.Error()
+	now := time.Now()
+	job.CompletedAt = &now
+	if updateErr := s.toolsRepo.Update(job); updateErr != nil {
+		log.WithError(updateErr).Error("Failed to persist failed job")
+	}
+	s.broadcastError(job, err.Error())
+}
+
+// progressCallback returns a ProgressFunc that throttles DB writes to once per
+// second while broadcasting every update over the WebSocket.
+func (s *Service) progressCallback(job *domain.ToolsJob, step string) ProgressFunc {
+	var lastDBWrite time.Time
+	return func(percent float64, elapsed time.Duration) {
+		job.Progress = percent
+		if time.Since(lastDBWrite) > time.Second || percent >= 100 {
+			if err := s.toolsRepo.Update(job); err != nil {
+				log.WithError(err).Warn("Failed to persist job progress")
+			}
+			lastDBWrite = time.Now()
+		}
+
+		remaining := 0
+		if percent > 0 && percent < 100 {
+			estimatedTotal := time.Duration(float64(elapsed) / (percent / 100))
+			remaining = int((estimatedTotal - elapsed).Seconds())
+		}
+		s.broadcast(job, percent, step, int(elapsed.Seconds()), remaining)
+	}
+}
+
+func (s *Service) broadcast(job *domain.ToolsJob, percent float64, step string, elapsed, remaining int) {
+	if s.broadcaster == nil {
+		return
+	}
+	s.broadcaster.Broadcast(domain.ToolsProgressUpdate{
+		Type:          "tools-progress",
+		JobID:         job.ID,
+		Status:        job.Status,
+		Progress:      percent,
+		CurrentStep:   step,
+		TimeElapsed:   elapsed,
+		TimeRemaining: remaining,
+	})
+}
+
+func (s *Service) broadcastError(job *domain.ToolsJob, message string) {
+	if s.broadcaster == nil {
+		return
+	}
+	s.broadcaster.Broadcast(domain.ToolsProgressUpdate{
+		Type:        "tools-progress",
+		JobID:       job.ID,
+		Status:      job.Status,
+		Progress:    job.Progress,
+		CurrentStep: "Failed",
+		Error:       message,
+	})
+}
+
+func stepLabel(op domain.ToolsOperationType) string {
+	switch op {
+	case domain.OpTypeTrim:
+		return "Trimming"
+	case domain.OpTypeConcat:
+		return "Concatenating"
+	case domain.OpTypeConvert:
+		return "Converting"
+	case domain.OpTypeExtractAudio:
+		return "Extracting audio"
+	case domain.OpTypeAdjustQuality:
+		return "Adjusting quality"
+	case domain.OpTypeRotate:
+		return "Rotating"
+	default:
+		return "Processing"
+	}
 }

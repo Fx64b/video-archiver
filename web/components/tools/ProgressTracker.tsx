@@ -1,13 +1,14 @@
 'use client'
 
-import { ToolsJob, ToolsProgressUpdate } from '@/types'
+import { cancelToolJob } from '@/services/toolsApi'
 import useToolsState from '@/store/toolsState'
-import { Clock, CheckCircle2, XCircle, Loader2, Pause } from 'lucide-react'
+import { ToolsJob, ToolsProgressUpdate } from '@/types'
+import { CheckCircle2, Clock, Loader2, Pause, XCircle } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 
 interface ProgressTrackerProps {
     showCompleted?: boolean // Whether to show completed jobs
@@ -32,21 +33,23 @@ export default function ProgressTracker({
     const getStatusIcon = (status: string) => {
         switch (status) {
             case 'pending':
-                return <Pause className="w-4 h-4 text-muted-foreground" />
+                return <Pause className="text-muted-foreground h-4 w-4" />
             case 'processing':
-                return <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                return <Loader2 className="text-primary h-4 w-4 animate-spin" />
             case 'complete':
-                return <CheckCircle2 className="w-4 h-4 text-green-500" />
+                return <CheckCircle2 className="h-4 w-4 text-green-500" />
             case 'failed':
-                return <XCircle className="w-4 h-4 text-red-500" />
+                return <XCircle className="h-4 w-4 text-red-500" />
             case 'cancelled':
-                return <XCircle className="w-4 h-4 text-orange-500" />
+                return <XCircle className="h-4 w-4 text-orange-500" />
             default:
                 return null
         }
     }
 
-    const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+    const getStatusBadgeVariant = (
+        status: string
+    ): 'default' | 'secondary' | 'destructive' | 'outline' => {
         switch (status) {
             case 'complete':
                 return 'default'
@@ -62,14 +65,8 @@ export default function ProgressTracker({
 
     const handleCancelJob = async (jobId: string) => {
         try {
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_SERVER_URL}/api/tools/jobs/${jobId}`,
-                { method: 'DELETE' }
-            )
-
-            if (response.ok) {
-                removeActiveJob(jobId)
-            }
+            await cancelToolJob(jobId)
+            removeActiveJob(jobId)
         } catch (err) {
             console.error('Failed to cancel job:', err)
         }
@@ -85,15 +82,19 @@ export default function ProgressTracker({
         return (
             <Card key={job.id} className={compact ? 'shadow-sm' : ''}>
                 <CardContent className={compact ? 'p-4' : 'p-6'}>
-                    <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2 flex-1">
+                    <div className="mb-3 flex items-start justify-between">
+                        <div className="flex flex-1 items-center gap-2">
                             {getStatusIcon(job.status)}
-                            <div className="flex-1 min-w-0">
-                                <h4 className={`font-semibold truncate ${compact ? 'text-sm' : ''}`}>
-                                    {job.operation_type.replace(/_/g, ' ').toUpperCase()}
+                            <div className="min-w-0 flex-1">
+                                <h4
+                                    className={`truncate font-semibold ${compact ? 'text-sm' : ''}`}
+                                >
+                                    {job.operation_type
+                                        .replace(/_/g, ' ')
+                                        .toUpperCase()}
                                 </h4>
                                 {progress?.current_step && (
-                                    <p className="text-xs text-muted-foreground truncate">
+                                    <p className="text-muted-foreground truncate text-xs">
                                         {progress.current_step}
                                     </p>
                                 )}
@@ -119,20 +120,34 @@ export default function ProgressTracker({
                     {/* Progress bar */}
                     {isActive && (
                         <div className="space-y-2">
-                            <Progress value={progress?.progress || job.progress} />
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                                <span>{Math.round(progress?.progress || job.progress)}%</span>
+                            <Progress
+                                value={progress?.progress || job.progress}
+                            />
+                            <div className="text-muted-foreground flex justify-between text-xs">
+                                <span>
+                                    {Math.round(
+                                        progress?.progress || job.progress
+                                    )}
+                                    %
+                                </span>
                                 {progress && (
                                     <div className="flex items-center gap-3">
                                         {progress.time_elapsed > 0 && (
                                             <span className="flex items-center gap-1">
-                                                <Clock className="w-3 h-3" />
-                                                {formatTime(progress.time_elapsed)} elapsed
+                                                <Clock className="h-3 w-3" />
+                                                {formatTime(
+                                                    progress.time_elapsed
+                                                )}{' '}
+                                                elapsed
                                             </span>
                                         )}
                                         {progress.time_remaining > 0 && (
                                             <span>
-                                                ~{formatTime(progress.time_remaining)} remaining
+                                                ~
+                                                {formatTime(
+                                                    progress.time_remaining
+                                                )}{' '}
+                                                remaining
                                             </span>
                                         )}
                                     </div>
@@ -143,19 +158,23 @@ export default function ProgressTracker({
 
                     {/* Error message */}
                     {hasFailed && progress?.error && (
-                        <div className="mt-3 p-2 bg-destructive/10 rounded text-xs text-destructive">
+                        <div className="bg-destructive/10 text-destructive mt-3 rounded p-2 text-xs">
                             {progress.error}
                         </div>
                     )}
 
                     {/* Input files info */}
                     {!compact && job.input_files.length > 0 && (
-                        <div className="mt-3 text-xs text-muted-foreground">
+                        <div className="text-muted-foreground mt-3 text-xs">
                             {job.input_type === 'videos' && (
                                 <span>{job.input_files.length} video(s)</span>
                             )}
-                            {job.input_type === 'playlist' && <span>Playlist</span>}
-                            {job.input_type === 'channel' && <span>Channel</span>}
+                            {job.input_type === 'playlist' && (
+                                <span>Playlist</span>
+                            )}
+                            {job.input_type === 'channel' && (
+                                <span>Channel</span>
+                            )}
                         </div>
                     )}
                 </CardContent>
@@ -165,7 +184,9 @@ export default function ProgressTracker({
 
     // Convert Map to array and sort by creation time (most recent first)
     const jobsArray = Array.from(activeJobs.values()).sort((a, b) => {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
     })
 
     // Limit number of items
@@ -174,7 +195,7 @@ export default function ProgressTracker({
     if (displayJobs.length === 0) {
         return (
             <Card>
-                <CardContent className="p-6 text-center text-muted-foreground">
+                <CardContent className="text-muted-foreground p-6 text-center">
                     <p>No active jobs</p>
                 </CardContent>
             </Card>
@@ -194,7 +215,7 @@ export default function ProgressTracker({
                 )}
             </div>
             {jobsArray.length > maxItems && (
-                <p className="text-xs text-center text-muted-foreground">
+                <p className="text-muted-foreground text-center text-xs">
                     +{jobsArray.length - maxItems} more job(s)
                 </p>
             )}

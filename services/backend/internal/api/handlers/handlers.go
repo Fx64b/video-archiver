@@ -9,12 +9,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/download"
+	"video-archiver/internal/services/tools"
 	"video-archiver/internal/util/statistics"
 )
 
@@ -158,11 +157,11 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	job := domain.Job{
-		ID:              uuid.New().String(),
-		URL:             req.URL,
-		CustomQuality:   req.Quality,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+		ID:            uuid.New().String(),
+		URL:           req.URL,
+		CustomQuality: req.Quality,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	if err := h.downloadService.Submit(job); err != nil {
@@ -423,36 +422,19 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 
 	// Try to find the video file based on the metadata
 	var videoPath string
-	
+
 	switch metadata := jobWithMetadata.Metadata.(type) {
 	case *domain.VideoMetadata:
-		// For videos, construct the expected file path
-		channelDir := metadata.Channel
-		if channelDir == "" {
-			channelDir = metadata.Uploader
+		// Locate the file on disk. yt-dlp's filename sanitization (and the
+		// container extension) cannot be reliably reconstructed from the
+		// title, so this scans the download directory and matches by title.
+		videoPath, err = tools.ResolveVideoFile(h.downloadPath, metadata)
+		if err != nil {
+			log.WithField("title", metadata.Title).Warn("Video file not found")
+			http.Error(w, "Video file not found", http.StatusNotFound)
+			return
 		}
-		if channelDir == "" {
-			channelDir = "Unknown"
-		}
-		
-		title := metadata.Title
-		if title == "" {
-			title = "Unknown"
-		}
-		
-		// Clean the filename
-		title = strings.ReplaceAll(title, "/", "_")
-		title = strings.ReplaceAll(title, "\\", "_")
-		title = strings.ReplaceAll(title, ":", "_")
-		title = strings.ReplaceAll(title, "*", "_")
-		title = strings.ReplaceAll(title, "?", "_")
-		title = strings.ReplaceAll(title, "\"", "_")
-		title = strings.ReplaceAll(title, "<", "_")
-		title = strings.ReplaceAll(title, ">", "_")
-		title = strings.ReplaceAll(title, "|", "_")
-		
-		videoPath = filepath.Join(h.downloadPath, channelDir, title+".mp4")
-		
+
 	default:
 		http.Error(w, "Unsupported content type for video playback", http.StatusBadRequest)
 		return
@@ -475,7 +457,6 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 	// Serve the file
 	http.ServeFile(w, r, videoPath)
 }
-
 
 func (h *Handler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.settingsRepository.Get()

@@ -82,12 +82,14 @@ __     _____ ____  _____ ___
 	}
 
 	toolsService := tools.NewService(&tools.Config{
-		ToolsRepository:    toolsRepo,
-		JobRepository:      jobRepo,
-		SettingsRepository: settingsRepo,
-		DownloadPath:       cfg.Server.DownloadPath,
-		ProcessedPath:      processedPath,
-		Concurrency:        2, // 2 concurrent tools jobs by default
+		ToolsRepository: toolsRepo,
+		JobRepository:   jobRepo,
+		// Reuse the download service's WebSocket hub so tools progress reaches
+		// the frontend over the same /ws connection.
+		Broadcaster:   downloadService.GetHub(),
+		DownloadPath:  cfg.Server.DownloadPath,
+		ProcessedPath: processedPath,
+		Concurrency:   2,
 	})
 
 	if err := toolsService.Start(); err != nil {

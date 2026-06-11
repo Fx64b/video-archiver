@@ -71,3 +71,10 @@ func (h *WebSocketHub) Register(conn *websocket.Conn) {
 func (h *WebSocketHub) Unregister(conn *websocket.Conn) {
 	h.unregister <- conn
 }
+
+// Broadcast sends an arbitrary message to every connected client. It lets other
+// services (e.g. the tools service) push updates over the same WebSocket the
+// frontend is already connected to.
+func (h *WebSocketHub) Broadcast(update interface{}) {
+	h.broadcast <- update
+}
