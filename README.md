@@ -10,7 +10,7 @@ A self-hosted YouTube video archiver with a modern web interface. Download, mana
 
 ## Overview
 
-Video Archiver allows you to download and organize videos from YouTube for offline viewing. The application consists of a Go backend that handles the actual downloading and management of videos, plus a modern Next.js frontend that provides a clean interface for interacting with your media collection.
+Video Archiver allows you to download and organize videos from YouTube for offline viewing. The application consists of a Go backend that handles the actual downloading and management of videos, plus a lightweight Vite + React frontend that provides a clean interface for interacting with your media collection.
 
 ## Features
 
@@ -46,7 +46,7 @@ Video Archiver allows you to download and organize videos from YouTube for offli
 ## Technology Stack
 
 - **Backend**: Go 1.23.2 with Chi router
-- **Frontend**: Next.js 15.4.7 with TypeScript 5.8.3
+- **Frontend**: Vite 6 + React with TypeScript 5.8.3
 - **UI**: shadcn/ui components with Radix UI primitives
 - **State Management**: Zustand 5.0+
 - **Real-time Updates**: WebSocket (Gorilla WebSocket)
@@ -127,7 +127,7 @@ Refer to the backend and frontend directories for specific setup instructions.
   - Manages download queue and progress tracking
   - Provides API endpoints and WebSocket updates
   - SQLite database for metadata storage
-- `/web`: Next.js frontend application
+- `/web`: Vite + React frontend application
   - Modern UI built with shadcn/ui
   - Real-time progress tracking
   - Download management interface
@@ -146,8 +146,8 @@ The application can be configured through environment variables:
 - `WS_PORT`: WebSocket server port (default: 8081)
 
 ### Frontend
-- `NEXT_PUBLIC_SERVER_URL`: URL for backend API (default: http://localhost:8080)
-- `NEXT_PUBLIC_SERVER_URL_WS`: URL for WebSocket connection (default: ws://localhost:8081)
+- `VITE_SERVER_URL`: URL for backend API, baked in at build time (default: http://localhost:8080)
+- `VITE_SERVER_URL_WS`: URL for WebSocket connection, baked in at build time (default: ws://localhost:8081)
 
 ## Known Issues
 
@@ -184,7 +184,7 @@ Please ensure your code follows the project's style and includes appropriate tes
 For the best development experience:
 
 1. Use `./run.sh --build --debug` to start the application with debug logging
-2. For frontend-only changes, you can run the Next.js app directly:
+2. For frontend-only changes, you can run the Vite dev server directly:
    ```bash
    cd web
    pnpm install

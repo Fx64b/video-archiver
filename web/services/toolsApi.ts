@@ -1,5 +1,7 @@
 import { ToolsJob } from '@/types'
 
+import { SERVER_URL } from '@/lib/env'
+
 /**
  * Typed client for the tools API. Centralizing the network layer here fixes a
  * class of bugs the previous per-page fetches suffered from: the wrong URL
@@ -7,7 +9,7 @@ import { ToolsJob } from '@/types'
  * response envelope as the job itself, and inconsistent parameter names.
  */
 
-const BASE = process.env.NEXT_PUBLIC_SERVER_URL ?? ''
+const BASE = SERVER_URL ?? ''
 
 // Operation identifiers must match the backend ToolsOperationType constants.
 export type ToolOperation =

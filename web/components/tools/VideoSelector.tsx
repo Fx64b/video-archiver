@@ -1,20 +1,23 @@
-'use client'
-
-import { JobWithMetadata } from '@/types'
 import useToolsState from '@/store/toolsState'
-import { Check, AlertCircle } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import Image from 'next/image'
+import { JobWithMetadata } from '@/types'
+import { AlertCircle, Check } from 'lucide-react'
 
+import { useEffect, useState } from 'react'
+
+import { SERVER_URL } from '@/lib/env'
+
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 
-// Type for metadata with video_count (used in playlists and channels)
-interface MetadataWithVideoCount {
+// Loose view on metadata counts: channels report video_count, playlists
+// report playlist_count (with items as a fallback).
+interface MetadataWithCounts {
     video_count?: number
+    playlist_count?: number
+    items?: unknown[]
     title?: string
     thumbnail?: string
     duration_string?: string
@@ -39,17 +42,19 @@ export default function VideoSelector({
     inputType,
     onSelectionChange,
 }: VideoSelectorProps) {
-    const [activeTab, setActiveTab] = useState<string>(
-        inputType || 'videos'
-    )
+    const [activeTab, setActiveTab] = useState<string>(inputType || 'videos')
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [data, setData] = useState<PaginatedResponse | null>(null)
     const [currentPage, setCurrentPage] = useState(1)
     const pageSize = 12
 
-    const { selectedInputs, addSelectedInput, removeSelectedInput, isInputSelected } =
-        useToolsState()
+    const {
+        selectedInputs,
+        addSelectedInput,
+        removeSelectedInput,
+        isInputSelected,
+    } = useToolsState()
 
     // Fetch data based on active tab
     useEffect(() => {
@@ -58,9 +63,7 @@ export default function VideoSelector({
             setError(null)
 
             try {
-                const url = new URL(
-                    `${process.env.NEXT_PUBLIC_SERVER_URL}/downloads/${activeTab}`
-                )
+                const url = new URL(`${SERVER_URL}/downloads/${activeTab}`)
                 url.searchParams.append('page', String(currentPage))
                 url.searchParams.append('limit', String(pageSize))
                 url.searchParams.append('sort_by', 'created_at')
@@ -96,7 +99,9 @@ export default function VideoSelector({
                 }
                 setData(result)
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to load data')
+                setError(
+                    err instanceof Error ? err.message : 'Failed to load data'
+                )
             } finally {
                 setLoading(false)
             }
@@ -116,7 +121,12 @@ export default function VideoSelector({
         if (!item.metadata || !item.job) return
 
         const inputId = item.job.id
-        const type = activeTab === 'videos' ? 'video' : activeTab === 'playlists' ? 'playlist' : 'channel'
+        const type =
+            activeTab === 'videos'
+                ? 'video'
+                : activeTab === 'playlists'
+                  ? 'playlist'
+                  : 'channel'
 
         if (isInputSelected(inputId)) {
             removeSelectedInput(inputId)
@@ -126,11 +136,20 @@ export default function VideoSelector({
                 selectedInputs.forEach((input) => removeSelectedInput(input.id))
             }
 
+            const counts = item.metadata as MetadataWithCounts
+            const videoCount =
+                type === 'playlist'
+                    ? counts.playlist_count || counts.items?.length
+                    : type === 'channel'
+                      ? counts.video_count
+                      : undefined
+
             addSelectedInput({
                 id: inputId,
                 type,
                 title: item.metadata.title || 'Untitled',
                 thumbnail: item.metadata.thumbnail,
+                videoCount,
             })
         }
     }
@@ -149,44 +168,49 @@ export default function VideoSelector({
             <Card
                 key={item.job.id}
                 className={`cursor-pointer transition-all hover:shadow-lg ${
-                    isSelected ? 'ring-2 ring-primary' : ''
+                    isSelected ? 'ring-primary ring-2' : ''
                 }`}
                 onClick={() => handleItemClick(item)}
             >
                 <CardContent className="p-0">
                     <div className="relative aspect-video">
                         {item.metadata.thumbnail && (
-                            <Image
+                            <img
                                 src={item.metadata.thumbnail}
                                 alt={item.metadata.title || 'Thumbnail'}
-                                fill
-                                className="object-cover rounded-t-lg"
-                                unoptimized
+                                className="absolute inset-0 h-full w-full rounded-t-lg object-cover"
                             />
                         )}
                         {isSelected && (
-                            <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
-                                <Check className="w-4 h-4" />
+                            <div className="bg-primary text-primary-foreground absolute top-2 right-2 rounded-full p-1">
+                                <Check className="h-4 w-4" />
                             </div>
                         )}
                     </div>
                     <div className="p-4">
-                        <h3 className="font-semibold line-clamp-2 mb-1">
+                        <h3 className="mb-1 line-clamp-2 font-semibold">
                             {item.metadata.title || 'Untitled'}
                         </h3>
                         {activeTab === 'videos' && (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-muted-foreground text-sm">
                                 {item.metadata.duration_string || 'N/A'}
                             </p>
                         )}
                         {activeTab === 'playlists' && (
-                            <p className="text-sm text-muted-foreground">
-                                {(item.metadata as MetadataWithVideoCount).video_count || 0} videos
+                            <p className="text-muted-foreground text-sm">
+                                {(item.metadata as MetadataWithCounts)
+                                    .playlist_count ||
+                                    (item.metadata as MetadataWithCounts).items
+                                        ?.length ||
+                                    0}{' '}
+                                videos
                             </p>
                         )}
                         {activeTab === 'channels' && (
-                            <p className="text-sm text-muted-foreground">
-                                {(item.metadata as MetadataWithVideoCount).video_count || 0} videos
+                            <p className="text-muted-foreground text-sm">
+                                {(item.metadata as MetadataWithCounts)
+                                    .video_count || 0}{' '}
+                                videos
                             </p>
                         )}
                     </div>
@@ -198,12 +222,12 @@ export default function VideoSelector({
     const renderContent = () => {
         if (loading) {
             return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {Array.from({ length: 8 }).map((_, i) => (
                         <Card key={i}>
                             <CardContent className="p-0">
                                 <Skeleton className="aspect-video w-full rounded-t-lg" />
-                                <div className="p-4 space-y-2">
+                                <div className="space-y-2 p-4">
                                     <Skeleton className="h-4 w-full" />
                                     <Skeleton className="h-3 w-20" />
                                 </div>
@@ -225,9 +249,9 @@ export default function VideoSelector({
 
         if (!data || data.items.length === 0) {
             return (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="text-muted-foreground py-12 text-center">
                     <p>No {activeTab} found.</p>
-                    <p className="text-sm mt-2">
+                    <p className="mt-2 text-sm">
                         Download some content first from the Downloads page.
                     </p>
                 </div>
@@ -236,17 +260,19 @@ export default function VideoSelector({
 
         return (
             <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {data.items.map((item) => renderItemCard(item))}
                 </div>
 
                 {/* Pagination */}
                 {data.total_pages > 1 && (
-                    <div className="flex justify-center gap-2 mt-6">
+                    <div className="mt-6 flex justify-center gap-2">
                         <Button
                             variant="outline"
                             disabled={currentPage === 1}
-                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            onClick={() =>
+                                setCurrentPage((p) => Math.max(1, p - 1))
+                            }
                         >
                             Previous
                         </Button>
@@ -257,7 +283,9 @@ export default function VideoSelector({
                             variant="outline"
                             disabled={currentPage === data.total_pages}
                             onClick={() =>
-                                setCurrentPage((p) => Math.min(data.total_pages, p + 1))
+                                setCurrentPage((p) =>
+                                    Math.min(data.total_pages, p + 1)
+                                )
                             }
                         >
                             Next
@@ -274,7 +302,11 @@ export default function VideoSelector({
     }
 
     return (
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="w-full"
+        >
             <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="videos">Videos</TabsTrigger>
                 <TabsTrigger value="playlists">Playlists</TabsTrigger>

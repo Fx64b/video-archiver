@@ -2,8 +2,7 @@ import { ToolOperation, submitTool } from '@/services/toolsApi'
 import useToolsState from '@/store/toolsState'
 
 import { useCallback, useState } from 'react'
-
-import { useRouter } from 'next/navigation'
+import { useNavigate } from 'react-router-dom'
 
 /**
  * useToolSubmit encapsulates the shared submit flow for every tool page:
@@ -11,9 +10,14 @@ import { useRouter } from 'next/navigation'
  * selection and return to the tools dashboard.
  */
 export function useToolSubmit(operation: ToolOperation) {
-    const router = useRouter()
-    const { selectedInputs, clearSelectedInputs, addActiveJob } =
-        useToolsState()
+    const navigate = useNavigate()
+    const {
+        selectedInputs,
+        clearSelectedInputs,
+        addActiveJob,
+        outputName,
+        setOutputName,
+    } = useToolsState()
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -27,14 +31,16 @@ export function useToolSubmit(operation: ToolOperation) {
             setIsSubmitting(true)
             setError(null)
             try {
+                const name = outputName.trim()
                 const job = await submitTool(
                     operation,
                     selectedInputs.map((i) => ({ id: i.id, type: i.type })),
-                    parameters
+                    name ? { ...parameters, output_name: name } : parameters
                 )
                 addActiveJob(job)
                 clearSelectedInputs()
-                router.push('/tools')
+                setOutputName('')
+                navigate('/tools')
             } catch (err) {
                 setError(
                     err instanceof Error ? err.message : 'An error occurred'
@@ -43,7 +49,15 @@ export function useToolSubmit(operation: ToolOperation) {
                 setIsSubmitting(false)
             }
         },
-        [operation, selectedInputs, addActiveJob, clearSelectedInputs, router]
+        [
+            operation,
+            selectedInputs,
+            addActiveJob,
+            clearSelectedInputs,
+            outputName,
+            setOutputName,
+            navigate,
+        ]
     )
 
     return { submit, isSubmitting, error, setError }

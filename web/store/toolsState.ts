@@ -1,11 +1,26 @@
 import { ToolsJob, ToolsProgressUpdate } from '@/types'
 import { create } from 'zustand'
 
-interface SelectedInput {
+export interface SelectedInput {
     id: string
     type: 'video' | 'playlist' | 'channel'
     title: string
     thumbnail?: string
+    /** Number of videos a playlist/channel selection expands into. */
+    videoCount?: number
+}
+
+/**
+ * countSelectedVideos returns how many videos a selection effectively covers:
+ * playlists and channels are expanded into their videos by the backend, so
+ * they count as their video count (or at least 2 when the count is unknown).
+ * Used to gate tools with a minimum input requirement such as concat.
+ */
+export function countSelectedVideos(inputs: SelectedInput[]): number {
+    return inputs.reduce((sum, input) => {
+        if (input.type === 'video') return sum + 1
+        return sum + Math.max(input.videoCount ?? 0, 2)
+    }, 0)
 }
 
 interface ToolsState {
@@ -18,6 +33,9 @@ interface ToolsState {
 
     // Selected inputs for processing
     selectedInputs: SelectedInput[]
+
+    // Optional user-chosen name for the output file of the next submitted job
+    outputName: string
 
     // UI state
     isProcessing: boolean
@@ -39,6 +57,9 @@ interface ToolsState {
     clearSelectedInputs: () => void
     isInputSelected: (id: string) => boolean
 
+    // Actions - Output naming
+    setOutputName: (name: string) => void
+
     // Actions - UI state
     setIsProcessing: (value: boolean) => void
     setCurrentOperation: (operation: string | null) => void
@@ -50,6 +71,7 @@ const useToolsState = create<ToolsState>((set, get) => ({
     jobProgress: new Map<string, ToolsProgressUpdate>(),
     jobHistory: [],
     selectedInputs: [],
+    outputName: '',
     isProcessing: false,
     currentOperation: null,
 
@@ -60,7 +82,7 @@ const useToolsState = create<ToolsState>((set, get) => ({
             newActiveJobs.set(job.id, job)
             return {
                 activeJobs: newActiveJobs,
-                isProcessing: newActiveJobs.size > 0
+                isProcessing: newActiveJobs.size > 0,
             }
         }),
 
@@ -145,6 +167,9 @@ const useToolsState = create<ToolsState>((set, get) => ({
     clearSelectedInputs: () => set({ selectedInputs: [] }),
 
     isInputSelected: (id) => get().selectedInputs.some((i) => i.id === id),
+
+    // Output naming actions
+    setOutputName: (name) => set({ outputName: name }),
 
     // UI state actions
     setIsProcessing: (value) => set({ isProcessing: value }),

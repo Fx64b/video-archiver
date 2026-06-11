@@ -1,6 +1,4 @@
-'use client'
-
-import useToolsState from '@/store/toolsState'
+import useToolsState, { countSelectedVideos } from '@/store/toolsState'
 import {
     ChevronRight,
     FileAudio,
@@ -12,7 +10,7 @@ import {
     Workflow,
 } from 'lucide-react'
 
-import Link from 'next/link'
+import { Link } from 'react-router-dom'
 
 import { useToolsWebSocket } from '@/hooks/useToolsWebSocket'
 
@@ -95,8 +93,11 @@ export default function ToolsContent() {
     // Subscribe to WebSocket tools progress updates
     useToolsWebSocket()
 
-    const { selectedInputs, clearSelectedInputs } = useToolsState()
+    const { selectedInputs, clearSelectedInputs, activeJobs } = useToolsState()
     const hasSelection = selectedInputs.length > 0
+    // Playlists/channels expand into their videos on the backend, so a single
+    // playlist selection can satisfy tools that need multiple inputs (concat).
+    const selectedVideoCount = countSelectedVideos(selectedInputs)
 
     return (
         <div className="flex min-h-screen w-full flex-col gap-8">
@@ -108,11 +109,10 @@ export default function ToolsContent() {
                 </p>
             </div>
 
-            {/* Active Jobs Progress */}
-            {Array.from(useToolsState.getState().activeJobs.values()).length >
-                0 && (
+            {/* Active Jobs Progress (completed/failed jobs stay visible until dismissed) */}
+            {activeJobs.size > 0 && (
                 <section>
-                    <ProgressTracker showCompleted={false} maxItems={3} />
+                    <ProgressTracker showCompleted maxItems={3} />
                 </section>
             )}
 
@@ -169,12 +169,12 @@ export default function ToolsContent() {
                     {TOOLS.map((tool) => {
                         const isDisabled =
                             !hasSelection ||
-                            selectedInputs.length < (tool.minSelection || 1)
+                            selectedVideoCount < (tool.minSelection || 1)
 
                         return (
                             <Link
                                 key={tool.href}
-                                href={isDisabled ? '#' : tool.href}
+                                to={isDisabled ? '#' : tool.href}
                                 className={
                                     isDisabled ? 'pointer-events-none' : ''
                                 }

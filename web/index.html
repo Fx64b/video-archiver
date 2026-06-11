@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" href="/favicon.ico" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="A self-hosted YouTube video archiver with a modern web interface. Download, manage, and organize your YouTube videos, playlists, and channels locally."
+        />
+        <title>Video Archiver</title>
+        <script>
+            // Apply the stored theme before first paint to avoid a flash.
+            try {
+                const theme = localStorage.getItem('theme')
+                const dark =
+                    theme === 'dark' ||
+                    ((theme === null || theme === 'system') &&
+                        window.matchMedia('(prefers-color-scheme: dark)')
+                            .matches)
+                document.documentElement.classList.toggle('dark', dark)
+            } catch {}
+        </script>
+    </head>
+    <body class="antialiased">
+        <div id="root"></div>
+        <script type="module" src="/src/main.tsx"></script>
+    </body>
+</html>

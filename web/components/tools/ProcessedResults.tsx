@@ -1,5 +1,3 @@
-'use client'
-
 import { listToolJobs, toolOutputUrl } from '@/services/toolsApi'
 import useWebSocketStore from '@/services/websocket'
 import { ToolsJob } from '@/types'
@@ -7,6 +5,7 @@ import { Download, FileVideo } from 'lucide-react'
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
     Card,
@@ -47,6 +46,9 @@ function operationLabel(op: string): string {
 export default function ProcessedResults() {
     const [jobs, setJobs] = useState<ToolsJob[]>([])
     const [loaded, setLoaded] = useState(false)
+    // ID of the job that completed most recently in this session, so the
+    // freshly produced file stands out in the list.
+    const [highlightId, setHighlightId] = useState<string | null>(null)
     const subscribe = useWebSocketStore((state) => state.subscribe)
 
     const load = useCallback(async () => {
@@ -68,8 +70,11 @@ export default function ProcessedResults() {
     useEffect(() => {
         const unsubscribe = subscribe(
             'tools-progress',
-            (data: { status?: string }) => {
+            (data: { status?: string; jobID?: string }) => {
                 if (data.status === 'complete') {
+                    if (data.jobID) {
+                        setHighlightId(data.jobID)
+                    }
                     load()
                 }
             }
@@ -111,14 +116,24 @@ export default function ProcessedResults() {
                             const filename = job.output_file
                                 ? job.output_file.split('/').pop()
                                 : ''
+                            const isNew = job.id === highlightId
                             return (
                                 <div
                                     key={job.id}
-                                    className="flex items-center justify-between gap-4 py-3"
+                                    className={`flex items-center justify-between gap-4 py-3 ${
+                                        isNew
+                                            ? 'bg-primary/5 ring-primary/30 -mx-3 rounded-md px-3 ring-1'
+                                            : ''
+                                    }`}
                                 >
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium">
+                                        <p className="flex items-center gap-2 text-sm font-medium">
                                             {operationLabel(job.operation_type)}
+                                            {isNew && (
+                                                <Badge className="text-xs">
+                                                    Just processed
+                                                </Badge>
+                                            )}
                                         </p>
                                         <p className="text-muted-foreground truncate text-xs">
                                             {filename}

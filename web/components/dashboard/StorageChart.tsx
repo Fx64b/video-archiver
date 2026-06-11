@@ -1,5 +1,3 @@
-'use client'
-
 import { Statistics } from '@/types'
 import { Cell, Label, Pie, PieChart } from 'recharts'
 

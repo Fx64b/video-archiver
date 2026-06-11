@@ -1,33 +1,28 @@
-/**
- * @jest-environment jsdom
- */
-
 // Mock the toast from sonner
-jest.mock('sonner', () => ({
-    toast: jest.fn(),
+vi.mock('sonner', () => ({
+    toast: vi.fn(),
 }))
 
 // TODO: Update these tests to match the new WebSocket implementation with ping/pong and onReconnect
 describe.skip('websocket service', () => {
-    let mockWebSocket: any
+    let mockWebSocket: Record<string, unknown>
     let onOpenCallback: (() => void) | null = null
     let onMessageCallback: ((event: MessageEvent) => void) | null = null
     let onCloseCallback: (() => void) | null = null
-    let onErrorCallback: ((error: Event) => void) | null = null
 
     beforeAll(() => {
         // Set up mocks before any module loads
         // Mock WebSocket
         mockWebSocket = {
             readyState: WebSocket.CONNECTING,
-            close: jest.fn(),
-            send: jest.fn(),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn(),
+            close: vi.fn(),
+            send: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
         }
 
-        // @ts-ignore
-        global.WebSocket = jest.fn().mockImplementation(() => {
+        // @ts-expect-error -- replacing the global WebSocket constructor with a mock
+        global.WebSocket = vi.fn().mockImplementation(() => {
             return mockWebSocket
         })
 
@@ -52,54 +47,40 @@ describe.skip('websocket service', () => {
             },
             configurable: true,
         })
-
-        Object.defineProperty(mockWebSocket, 'onerror', {
-            set: (callback: (error: Event) => void) => {
-                onErrorCallback = callback
-            },
-            configurable: true,
-        })
     })
 
     beforeEach(async () => {
-        jest.clearAllMocks()
-        jest.useFakeTimers()
+        vi.clearAllMocks()
+        vi.useFakeTimers()
 
         // Reset callbacks
         onOpenCallback = null
         onMessageCallback = null
         onCloseCallback = null
-        onErrorCallback = null
 
         // Reset mock readyState
         mockWebSocket.readyState = WebSocket.CONNECTING
 
         // Reset the WebSocket store state
-        jest.resetModules()
+        vi.resetModules()
     })
 
     afterEach(() => {
-        jest.clearAllTimers()
-        jest.useRealTimers()
+        vi.clearAllTimers()
+        vi.useRealTimers()
     })
 
     it('should connect to websocket when connect() is called', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
+        const { default: useWebSocketStore } = await import('../websocket')
 
         const store = useWebSocketStore.getState()
         store.connect()
 
-        expect(global.WebSocket).toHaveBeenCalledWith(
-            'ws://localhost:8081/ws'
-        )
+        expect(global.WebSocket).toHaveBeenCalledWith('ws://localhost:8081/ws')
     })
 
     it('should set isConnected to true when websocket opens', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
+        const { default: useWebSocketStore } = await import('../websocket')
 
         const store = useWebSocketStore.getState()
         store.connect()
@@ -111,11 +92,9 @@ describe.skip('websocket service', () => {
     })
 
     it('should handle metadata messages', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
+        const { default: useWebSocketStore } = await import('../websocket')
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         const store = useWebSocketStore.getState()
         store.subscribe('metadata', callback)
         store.connect()
@@ -139,11 +118,9 @@ describe.skip('websocket service', () => {
     })
 
     it('should handle progress messages', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
+        const { default: useWebSocketStore } = await import('../websocket')
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         const store = useWebSocketStore.getState()
         store.subscribe('progress', callback)
         store.connect()
@@ -165,12 +142,10 @@ describe.skip('websocket service', () => {
     })
 
     it('should notify all listeners with "all" subscription', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
+        const { default: useWebSocketStore } = await import('../websocket')
 
-        const allCallback = jest.fn()
-        const metadataCallback = jest.fn()
+        const allCallback = vi.fn()
+        const metadataCallback = vi.fn()
         const store = useWebSocketStore.getState()
         store.subscribe('all', allCallback)
         store.subscribe('metadata', metadataCallback)
@@ -195,11 +170,9 @@ describe.skip('websocket service', () => {
     })
 
     it('should unsubscribe listeners', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
+        const { default: useWebSocketStore } = await import('../websocket')
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         const store = useWebSocketStore.getState()
         const unsubscribe = store.subscribe('metadata', callback)
         store.connect()
@@ -231,10 +204,7 @@ describe.skip('websocket service', () => {
     })
 
     it('should attempt to reconnect when connection closes', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
-        const { toast } = require('sonner')
+        const { default: useWebSocketStore } = await import('../websocket')
 
         const store = useWebSocketStore.getState()
         store.connect()
@@ -250,16 +220,14 @@ describe.skip('websocket service', () => {
         expect(useWebSocketStore.getState().isConnected).toBe(false)
 
         // Fast-forward timer
-        jest.advanceTimersByTime(5000)
+        vi.advanceTimersByTime(5000)
 
         // Should attempt to reconnect
         expect(global.WebSocket).toHaveBeenCalledTimes(2)
     })
 
     it('should disconnect and cleanup', async () => {
-        const { default: useWebSocketStore } = await import(
-            '../websocket'
-        )
+        const { default: useWebSocketStore } = await import('../websocket')
 
         const store = useWebSocketStore.getState()
         store.connect()

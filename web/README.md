@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Video Archiver — Web Frontend
+
+A Vite + React + TypeScript single-page app using shadcn/ui, Tailwind CSS 4, Zustand and React Router.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server runs on [http://localhost:3000](http://localhost:3000) and expects the backend on
+`http://localhost:8080` (REST) and `ws://localhost:8081` (WebSocket). Override with:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `VITE_SERVER_URL` — backend API base URL
+- `VITE_SERVER_URL_WS` — WebSocket base URL
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Both are baked into the bundle at build time (see `lib/env.ts`).
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Script               | Description                        |
+| -------------------- | ---------------------------------- |
+| `pnpm dev`           | Start the Vite dev server          |
+| `pnpm build`         | Typecheck and build for production |
+| `pnpm preview`       | Serve the production build locally |
+| `pnpm test`          | Run the Vitest test suite          |
+| `pnpm test:coverage` | Run tests with coverage            |
+| `pnpm lint`          | Run ESLint                         |
+| `pnpm format`        | Format with Prettier               |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `index.html`, `src/main.tsx` — app entry
+- `src/App.tsx` — layout shell and routes
+- `src/pages/` — one component per route
+- `components/` — shared components (`components/ui/` is shadcn/ui)
+- `store/` — Zustand stores
+- `services/` — API/WebSocket clients
+- `types/index.ts` — generated from Go structs via tygo (do not edit by hand)
 
-## Deploy on Vercel
+## Docker
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The production image builds the static bundle and serves it with nginx on port 3000
+(see `Dockerfile` and `nginx.conf`). The SPA fallback rewrites unknown paths to `index.html`.

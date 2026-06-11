@@ -46,12 +46,7 @@ __     _____ ____  _____ ___
 	}
 
 	fmt.Println("Initializing database...")
-	dbPath := os.Getenv("DATABASE_PATH")
-	if dbPath == "" {
-		dbPath = "./data/db/video-archiver.db"
-	}
-
-	db, err := sqlite.NewDB(dbPath)
+	db, err := sqlite.NewDB(cfg.Server.DatabasePath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -97,7 +92,7 @@ __     _____ ____  _____ ___
 	}
 	defer toolsService.Stop()
 
-	handler := handlers.NewHandler(downloadService, os.Getenv("DOWNLOAD_PATH"), settingsRepo)
+	handler := handlers.NewHandler(downloadService, cfg.Server.DownloadPath, settingsRepo)
 	toolsHandler := handlers.NewToolsHandler(toolsService)
 
 	apiRouter := chi.NewRouter()

@@ -1,6 +1,5 @@
-'use client'
-
 import useSettingsState from '@/store/settingsState'
+
 import { useEffect } from 'react'
 
 export function SettingsInitializer() {

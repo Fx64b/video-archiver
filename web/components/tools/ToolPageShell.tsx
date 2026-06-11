@@ -1,13 +1,9 @@
-'use client'
-
-import useToolsState from '@/store/toolsState'
+import useToolsState, { countSelectedVideos } from '@/store/toolsState'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
 
 import { ReactNode, useEffect } from 'react'
-
-import Image from 'next/image'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -18,6 +14,8 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface ToolPageShellProps {
     title: string
@@ -55,32 +53,35 @@ export default function ToolPageShell({
     children,
     tips,
 }: ToolPageShellProps) {
-    const router = useRouter()
-    const { selectedInputs, clearSelectedInputs } = useToolsState()
+    const navigate = useNavigate()
+    const { selectedInputs, clearSelectedInputs, outputName, setOutputName } =
+        useToolsState()
 
     // Send the user back to the dashboard if they arrive without a selection
     // (e.g. on a hard refresh, since the selection lives in memory).
     useEffect(() => {
         if (selectedInputs.length === 0) {
-            router.push('/tools')
+            navigate('/tools')
         }
-    }, [selectedInputs.length, router])
+    }, [selectedInputs.length, navigate])
 
     if (selectedInputs.length === 0) {
         return null
     }
 
-    const notEnough = selectedInputs.length < minSelection
+    // Playlists/channels are expanded into their videos by the backend, so
+    // they can satisfy a multi-input requirement on their own.
+    const notEnough = countSelectedVideos(selectedInputs) < minSelection
 
     const handleCancel = () => {
         clearSelectedInputs()
-        router.push('/tools')
+        navigate('/tools')
     }
 
     return (
         <div className="flex min-h-screen w-full flex-col gap-6">
             <div className="flex items-center gap-4">
-                <Link href="/tools">
+                <Link to="/tools">
                     <Button variant="ghost" size="icon">
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
@@ -107,6 +108,23 @@ export default function ToolPageShell({
                         </CardHeader>
                         <CardContent className="space-y-4">
                             {children}
+                            <div className="space-y-2 border-t pt-4">
+                                <Label htmlFor="output-name">
+                                    Output file name (optional)
+                                </Label>
+                                <Input
+                                    id="output-name"
+                                    placeholder="e.g. my-clip"
+                                    value={outputName}
+                                    onChange={(e) =>
+                                        setOutputName(e.target.value)
+                                    }
+                                />
+                                <p className="text-muted-foreground text-xs">
+                                    The file extension is added automatically.
+                                    Leave empty for a generated name.
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
                     {tips}
@@ -132,12 +150,10 @@ export default function ToolPageShell({
                                         <CardContent className="p-0">
                                             {input.thumbnail && (
                                                 <div className="relative aspect-video">
-                                                    <Image
+                                                    <img
                                                         src={input.thumbnail}
                                                         alt={input.title}
-                                                        fill
-                                                        className="object-cover"
-                                                        unoptimized
+                                                        className="absolute inset-0 h-full w-full object-cover"
                                                     />
                                                 </div>
                                             )}
@@ -147,6 +163,10 @@ export default function ToolPageShell({
                                                 </p>
                                                 <p className="text-muted-foreground mt-1 text-xs capitalize">
                                                     {input.type}
+                                                    {input.type !== 'video' &&
+                                                    input.videoCount
+                                                        ? ` · ${input.videoCount} videos`
+                                                        : ''}
                                                 </p>
                                             </div>
                                         </CardContent>

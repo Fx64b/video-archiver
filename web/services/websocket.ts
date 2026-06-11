@@ -1,6 +1,8 @@
 import { toast } from 'sonner'
 import { create } from 'zustand'
 
+import { SERVER_URL_WS } from '@/lib/env'
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface WebSocketState {
@@ -33,7 +35,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
         // Close existing socket if it exists but isn't open
         if (socket) disconnect()
 
-        const wsUrl = process.env.NEXT_PUBLIC_SERVER_URL_WS + '/ws'
+        const wsUrl = SERVER_URL_WS + '/ws'
         const newSocket = new WebSocket(wsUrl)
 
         newSocket.onopen = () => {
@@ -166,7 +168,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
 }))
 
 // Automatically connect when the service is imported (unless in test environment)
-if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+if (typeof window !== 'undefined' && import.meta.env.MODE !== 'test') {
     setTimeout(() => {
         useWebSocketStore.getState().connect()
     }, 0)

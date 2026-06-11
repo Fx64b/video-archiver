@@ -13,7 +13,8 @@ describe('utils', () => {
         })
 
         it('should handle conditional classes', () => {
-            expect(cn('foo', false && 'bar', 'baz')).toBe('foo baz')
+            const hidden = false
+            expect(cn('foo', hidden && 'bar', 'baz')).toBe('foo baz')
         })
 
         it('should merge tailwind classes without conflicts', () => {

@@ -1,53 +1,28 @@
-# Base image with pnpm pre-installed.
+# Build stage: compile the Vite app to static files.
 # Pin pnpm to the 10.x line that matches the lockfile (lockfileVersion 9.0).
-# `pnpm@latest` now resolves to pnpm 11, which ignores the `pnpm` field in
-# package.json and fails the production install on sharp's build script
-# (ERR_PNPM_IGNORED_BUILDS). Pinning keeps the image build reproducible.
-FROM node:24-alpine AS base
+FROM node:24-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 
-# Install dependencies only when needed
-FROM base AS deps
-# Copy dependency manifests
+# Install dependencies first to keep them cached between source changes
 COPY package.json pnpm-lock.yaml* ./
-# Install all dependencies (including devDependencies for build)
 RUN pnpm install --frozen-lockfile
 
-# Rebuild the source code only when needed
-FROM base AS builder
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-# Copy all source files
 COPY . .
-# Set environment to production
-ENV NODE_ENV production
-# Set build-time environment variables for Next.js
-ARG NEXT_PUBLIC_SERVER_URL=http://backend:8080
-ARG NEXT_PUBLIC_SERVER_URL_WS=ws://backend:8081
-ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
-ENV NEXT_PUBLIC_SERVER_URL_WS=$NEXT_PUBLIC_SERVER_URL_WS
-# Build the application
+
+# Backend endpoints are baked into the static bundle at build time
+ARG VITE_SERVER_URL=http://localhost:8080
+ARG VITE_SERVER_URL_WS=ws://localhost:8081
+ENV VITE_SERVER_URL=$VITE_SERVER_URL
+ENV VITE_SERVER_URL_WS=$VITE_SERVER_URL_WS
+
 RUN pnpm build
 
-# Production image, copy only necessary files
-FROM base AS runner
-ENV NODE_ENV production
+# Runtime stage: serve the static bundle with nginx
+FROM nginx:alpine AS runner
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
-
-# Install production dependencies + typescript (needed for next.config.ts)
-RUN pnpm install --frozen-lockfile --prod && \
-    pnpm add -D typescript
-
-# Copy built application from builder
-COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-
-# Expose the default Next.js port
 EXPOSE 3000
 
-# Start the Next.js application
-CMD ["pnpm", "start"]
+CMD ["nginx", "-g", "daemon off;"]

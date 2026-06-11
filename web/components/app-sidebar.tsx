@@ -1,18 +1,13 @@
-'use client'
-
 import {
     ChartArea,
     GitBranch,
     Home,
     MonitorDown,
-    MonitorPlay,
     Settings,
     Wrench,
 } from 'lucide-react'
 
-import { useEffect, useState } from 'react'
-
-import Link from 'next/link'
+import { Link, useLocation } from 'react-router-dom'
 
 import {
     Sidebar,
@@ -44,16 +39,6 @@ const items = [
         icon: MonitorDown,
     },
     {
-        title: 'Stream',
-        url: '/stream',
-        icon: MonitorPlay,
-    },
-    /*    {
-        title: 'Channels',
-        url: '/channels',
-        icon: Users,
-    },*/
-    {
         title: 'Tools',
         url: '/tools',
         icon: Wrench,
@@ -66,27 +51,16 @@ const items = [
 ]
 
 export function AppSidebar() {
-    const [version, setVersion] = useState<string | null>(null)
+    const { pathname } = useLocation()
 
-    useEffect(() => {
-        const fetchVersion = async () => {
-            try {
-                const response = await fetch('/api/info')
-                const data = await response.json()
-                setVersion(data.info.version)
-            } catch (error) {
-                console.error('Failed to fetch version:', error)
-            }
-        }
-
-        fetchVersion()
-    }, [])
+    const isActive = (url: string) =>
+        url === '/' ? pathname === '/' : pathname.startsWith(url)
 
     return (
         <Sidebar>
             <SidebarHeader>
                 <SidebarGroupLabel>
-                    <b className={'text-xl text-white'}>Video Archiver</b>
+                    <b className="text-foreground text-xl">Video Archiver</b>
                 </SidebarGroupLabel>
             </SidebarHeader>
             <SidebarContent>
@@ -95,11 +69,14 @@ export function AppSidebar() {
                         <SidebarMenu>
                             {items.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
-                                        <a href={item.url}>
+                                    <SidebarMenuButton
+                                        asChild
+                                        isActive={isActive(item.url)}
+                                    >
+                                        <Link to={item.url}>
                                             <item.icon />
                                             <span>{item.title}</span>
-                                        </a>
+                                        </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
@@ -109,13 +86,14 @@ export function AppSidebar() {
             </SidebarContent>
             <SidebarFooter>
                 <SidebarGroupLabel className={'gap-x-4'}>
-                    <p className={'text-md'}>version {version}-BETA</p>{' '}
-                    <Link
-                        target={'_blank'}
-                        href={'https://github.com/Fx64b/video-archiver'}
+                    <p className={'text-md'}>version {__APP_VERSION__}-BETA</p>
+                    <a
+                        target="_blank"
+                        rel="noreferrer"
+                        href="https://github.com/Fx64b/video-archiver"
                     >
                         <GitBranch size={20} />
-                    </Link>
+                    </a>
                 </SidebarGroupLabel>
             </SidebarFooter>
         </Sidebar>
