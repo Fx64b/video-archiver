@@ -1,5 +1,5 @@
 import { JobStatusError, JobWithMetadata, VideoMetadata } from '@/types'
-import { AlertTriangle, Play } from 'lucide-react'
+import { AlertTriangle, Film, Play } from 'lucide-react'
 
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -46,28 +46,31 @@ export function VideosGrid({ items }: VideosGridProps) {
                 return (
                     <Card
                         key={item.job?.id || i}
-                        className="relative cursor-pointer overflow-hidden pt-0 transition-transform hover:scale-105"
+                        className="hover:border-primary relative cursor-pointer overflow-hidden border pt-0 transition-all hover:shadow-md"
                         onClick={() =>
                             router.push(`/downloads/video/${item.job?.id}`)
                         }
                     >
                         {isFailed && (
-                            <div className="absolute right-2 top-2 z-10">
-                                <div className="rounded-full bg-destructive p-1.5">
+                            <div className="absolute top-2 right-2 z-10">
+                                <div className="bg-destructive rounded-full p-1.5">
                                     <AlertTriangle className="h-4 w-4 text-white" />
                                 </div>
                             </div>
                         )}
-                        <div className="relative aspect-video">
-                            <Image
-                                src={
-                                    thumbnailUrl ||
-                                    `https://picsum.photos/320/180?random=${i}`
-                                }
-                                alt={metadata?.title || `Video ${i}`}
-                                fill
-                                className="object-cover"
-                            />
+                        <div className="bg-muted relative aspect-video">
+                            {thumbnailUrl ? (
+                                <Image
+                                    src={thumbnailUrl}
+                                    alt={metadata?.title || 'Video thumbnail'}
+                                    fill
+                                    className="object-cover"
+                                />
+                            ) : (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <Film className="text-muted-foreground h-8 w-8" />
+                                </div>
+                            )}
                             <div className="absolute right-2 bottom-2 rounded bg-black/70 px-1 text-xs text-white">
                                 {duration}
                             </div>
@@ -83,8 +86,7 @@ export function VideosGrid({ items }: VideosGridProps) {
                         </div>
                         <CardContent className="px-4 pt-2">
                             <h3 className="line-clamp-1 font-semibold">
-                                {metadata?.title ||
-                                    `Advanced JavaScript Concepts - Part ${i}`}
+                                {metadata?.title || 'Untitled video'}
                             </h3>
                             <div className="text-muted-foreground mt-2 flex items-center justify-between text-sm">
                                 <span>{metadata?.channel}</span>
@@ -94,7 +96,10 @@ export function VideosGrid({ items }: VideosGridProps) {
                             </div>
                             <div className="mt-6 flex items-center gap-2">
                                 {metadata?.resolution && (
-                                    <Badge variant="outline" className="text-xs">
+                                    <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                    >
                                         {formatResolution(metadata.resolution)}
                                     </Badge>
                                 )}

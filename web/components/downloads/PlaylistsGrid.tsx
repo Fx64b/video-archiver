@@ -34,7 +34,7 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                 // Use actual playlist items when available
                 const playlistItems = metadata?.items || []
                 const videoCount = metadata?.playlist_count || 0
-                const title = metadata?.title || `Playlist ${i + 1}`
+                const title = metadata?.title || 'Untitled playlist'
                 const channel = metadata?.channel || 'Unknown Channel'
                 const updateDate = item.job
                     ? new Date(item.job.updated_at)
@@ -43,7 +43,7 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                 return (
                     <Card
                         key={item.job?.id || i}
-                        className="cursor-pointer transition-transform hover:scale-105"
+                        className="hover:border-primary cursor-pointer border transition-all hover:shadow-md"
                         onClick={() =>
                             router.push(`/downloads/playlist/${item.job?.id}`)
                         }
@@ -66,28 +66,33 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                                           .map((video, j) => (
                                               <div
                                                   key={j}
-                                                  className="relative aspect-video overflow-hidden rounded-md"
+                                                  className="bg-muted relative aspect-video overflow-hidden rounded-md"
                                               >
-                                                  <Image
-                                                      src={
-                                                          video.thumbnail ||
-                                                          `https://picsum.photos/160/90?random=${i}${j}`
-                                                      }
-                                                      alt={
-                                                          video.title ||
-                                                          `Video ${j + 1}`
-                                                      }
-                                                      fill
-                                                      className="object-cover"
-                                                  />
+                                                  {video.thumbnail ? (
+                                                      <Image
+                                                          src={video.thumbnail}
+                                                          alt={
+                                                              video.title ||
+                                                              `Video ${j + 1}`
+                                                          }
+                                                          fill
+                                                          className="object-cover"
+                                                      />
+                                                  ) : (
+                                                      <div className="absolute inset-0 flex items-center justify-center">
+                                                          <Film className="text-muted-foreground h-6 w-6" />
+                                                      </div>
+                                                  )}
                                                   {video.duration_string && (
                                                       <div className="absolute right-1 bottom-1 rounded bg-black/80 px-1 text-xs text-white">
-                                                          {video.duration_string}
+                                                          {
+                                                              video.duration_string
+                                                          }
                                                       </div>
                                                   )}
                                               </div>
                                           ))
-                                    : metadata?.thumbnails?.length
+                                    : metadata?.thumbnails?.[0]?.url
                                       ? // Fall back to playlist thumbnails if no items available
                                         [0, 1, 2, 3].map((j) => (
                                             <div
@@ -97,8 +102,7 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                                                 <Image
                                                     src={
                                                         metadata.thumbnails[0]
-                                                            ?.url ||
-                                                        `https://picsum.photos/160/90?random=${i}${j}`
+                                                            .url
                                                     }
                                                     alt={`Video thumbnail`}
                                                     fill
@@ -119,7 +123,9 @@ export function PlaylistsGrid({ items }: PlaylistsGridProps) {
                                         ))}
                             </div>
                             <div className="text-muted-foreground mt-3 flex justify-between text-sm">
-                                <span>Last updated: {format(updateDate, 'PPP')}</span>
+                                <span>
+                                    Last updated: {format(updateDate, 'PPP')}
+                                </span>
                                 {metadata?.view_count && (
                                     <span>
                                         {formatSubscriberNumber(

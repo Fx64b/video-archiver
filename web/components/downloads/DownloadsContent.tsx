@@ -184,6 +184,12 @@ export default function DownloadsContent() {
 
     return (
         <main className="flex w-full flex-col">
+            <div className="mb-8">
+                <h1 className="mb-2 text-3xl font-bold">Downloads</h1>
+                <p className="text-muted-foreground">
+                    Browse your archived videos, playlists and channels
+                </p>
+            </div>
             <Tabs
                 defaultValue={activeTab}
                 value={activeTab}

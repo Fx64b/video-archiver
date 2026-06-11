@@ -5,7 +5,6 @@ import {
     GitBranch,
     Home,
     MonitorDown,
-    MonitorPlay,
     Settings,
     Wrench,
 } from 'lucide-react'
@@ -13,6 +12,7 @@ import {
 import { useEffect, useState } from 'react'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 import {
     Sidebar,
@@ -44,16 +44,6 @@ const items = [
         icon: MonitorDown,
     },
     {
-        title: 'Stream',
-        url: '/stream',
-        icon: MonitorPlay,
-    },
-    /*    {
-        title: 'Channels',
-        url: '/channels',
-        icon: Users,
-    },*/
-    {
         title: 'Tools',
         url: '/tools',
         icon: Wrench,
@@ -66,6 +56,7 @@ const items = [
 ]
 
 export function AppSidebar() {
+    const pathname = usePathname()
     const [version, setVersion] = useState<string | null>(null)
 
     useEffect(() => {
@@ -82,11 +73,14 @@ export function AppSidebar() {
         fetchVersion()
     }, [])
 
+    const isActive = (url: string) =>
+        url === '/' ? pathname === '/' : pathname.startsWith(url)
+
     return (
         <Sidebar>
             <SidebarHeader>
                 <SidebarGroupLabel>
-                    <b className={'text-xl text-white'}>Video Archiver</b>
+                    <b className="text-foreground text-xl">Video Archiver</b>
                 </SidebarGroupLabel>
             </SidebarHeader>
             <SidebarContent>
@@ -95,11 +89,14 @@ export function AppSidebar() {
                         <SidebarMenu>
                             {items.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
-                                        <a href={item.url}>
+                                    <SidebarMenuButton
+                                        asChild
+                                        isActive={isActive(item.url)}
+                                    >
+                                        <Link href={item.url}>
                                             <item.icon />
                                             <span>{item.title}</span>
-                                        </a>
+                                        </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
@@ -109,7 +106,9 @@ export function AppSidebar() {
             </SidebarContent>
             <SidebarFooter>
                 <SidebarGroupLabel className={'gap-x-4'}>
-                    <p className={'text-md'}>version {version}-BETA</p>{' '}
+                    {version && (
+                        <p className={'text-md'}>version {version}-BETA</p>
+                    )}
                     <Link
                         target={'_blank'}
                         href={'https://github.com/Fx64b/video-archiver'}

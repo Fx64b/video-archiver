@@ -3,14 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"time"
+
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"os"
-	"strconv"
-	"time"
 	"video-archiver/internal/domain"
 	"video-archiver/internal/services/download"
 	"video-archiver/internal/services/tools"
@@ -24,6 +24,27 @@ type DownloadRequest struct {
 
 type Response struct {
 	Message interface{} `json:"message"`
+}
+
+// paginatedJobs is the envelope returned by list endpoints.
+type paginatedJobs struct {
+	Items      []*domain.JobWithMetadata `json:"items"`
+	TotalCount int                       `json:"total_count"`
+	Page       int                       `json:"page"`
+	Limit      int                       `json:"limit"`
+	TotalPages int                       `json:"total_pages"`
+}
+
+// validQualities lists the download resolutions accepted by the API.
+var validQualities = []int{360, 480, 720, 1080, 1440, 2160}
+
+func isValidQuality(quality int) bool {
+	for _, q := range validQualities {
+		if quality == q {
+			return true
+		}
+	}
+	return false
 }
 
 type Handler struct {
@@ -134,20 +155,9 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate custom quality if provided
-	if req.Quality != nil {
-		validQualities := []int{360, 480, 720, 1080, 1440, 2160}
-		qualityValid := false
-		for _, q := range validQualities {
-			if *req.Quality == q {
-				qualityValid = true
-				break
-			}
-		}
-		if !qualityValid {
-			http.Error(w, "Invalid quality. Must be 360, 480, 720, 1080, 1440, or 2160", http.StatusBadRequest)
-			return
-		}
+	if req.Quality != nil && !isValidQuality(*req.Quality) {
+		http.Error(w, "Invalid quality. Must be 360, 480, 720, 1080, 1440, or 2160", http.StatusBadRequest)
+		return
 	}
 
 	if req.Quality != nil {
@@ -170,9 +180,7 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := Response{Message: "Video added to download queue"}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: "Video added to download queue"})
 }
 
 func (h *Handler) HandleCancelDownload(w http.ResponseWriter, r *http.Request) {
@@ -190,9 +198,7 @@ func (h *Handler) HandleCancelDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := Response{Message: "Download cancelled successfully"}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: "Download cancelled successfully"})
 }
 
 func (h *Handler) HandleRecent(w http.ResponseWriter, r *http.Request) {
@@ -203,25 +209,16 @@ func (h *Handler) HandleRecent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(recentJobs) == 0 {
-		// Return empty array with 200 status instead of 404
-		resp := Response{Message: []interface{}{}}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
-		return
+	if recentJobs == nil {
+		recentJobs = []*domain.JobWithMetadata{}
 	}
 
-	resp := Response{Message: recentJobs}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: recentJobs})
 }
 
 func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
-	log.WithField("jobID", jobID).Info("Received request for job")
-
 	if jobID == "" {
-		log.Warn("Missing job ID in request")
 		http.Error(w, "Missing job ID", http.StatusBadRequest)
 		return
 	}
@@ -239,67 +236,49 @@ func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := Response{Message: jobWithMetadata}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: jobWithMetadata})
 }
 
 func (h *Handler) HandleGetJobParents(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
-	log.WithField("jobID", jobID).Info("Received request for job parents")
-
 	if jobID == "" {
-		log.Warn("Missing job ID in request")
 		http.Error(w, "Missing job ID", http.StatusBadRequest)
 		return
 	}
 
-	jobRepo := h.downloadService.GetRepository()
-	parents, err := jobRepo.GetParentsForVideo(jobID)
+	parents, err := h.downloadService.GetRepository().GetParentsForVideo(jobID)
 	if err != nil {
 		log.WithError(err).Error("Failed to get parents for video")
 		http.Error(w, "Failed to get parents for video", http.StatusInternalServerError)
 		return
 	}
 
-	// Return empty array if no parents found (not an error)
 	if parents == nil {
 		parents = []*domain.JobWithMetadata{}
 	}
 
-	resp := Response{Message: parents}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: parents})
 }
 
 func (h *Handler) HandleGetJobVideos(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
-	log.WithField("jobID", jobID).Info("Received request for job videos")
-
 	if jobID == "" {
-		log.Warn("Missing job ID in request")
 		http.Error(w, "Missing job ID", http.StatusBadRequest)
 		return
 	}
 
-	jobRepo := h.downloadService.GetRepository()
-	videos, err := jobRepo.GetVideosForParent(jobID)
+	videos, err := h.downloadService.GetRepository().GetVideosForParent(jobID)
 	if err != nil {
 		log.WithError(err).Error("Failed to get videos for parent")
 		http.Error(w, "Failed to get videos for parent", http.StatusInternalServerError)
 		return
 	}
 
-	// Return empty array if no videos found (not an error)
 	if videos == nil {
 		videos = []*domain.JobWithMetadata{}
 	}
 
-	log.WithField("jobID", jobID).WithField("count", len(videos)).Info("Returning videos for parent")
-
-	resp := Response{Message: videos}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: videos})
 }
 
 func (h *Handler) HandleGetStatistics(w http.ResponseWriter, r *http.Request) {
@@ -310,33 +289,20 @@ func (h *Handler) HandleGetStatistics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := Response{Message: stats}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: stats})
 }
 
 func (h *Handler) HandleGetDownloads(w http.ResponseWriter, r *http.Request) {
 	contentType := chi.URLParam(r, "type")
-
-	// Validate content type
 	if contentType != "videos" && contentType != "playlists" && contentType != "channels" {
 		http.Error(w, "Invalid content type. Must be 'videos', 'playlists', or 'channels'", http.StatusBadRequest)
 		return
 	}
 
-	// Parse query parameters
-	page := 1
-	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
-
-	limit := 20
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
+	page := parseIntQuery(r, "page", 1)
+	limit := parseIntQuery(r, "limit", 20)
+	if limit > 100 {
+		limit = 20
 	}
 
 	sortBy := r.URL.Query().Get("sort_by")
@@ -349,55 +315,24 @@ func (h *Handler) HandleGetDownloads(w http.ResponseWriter, r *http.Request) {
 		order = "desc"
 	}
 
-	jobRepo := h.downloadService.GetRepository()
-	items, totalCount, err := jobRepo.GetMetadataByType(contentType, page, limit, sortBy, order)
+	items, totalCount, err := h.downloadService.GetRepository().GetMetadataByType(contentType, page, limit, sortBy, order)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to get %s", contentType)
 		http.Error(w, fmt.Sprintf("Failed to get %s", contentType), http.StatusInternalServerError)
 		return
 	}
 
-	if len(items) == 0 && page == 1 {
-		log.Infof("No %s found", contentType)
-
-		resp := struct {
-			Items      []*domain.JobWithMetadata `json:"items"`
-			TotalCount int                       `json:"total_count"`
-			Page       int                       `json:"page"`
-			Limit      int                       `json:"limit"`
-			TotalPages int                       `json:"total_pages"`
-		}{
-			Items:      []*domain.JobWithMetadata{},
-			TotalCount: 0,
-			Page:       page,
-			Limit:      limit,
-			TotalPages: 0,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(Response{Message: resp})
-		return
+	if items == nil {
+		items = []*domain.JobWithMetadata{}
 	}
 
-	resp := struct {
-		Items      []*domain.JobWithMetadata `json:"items"`
-		TotalCount int                       `json:"total_count"`
-		Page       int                       `json:"page"`
-		Limit      int                       `json:"limit"`
-		TotalPages int                       `json:"total_pages"`
-	}{
+	writeJSON(w, http.StatusOK, Response{Message: paginatedJobs{
 		Items:      items,
 		TotalCount: totalCount,
 		Page:       page,
 		Limit:      limit,
 		TotalPages: (totalCount + limit - 1) / limit, // Ceiling division
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(Response{Message: resp})
-	if err != nil {
-		return
-	}
+	}})
 }
 
 func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
@@ -420,41 +355,32 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try to find the video file based on the metadata
-	var videoPath string
-
-	switch metadata := jobWithMetadata.Metadata.(type) {
-	case *domain.VideoMetadata:
-		// Locate the file on disk. yt-dlp's filename sanitization (and the
-		// container extension) cannot be reliably reconstructed from the
-		// title, so this scans the download directory and matches by title.
-		videoPath, err = tools.ResolveVideoFile(h.downloadPath, metadata)
-		if err != nil {
-			log.WithField("title", metadata.Title).Warn("Video file not found")
-			http.Error(w, "Video file not found", http.StatusNotFound)
-			return
-		}
-
-	default:
+	metadata, ok := jobWithMetadata.Metadata.(*domain.VideoMetadata)
+	if !ok {
 		http.Error(w, "Unsupported content type for video playback", http.StatusBadRequest)
 		return
 	}
 
-	// Check if the file exists
+	// Locate the file on disk. yt-dlp's filename sanitization (and the
+	// container extension) cannot be reliably reconstructed from the
+	// title, so this scans the download directory and matches by title.
+	videoPath, err := tools.ResolveVideoFile(h.downloadPath, metadata)
+	if err != nil {
+		log.WithField("title", metadata.Title).Warn("Video file not found")
+		http.Error(w, "Video file not found", http.StatusNotFound)
+		return
+	}
+
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
 		log.WithField("path", videoPath).Warn("Video file not found")
 		http.Error(w, "Video file not found", http.StatusNotFound)
 		return
 	}
 
-	log.WithField("path", videoPath).Info("Serving video file")
+	log.WithField("path", videoPath).Debug("Serving video file")
 
-	// Set appropriate headers for video streaming
-	w.Header().Set("Content-Type", "video/mp4")
-	w.Header().Set("Accept-Ranges", "bytes")
+	// ServeFile handles range requests and content type detection.
 	w.Header().Set("Cache-Control", "no-cache")
-
-	// Serve the file
 	http.ServeFile(w, r, videoPath)
 }
 
@@ -466,9 +392,7 @@ func (h *Handler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := Response{Message: settings}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: settings})
 }
 
 type UpdateSettingsRequest struct {
@@ -484,33 +408,21 @@ func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate theme
 	if req.Theme != "light" && req.Theme != "dark" && req.Theme != "system" {
 		http.Error(w, "Invalid theme. Must be 'light', 'dark', or 'system'", http.StatusBadRequest)
 		return
 	}
 
-	// Validate download quality
-	validQualities := []int{360, 480, 720, 1080, 1440, 2160}
-	qualityValid := false
-	for _, q := range validQualities {
-		if req.DownloadQuality == q {
-			qualityValid = true
-			break
-		}
-	}
-	if !qualityValid {
+	if !isValidQuality(req.DownloadQuality) {
 		http.Error(w, "Invalid download quality. Must be 360, 480, 720, 1080, 1440, or 2160", http.StatusBadRequest)
 		return
 	}
 
-	// Validate concurrent downloads
 	if req.ConcurrentDownloads < 1 || req.ConcurrentDownloads > 10 {
 		http.Error(w, "Invalid concurrent downloads. Must be between 1 and 10", http.StatusBadRequest)
 		return
 	}
 
-	// Get current settings
 	settings, err := h.settingsRepository.Get()
 	if err != nil {
 		log.WithError(err).Error("Failed to get current settings")
@@ -518,7 +430,6 @@ func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update settings
 	settings.Theme = req.Theme
 	settings.DownloadQuality = req.DownloadQuality
 	settings.ConcurrentDownloads = req.ConcurrentDownloads
@@ -532,9 +443,7 @@ func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	log.Infof("Settings updated successfully - Theme: %s, Quality: %dp, Concurrent Downloads: %d",
 		settings.Theme, settings.DownloadQuality, settings.ConcurrentDownloads)
 
-	resp := Response{Message: settings}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, Response{Message: settings})
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

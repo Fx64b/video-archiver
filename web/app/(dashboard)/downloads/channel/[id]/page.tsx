@@ -34,7 +34,6 @@ export default function ChannelDetailPage() {
                     throw new Error('Failed to fetch channel')
                 }
                 const data = await response.json()
-                console.log('Channel API response:', data)
                 setChannel(data.message || data)
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error')
@@ -112,16 +111,22 @@ export default function ChannelDetailPage() {
                     <div className="flex flex-col gap-6 sm:flex-row">
                         {/* Channel avatar */}
                         <div className="flex-shrink-0">
-                            <div className="relative h-32 w-32 overflow-hidden rounded-full">
-                                <Image
-                                    src={
-                                        thumbnailUrl ||
-                                        `https://picsum.photos/128/128?random=channel`
-                                    }
-                                    alt={metadata?.channel || 'Channel avatar'}
-                                    fill
-                                    className="object-cover"
-                                />
+                            <div className="bg-muted relative h-32 w-32 overflow-hidden rounded-full">
+                                {thumbnailUrl ? (
+                                    <Image
+                                        src={thumbnailUrl}
+                                        alt={
+                                            metadata?.channel ||
+                                            'Channel avatar'
+                                        }
+                                        fill
+                                        className="object-cover"
+                                    />
+                                ) : (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <Users className="text-muted-foreground h-12 w-12" />
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -219,24 +224,27 @@ export default function ChannelDetailPage() {
                                 (video: PlaylistItem, index: number) => (
                                     <Card
                                         key={video.id || index}
-                                        className="cursor-pointer overflow-hidden transition-transform hover:scale-105"
+                                        className="hover:border-primary cursor-pointer overflow-hidden border transition-all hover:shadow-md"
                                         onClick={() =>
                                             handleVideoClick(video.id)
                                         }
                                     >
-                                        <div className="relative aspect-video">
-                                            <Image
-                                                src={
-                                                    video.thumbnail ||
-                                                    `https://picsum.photos/320/180?random=${index}`
-                                                }
-                                                alt={
-                                                    video.title ||
-                                                    `Video ${index + 1}`
-                                                }
-                                                fill
-                                                className="object-cover"
-                                            />
+                                        <div className="bg-muted relative aspect-video">
+                                            {video.thumbnail ? (
+                                                <Image
+                                                    src={video.thumbnail}
+                                                    alt={
+                                                        video.title ||
+                                                        `Video ${index + 1}`
+                                                    }
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                            ) : (
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                    <Video className="text-muted-foreground h-8 w-8" />
+                                                </div>
+                                            )}
                                             <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity hover:opacity-100">
                                                 <Play className="h-8 w-8 text-white" />
                                             </div>

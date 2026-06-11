@@ -2,7 +2,7 @@
 
 import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
-import { AlertCircle, LoaderCircle, Settings, X } from 'lucide-react'
+import { AlertCircle, Check, LoaderCircle, Settings, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
@@ -86,7 +86,10 @@ export function UrlInput() {
     ]
 
     const getQualityLabel = (quality: number) => {
-        return qualityOptions.find((q) => q.value === quality)?.label || `${quality}p`
+        return (
+            qualityOptions.find((q) => q.value === quality)?.label ||
+            `${quality}p`
+        )
     }
 
     useEffect(() => {
@@ -135,6 +138,9 @@ export function UrlInput() {
                                 onClick={() => setCustomQuality(option.value)}
                             >
                                 {option.label}
+                                {customQuality === option.value && (
+                                    <Check className="ml-auto h-4 w-4" />
+                                )}
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuContent>
@@ -167,17 +173,17 @@ export function UrlInput() {
             )}
 
             {!isConnected && (
-                <div
-                    className={`text-destructive mt-2 flex items-center ${isConnected ? 'display-none' : 'fade-in'}`}
-                >
+                <div className="text-destructive mt-2 flex items-center">
                     <AlertCircle className="mr-2 h-4 w-4" />
                     <span>{getReconnectingText()}</span>
                 </div>
             )}
 
-            <div className="my-2" />
-            {error && <AlertDestructive message={error} />}
-            <div className="my-2" />
+            {error && (
+                <div className="mt-4">
+                    <AlertDestructive message={error} />
+                </div>
+            )}
         </div>
     )
 }

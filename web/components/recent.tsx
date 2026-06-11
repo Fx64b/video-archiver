@@ -57,7 +57,6 @@ const Recent: React.FC = () => {
 
         // Refetch recent jobs on WebSocket reconnection
         const unsubscribeReconnect = onReconnect(() => {
-            console.log('WebSocket reconnected, fetching recent jobs...')
             fetchRecentJobs()
         })
 
@@ -68,7 +67,7 @@ const Recent: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
+            <div className="max-w-(--breakpoint-md) space-y-4">
                 <Card>
                     <CardContent className="p-4">
                         <Skeleton className="h-36 w-full" />
@@ -84,7 +83,7 @@ const Recent: React.FC = () => {
     )
 
     return (
-        <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
+        <div className="max-w-(--breakpoint-md) space-y-4">
             {filteredJobs.length > 0 ? (
                 filteredJobs.map((job) => (
                     <MetadataCard
@@ -94,7 +93,11 @@ const Recent: React.FC = () => {
                     />
                 ))
             ) : jobs.length === 0 ? (
-                <p>{message || 'No recent downloads found.'}</p>
+                <Card>
+                    <CardContent className="text-muted-foreground p-8 text-center text-sm">
+                        {message || 'No recent downloads yet.'}
+                    </CardContent>
+                </Card>
             ) : null}
         </div>
     )

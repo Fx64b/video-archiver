@@ -58,17 +58,21 @@ const JobProgress: React.FC = () => {
         }
     }, [connect, subscribe, addActiveDownload, getRecentMetadata])
 
+    const jobEntries = Object.entries(jobs)
+
+    if (jobEntries.length === 0) {
+        return null
+    }
+
     return (
-        <div className="mb-4 max-w-(--breakpoint-md) space-y-4">
-            {Object.entries(jobs)
-                .reverse()
-                .map(([jobID, job]) => (
-                    <MetadataCard
-                        key={jobID}
-                        metadata={metadata[jobID] || null}
-                        job={job}
-                    />
-                ))}
+        <div className="max-w-(--breakpoint-md) space-y-4">
+            {jobEntries.reverse().map(([jobID, job]) => (
+                <MetadataCard
+                    key={jobID}
+                    metadata={metadata[jobID] || null}
+                    job={job}
+                />
+            ))}
         </div>
     )
 }

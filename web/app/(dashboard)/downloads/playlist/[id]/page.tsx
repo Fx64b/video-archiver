@@ -1,7 +1,20 @@
 'use client'
 
-import { JobWithMetadata, PlaylistItem, PlaylistMetadata, VideoMetadata } from '@/types'
-import { AlertTriangle, ArrowLeft, Eye, List, Play, User, XCircle } from 'lucide-react'
+import {
+    JobWithMetadata,
+    PlaylistItem,
+    PlaylistMetadata,
+    VideoMetadata,
+} from '@/types'
+import {
+    AlertTriangle,
+    ArrowLeft,
+    Eye,
+    List,
+    Play,
+    User,
+    XCircle,
+} from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
@@ -34,7 +47,6 @@ export default function PlaylistDetailPage() {
                     throw new Error('Failed to fetch playlist')
                 }
                 const data = await response.json()
-                console.log('Playlist API response:', data)
                 setPlaylist(data.message || data)
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error')
@@ -52,7 +64,6 @@ export default function PlaylistDetailPage() {
                     throw new Error('Failed to fetch videos')
                 }
                 const data = await response.json()
-                console.log('Videos API response:', data)
                 setVideos(data.message || [])
             } catch (err) {
                 console.error('Failed to fetch videos:', err)
@@ -65,9 +76,8 @@ export default function PlaylistDetailPage() {
         }
     }, [id])
 
-    const handleVideoClick = (videoId: string) => {
-        // Navigate to video page - you'll need to implement mapping video IDs to job IDs
-        router.push(`/downloads/video/${videoId}`)
+    const handleVideoClick = (jobId: string) => {
+        router.push(`/downloads/video/${jobId}`)
     }
 
     if (loading) {
@@ -161,25 +171,37 @@ export default function PlaylistDetailPage() {
                         {videos && videos.length > 0 ? (
                             videos.map(
                                 (videoJob: JobWithMetadata, index: number) => {
-                                    const video = videoJob.metadata as VideoMetadata
-                                    const isFailed = videoJob.job?.status === 'error'
+                                    const video =
+                                        videoJob.metadata as VideoMetadata
+                                    const isFailed =
+                                        videoJob.job?.status === 'error'
 
                                     return (
                                         <Card
                                             key={videoJob.job?.id || index}
                                             className={`${!isFailed ? 'hover:bg-muted/50 cursor-pointer' : 'opacity-75'} transition-colors`}
                                             onClick={() =>
-                                                !isFailed && videoJob.job?.id && handleVideoClick(videoJob.job.id)
+                                                !isFailed &&
+                                                videoJob.job?.id &&
+                                                handleVideoClick(
+                                                    videoJob.job.id
+                                                )
                                             }
                                         >
                                             <CardContent className="flex gap-4 p-4">
                                                 <div className="flex-shrink-0">
-                                                    <div className="relative h-20 w-36 overflow-hidden rounded-md bg-muted">
-                                                        {!isFailed && video?.thumbnail ? (
+                                                    <div className="bg-muted relative h-20 w-36 overflow-hidden rounded-md">
+                                                        {!isFailed &&
+                                                        video?.thumbnail ? (
                                                             <>
                                                                 <Image
-                                                                    src={video.thumbnail}
-                                                                    alt={video.title || `Video ${index + 1}`}
+                                                                    src={
+                                                                        video.thumbnail
+                                                                    }
+                                                                    alt={
+                                                                        video.title ||
+                                                                        `Video ${index + 1}`
+                                                                    }
                                                                     fill
                                                                     className="object-cover"
                                                                 />
@@ -188,17 +210,19 @@ export default function PlaylistDetailPage() {
                                                                 </div>
                                                                 {video.duration_string && (
                                                                     <div className="absolute right-1 bottom-1 rounded bg-black/80 px-1 text-xs text-white">
-                                                                        {video.duration_string}
+                                                                        {
+                                                                            video.duration_string
+                                                                        }
                                                                     </div>
                                                                 )}
                                                             </>
                                                         ) : (
-                                                            <div className="flex h-full items-center justify-center bg-destructive/10">
-                                                                <XCircle className="h-10 w-10 text-destructive" />
+                                                            <div className="bg-destructive/10 flex h-full items-center justify-center">
+                                                                <XCircle className="text-destructive h-10 w-10" />
                                                             </div>
                                                         )}
                                                         {isFailed && (
-                                                            <div className="absolute top-1 right-1 rounded-full bg-destructive p-1">
+                                                            <div className="bg-destructive absolute top-1 right-1 rounded-full p-1">
                                                                 <AlertTriangle className="h-4 w-4 text-white" />
                                                             </div>
                                                         )}
@@ -206,22 +230,28 @@ export default function PlaylistDetailPage() {
                                                 </div>
                                                 <div className="min-w-0 flex-1">
                                                     <h3 className="mb-1 line-clamp-2 font-medium">
-                                                        {video?.title || `Video ${index + 1}`}
+                                                        {video?.title ||
+                                                            `Video ${index + 1}`}
                                                         {isFailed && (
-                                                            <span className="ml-2 text-destructive text-sm font-normal">
+                                                            <span className="text-destructive ml-2 text-sm font-normal">
                                                                 (Failed)
                                                             </span>
                                                         )}
                                                     </h3>
                                                     <div className="text-muted-foreground flex items-center gap-2 text-sm">
                                                         {video?.channel && (
-                                                            <span>{video.channel}</span>
+                                                            <span>
+                                                                {video.channel}
+                                                            </span>
                                                         )}
                                                         {video?.view_count && (
                                                             <>
                                                                 <span>•</span>
                                                                 <span>
-                                                                    {formatSubscriberNumber(video.view_count)} views
+                                                                    {formatSubscriberNumber(
+                                                                        video.view_count
+                                                                    )}{' '}
+                                                                    views
                                                                 </span>
                                                             </>
                                                         )}
@@ -229,7 +259,9 @@ export default function PlaylistDetailPage() {
                                                             <>
                                                                 <span>•</span>
                                                                 <span>
-                                                                    {new Date(video.upload_date).toLocaleDateString()}
+                                                                    {new Date(
+                                                                        video.upload_date
+                                                                    ).toLocaleDateString()}
                                                                 </span>
                                                             </>
                                                         )}
@@ -253,7 +285,9 @@ export default function PlaylistDetailPage() {
                         ) : (
                             <div className="py-8 text-center">
                                 <p className="text-muted-foreground">
-                                    {loading ? 'Loading videos...' : 'No videos found in this playlist'}
+                                    {loading
+                                        ? 'Loading videos...'
+                                        : 'No videos found in this playlist'}
                                 </p>
                             </div>
                         )}

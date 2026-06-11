@@ -95,7 +95,7 @@ export default function ToolsContent() {
     // Subscribe to WebSocket tools progress updates
     useToolsWebSocket()
 
-    const { selectedInputs, clearSelectedInputs } = useToolsState()
+    const { selectedInputs, clearSelectedInputs, activeJobs } = useToolsState()
     const hasSelection = selectedInputs.length > 0
 
     return (
@@ -109,8 +109,7 @@ export default function ToolsContent() {
             </div>
 
             {/* Active Jobs Progress */}
-            {Array.from(useToolsState.getState().activeJobs.values()).length >
-                0 && (
+            {activeJobs.size > 0 && (
                 <section>
                     <ProgressTracker showCompleted={false} maxItems={3} />
                 </section>

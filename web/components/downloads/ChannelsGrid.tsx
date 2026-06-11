@@ -1,5 +1,6 @@
 import { ChannelMetadata, JobWithMetadata } from '@/types'
 import { format } from 'date-fns'
+import { User } from 'lucide-react'
 
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -44,27 +45,32 @@ export function ChannelsGrid({ items }: ChannelsGridProps) {
                 return (
                     <Card
                         key={item.job?.id || i}
-                        className="cursor-pointer transition-transform hover:scale-105"
+                        className="hover:border-primary cursor-pointer border transition-all hover:shadow-md"
                         onClick={() =>
                             router.push(`/downloads/channel/${item.job?.id}`)
                         }
                     >
                         <CardHeader>
                             <div className="flex items-center gap-3">
-                                <div className="relative h-10 w-10 overflow-hidden rounded-full">
-                                    <Image
-                                        src={
-                                            thumbnailUrl ||
-                                            `https://picsum.photos/100/100?random=${i}`
-                                        }
-                                        alt={channelName || `Channel ${i}`}
-                                        fill
-                                        className="object-cover"
-                                    />
+                                <div className="bg-muted relative h-10 w-10 overflow-hidden rounded-full">
+                                    {thumbnailUrl ? (
+                                        <Image
+                                            src={thumbnailUrl}
+                                            alt={
+                                                channelName || 'Channel avatar'
+                                            }
+                                            fill
+                                            className="object-cover"
+                                        />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <User className="text-muted-foreground h-5 w-5" />
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <CardTitle className="text-base">
-                                        {channelName}
+                                        {channelName || 'Unknown channel'}
                                     </CardTitle>
                                     <CardDescription>
                                         {subscribers}

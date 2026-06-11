@@ -34,22 +34,17 @@ export default function VideoDetailPage() {
     useEffect(() => {
         const fetchVideo = async () => {
             try {
-                const url = `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}`
-                console.log('Fetching video from:', url)
-
-                const response = await fetch(url)
-                console.log('Video response status:', response.status)
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}`
+                )
 
                 if (!response.ok) {
-                    const errorText = await response.text()
-                    console.error('Video API error:', errorText)
                     throw new Error(
                         `Failed to fetch video: ${response.status} ${response.statusText}`
                     )
                 }
 
                 const data = await response.json()
-                console.log('Video API response:', data)
                 setVideo(data.message || data)
             } catch (err) {
                 console.error('Video fetch error:', err)
@@ -60,24 +55,18 @@ export default function VideoDetailPage() {
         }
 
         const fetchParents = async () => {
+            // Don't fail the whole page if parents can't be fetched
             try {
-                const url = `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}/parents`
-                console.log('Fetching parents from:', url)
-
-                const response = await fetch(url)
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_SERVER_URL}/job/${id}/parents`
+                )
 
                 if (response.ok) {
                     const data = await response.json()
-                    console.log('Parents API response:', data)
                     setParents(data.message || [])
-                } else {
-                    console.warn(
-                        'Failed to fetch parents, continuing without them'
-                    )
                 }
             } catch (err) {
-                console.warn('Failed to fetch parents:', err)
-                // Don't fail the whole page if parents can't be fetched
+                console.error('Failed to fetch parents:', err)
             }
         }
 
@@ -144,7 +133,7 @@ export default function VideoDetailPage() {
                     </Button>
                 </Link>
                 {isFailed && (
-                    <div className="flex items-center gap-2 text-destructive">
+                    <div className="text-destructive flex items-center gap-2">
                         <AlertTriangle className="h-5 w-5" />
                         <span className="font-medium">Download Failed</span>
                     </div>
@@ -158,7 +147,7 @@ export default function VideoDetailPage() {
                     {isFailed ? (
                         <Card className="mb-4">
                             <CardContent className="flex flex-col items-center justify-center gap-4 p-12 text-center">
-                                <AlertTriangle className="h-16 w-16 text-destructive" />
+                                <AlertTriangle className="text-destructive h-16 w-16" />
                                 <div>
                                     <h3 className="mb-2 text-lg font-semibold">
                                         Download Failed
@@ -173,8 +162,8 @@ export default function VideoDetailPage() {
                                         </p>
                                         <ul className="text-muted-foreground list-inside list-disc space-y-1">
                                             <li>
-                                                HTTP 403 Forbidden - Video may be
-                                                restricted or age-gated
+                                                HTTP 403 Forbidden - Video may
+                                                be restricted or age-gated
                                             </li>
                                             <li>
                                                 Network errors during download
