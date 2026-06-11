@@ -5,11 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Docker-based Development (Recommended)
-- `./run.sh` - Start the full application
-- `./run.sh --build` - Rebuild containers and regenerate TypeScript types
-- `./run.sh --debug` - Start with debug logging enabled
-- `./run.sh --clear --build` - Fresh start (clears database and downloads)
-- `./run.sh --backend-only` - Start only the backend service
+- `./run.sh` - Start the full application (builds images on first run)
+- `./run.sh build` - Rebuild images and start (use after pulling changes)
+- `./run.sh stop` - Stop the application
+- `./run.sh logs [service]` - Follow container logs
+- `./run.sh test [coverage|verbose]` - Run backend tests
+- `./run.sh types` - Regenerate `web/types/index.ts` from Go domain structs (commit the result)
+- `./run.sh reset` - Stop and delete all data (database, downloads)
+- `./run.sh --debug` / `--backend-only` / `--detach` - Options for start/build
+- Dockerfiles use BuildKit cache mounts (Go build cache, pnpm store), so rebuilds are incremental
 
 ### Frontend Development
 - `cd web && pnpm install` - Install dependencies

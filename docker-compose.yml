@@ -1,12 +1,17 @@
+name: video-archiver
+
 services:
   backend:
     build:
       context: ./services/backend
+    # init reaps the yt-dlp/ffmpeg child processes the backend spawns
+    init: true
+    restart: unless-stopped
+    user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
     volumes:
       - ./data/downloads:/app/data/downloads:Z
       - ./data/db:/app/data/db:Z
       - ./data/cache:/app/cache:Z
-    user: "${CURRENT_UID}:${CURRENT_GID}"
     ports:
       - "8080:8080"
       - "8081:8081"
@@ -24,5 +29,8 @@ services:
       args:
         - VITE_SERVER_URL=http://localhost:8080
         - VITE_SERVER_URL_WS=ws://localhost:8081
+    restart: unless-stopped
+    depends_on:
+      - backend
     ports:
       - "3000:3000"

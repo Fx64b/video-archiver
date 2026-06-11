@@ -65,45 +65,52 @@ Video Archiver allows you to download and organize videos from YouTube for offli
 
 ### Quick Start
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/Fx64b/video-archiver.git
 cd video-archiver
-```
-
-2. Set environment variables:
-```bash
-cp web/.env.local.example web/.env.local
-```
-
-3. Start the application:
-```bash
 ./run.sh
 ```
 
-The web interface will be available at `http://localhost:3000`
+That's it — the first run builds the Docker images automatically. The web
+interface will be available at `http://localhost:3000`.
 
-### Run Script Options
+### Run Script
 
 ```bash
-./run.sh [options]
+./run.sh [command] [options]
+
+Commands:
+  start             Start the application (default; builds images on first run)
+  build             Rebuild images, then start
+  stop              Stop the application
+  logs [service]    Follow container logs (backend, web)
+  test [target]     Run backend tests (target: coverage, verbose; default: all)
+  types             Regenerate TypeScript types from the Go domain structs
+  clean             Remove containers and locally built images
+  reset             Stop and delete all data (database, downloads)
+  help              Show help message
 
 Options:
-  --clear           Clear the database and downloads
-  --build           Rebuild the containers and regenerate TypeScript types
-  --debug           Enable debug logging in backend
-  --backend-only    Start only the backend service
-  --test            Run backend unit tests
-  --test-verbose    Run backend tests with verbose output
-  --test-coverage   Run backend tests with coverage report
-  --help|-h         Show help message
+  -d, --detach      Run containers in the background
+      --debug       Enable debug logging in the backend
+      --backend-only  Operate on the backend service only
+      --no-cache    (build) Rebuild images without using the build cache
+  -y, --yes         Skip confirmation prompts
 ```
 
 Common use cases:
-- Fresh start: `./run.sh --clear --build`
-- Development: `./run.sh --build --debug`
-- Production: `./run.sh`
-- Testing: `./run.sh --test` or `./run.sh --test-coverage`
+- First start / normal start: `./run.sh`
+- After pulling changes: `./run.sh build`
+- Development with verbose logs: `./run.sh build --debug`
+- Wipe everything and start over: `./run.sh reset`
+- Testing: `./run.sh test` or `./run.sh test coverage`
+
+After changing the Go structs in `services/backend/internal/domain`, run
+`./run.sh types` to regenerate `web/types/index.ts` (uses local `tygo` or Go
+if available, otherwise falls back to a Docker container — and commit the
+result). Rebuilds are fast: Docker build caches keep the Go build cache
+(including the cgo-compiled SQLite driver) and the pnpm package store warm
+between builds.
 
 ### Manual Setup (Without Docker)
 
