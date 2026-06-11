@@ -136,11 +136,20 @@ export default function VideoSelector({
                 selectedInputs.forEach((input) => removeSelectedInput(input.id))
             }
 
+            const counts = item.metadata as MetadataWithCounts
+            const videoCount =
+                type === 'playlist'
+                    ? counts.playlist_count || counts.items?.length
+                    : type === 'channel'
+                      ? counts.video_count
+                      : undefined
+
             addSelectedInput({
                 id: inputId,
                 type,
                 title: item.metadata.title || 'Untitled',
                 thumbnail: item.metadata.thumbnail,
+                videoCount,
             })
         }
     }

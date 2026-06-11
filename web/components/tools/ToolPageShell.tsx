@@ -1,4 +1,4 @@
-import useToolsState from '@/store/toolsState'
+import useToolsState, { countSelectedVideos } from '@/store/toolsState'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
 
 import { ReactNode, useEffect } from 'react'
@@ -69,7 +69,9 @@ export default function ToolPageShell({
         return null
     }
 
-    const notEnough = selectedInputs.length < minSelection
+    // Playlists/channels are expanded into their videos by the backend, so
+    // they can satisfy a multi-input requirement on their own.
+    const notEnough = countSelectedVideos(selectedInputs) < minSelection
 
     const handleCancel = () => {
         clearSelectedInputs()
@@ -161,6 +163,10 @@ export default function ToolPageShell({
                                                 </p>
                                                 <p className="text-muted-foreground mt-1 text-xs capitalize">
                                                     {input.type}
+                                                    {input.type !== 'video' &&
+                                                    input.videoCount
+                                                        ? ` · ${input.videoCount} videos`
+                                                        : ''}
                                                 </p>
                                             </div>
                                         </CardContent>

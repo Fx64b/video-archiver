@@ -1,11 +1,26 @@
 import { ToolsJob, ToolsProgressUpdate } from '@/types'
 import { create } from 'zustand'
 
-interface SelectedInput {
+export interface SelectedInput {
     id: string
     type: 'video' | 'playlist' | 'channel'
     title: string
     thumbnail?: string
+    /** Number of videos a playlist/channel selection expands into. */
+    videoCount?: number
+}
+
+/**
+ * countSelectedVideos returns how many videos a selection effectively covers:
+ * playlists and channels are expanded into their videos by the backend, so
+ * they count as their video count (or at least 2 when the count is unknown).
+ * Used to gate tools with a minimum input requirement such as concat.
+ */
+export function countSelectedVideos(inputs: SelectedInput[]): number {
+    return inputs.reduce((sum, input) => {
+        if (input.type === 'video') return sum + 1
+        return sum + Math.max(input.videoCount ?? 0, 2)
+    }, 0)
 }
 
 interface ToolsState {

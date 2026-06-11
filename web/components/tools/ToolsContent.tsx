@@ -1,4 +1,4 @@
-import useToolsState from '@/store/toolsState'
+import useToolsState, { countSelectedVideos } from '@/store/toolsState'
 import {
     ChevronRight,
     FileAudio,
@@ -95,6 +95,9 @@ export default function ToolsContent() {
 
     const { selectedInputs, clearSelectedInputs, activeJobs } = useToolsState()
     const hasSelection = selectedInputs.length > 0
+    // Playlists/channels expand into their videos on the backend, so a single
+    // playlist selection can satisfy tools that need multiple inputs (concat).
+    const selectedVideoCount = countSelectedVideos(selectedInputs)
 
     return (
         <div className="flex min-h-screen w-full flex-col gap-8">
@@ -166,7 +169,7 @@ export default function ToolsContent() {
                     {TOOLS.map((tool) => {
                         const isDisabled =
                             !hasSelection ||
-                            selectedInputs.length < (tool.minSelection || 1)
+                            selectedVideoCount < (tool.minSelection || 1)
 
                         return (
                             <Link
