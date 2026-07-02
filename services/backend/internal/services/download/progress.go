@@ -2,13 +2,13 @@ package download
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"video-archiver/internal/domain"
 
@@ -77,8 +77,11 @@ type ProgressState struct {
 	Warnings          []string           // Collected warnings/errors during download
 }
 
-// ProgressTracker handles robust progress tracking
+// ProgressTracker handles robust progress tracking. One tracker exists per
+// download and is fed from both the stdout and stderr pipes; mu serializes
+// those two readers over the shared state.
 type ProgressTracker struct {
+	mu              sync.Mutex
 	state           *ProgressState
 	service         *Service
 	updateThrottle  time.Duration
@@ -108,33 +111,54 @@ func NewProgressTracker(service *Service, jobID, jobType string) *ProgressTracke
 	}
 }
 
-// trackProgress is the main entry point for progress tracking
-func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
-	tracker := NewProgressTracker(s, jobID, jobType)
-
+// consume reads one of yt-dlp's output pipes to exhaustion, feeding each line
+// into the shared tracker state. The caller sends the final update once after
+// every pipe has been consumed — never per pipe, which used to produce
+// duplicate completion broadcasts and database writes.
+func (pt *ProgressTracker) consume(pipe io.Reader) {
 	scanner := bufio.NewScanner(pipe)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
-
+		line := strings.TrimSpace(scanner.Text())
 		if len(line) == 0 {
 			continue
 		}
 
-		tracker.processLine(line)
+		pt.mu.Lock()
+		pt.processLine(line)
+		pt.mu.Unlock()
 	}
-
-	// Send final completion update
-	tracker.sendFinalUpdate()
 
 	if err := scanner.Err(); err != nil {
 		if !strings.Contains(err.Error(), "file already closed") && !strings.Contains(err.Error(), "broken pipe") {
 			log.WithError(err).Error("Error reading progress output")
 		}
 	}
+}
+
+// track consumes both output pipes concurrently and returns a wait function
+// that blocks until they are drained. Callers must invoke wait() BEFORE
+// cmd.Wait() — os/exec closes the pipes on Wait, so reads have to finish
+// first — and then call finish() once the command's outcome is known.
+func (pt *ProgressTracker) track(stdout, stderr io.Reader) (wait func()) {
+	var wg sync.WaitGroup
+	for _, pipe := range []io.Reader{stdout, stderr} {
+		wg.Add(1)
+		go func(p io.Reader) {
+			defer wg.Done()
+			pt.consume(p)
+		}(pipe)
+	}
+	return wg.Wait
+}
+
+// finish sends the single final completion update for the download.
+func (pt *ProgressTracker) finish() {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	pt.sendFinalUpdate()
 }
 
 // processLine analyzes each line and updates state accordingly
@@ -640,7 +664,7 @@ func (pt *ProgressTracker) broadcastUpdate() {
 		Warnings:             pt.state.Warnings,
 	}
 
-	pt.service.hub.broadcast <- update
+	pt.service.hub.Broadcast(update)
 
 	if os.Getenv("DEBUG") == "true" {
 		log.WithFields(log.Fields{
@@ -690,30 +714,5 @@ func (pt *ProgressTracker) updateJobProgress(jobID string, progress float64) err
 	job.Progress = progress
 	job.Warnings = pt.state.Warnings
 	return pt.service.jobs.Update(job)
-}
-
-// Legacy functions for metadata handling (unchanged)
-func (s *Service) processPlaylistMetadata(jobID string, metadataPath string) {
-	data, err := os.ReadFile(metadataPath)
-	if err != nil {
-		log.WithError(err).Error("Failed to read playlist metadata file")
-		return
-	}
-
-	var metadata domain.PlaylistMetadata
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		log.WithError(err).Error("Failed to parse playlist metadata")
-		return
-	}
-
-	update := domain.MetadataUpdate{
-		JobID:    jobID,
-		Metadata: &metadata,
-	}
-	s.hub.broadcast <- update
-
-	if err := s.jobs.StoreMetadata(jobID, &metadata); err != nil {
-		log.WithError(err).Error("Failed to store playlist metadata")
-	}
 }
 

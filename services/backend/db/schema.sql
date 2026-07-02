@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS jobs (
                                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                                     job_id TEXT UNIQUE,
                                     url TEXT NOT NULL,
-                                    is_playlist BOOLEAN DEFAULT FALSE,
                                     status TEXT,
                                     progress REAL,
                                     warnings TEXT,

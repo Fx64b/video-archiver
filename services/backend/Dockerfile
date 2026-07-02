@@ -35,8 +35,8 @@ RUN apk add --no-cache ffmpeg python3 curl gcompat libstdc++ \
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 
+# The SQLite schema is embedded in the binary (services/backend/db/embed.go).
 COPY --from=builder /build/main .
-COPY --from=builder /build/db/schema.sql ./db/
 
 # Data directories are normally bind-mounted by docker compose; the loose
 # permissions keep the image usable when run with an arbitrary --user.

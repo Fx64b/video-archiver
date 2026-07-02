@@ -118,36 +118,16 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 	}()
 
-	// Set up ping/pong handlers for connection health
-	const (
-		pongWait   = 60 * time.Second
-		pingPeriod = (pongWait * 9) / 10 // Send pings at 90% of pong deadline
-	)
+	// Connection health: pings are sent by the hub's per-client writer (the
+	// connection's single writer); this side only refreshes the read deadline
+	// as pongs arrive.
+	const pongWait = 60 * time.Second
 
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-
-	// Start ping ticker in a goroutine
-	done := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(pingPeriod)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
-					log.WithError(err).Debug("Failed to send ping")
-					return
-				}
-			case <-done:
-				return
-			}
-		}
-	}()
-	defer close(done)
 
 	// Read loop - waits for messages or pong responses
 	for {
@@ -537,6 +517,12 @@ type UpdateSettingsRequest struct {
 	Theme               string `json:"theme"`
 	DownloadQuality     int    `json:"download_quality"`
 	ConcurrentDownloads int    `json:"concurrent_downloads"`
+	// Tools preferences are optional (pointers) so requests that omit them —
+	// like the current settings page — don't clobber stored values.
+	ToolsDefaultFormat    *string `json:"tools_default_format,omitempty"`
+	ToolsDefaultQuality   *string `json:"tools_default_quality,omitempty"`
+	ToolsPreserveOriginal *bool   `json:"tools_preserve_original,omitempty"`
+	ToolsOutputPath       *string `json:"tools_output_path,omitempty"`
 }
 
 func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
@@ -571,6 +557,18 @@ func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	settings.Theme = req.Theme
 	settings.DownloadQuality = req.DownloadQuality
 	settings.ConcurrentDownloads = req.ConcurrentDownloads
+	if req.ToolsDefaultFormat != nil {
+		settings.ToolsDefaultFormat = *req.ToolsDefaultFormat
+	}
+	if req.ToolsDefaultQuality != nil {
+		settings.ToolsDefaultQuality = *req.ToolsDefaultQuality
+	}
+	if req.ToolsPreserveOriginal != nil {
+		settings.ToolsPreserveOriginal = *req.ToolsPreserveOriginal
+	}
+	if req.ToolsOutputPath != nil {
+		settings.ToolsOutputPath = *req.ToolsOutputPath
+	}
 
 	if err := h.settingsRepository.Update(settings); err != nil {
 		log.WithError(err).Error("Failed to update settings")
