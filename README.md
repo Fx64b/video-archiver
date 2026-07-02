@@ -117,8 +117,7 @@ between builds.
 ### Manual Setup (Without Docker)
 
 #### Backend Requirements
-- Go 1.23.2 or higher
-- SQLite 3
+- Go 1.25 or higher (SQLite is bundled — the driver is pure Go, no cgo or system SQLite needed)
 - yt-dlp (latest version recommended)
 - ffmpeg (latest version recommended)
 - tygo (for TypeScript type generation): `go install github.com/gzuidhof/tygo@latest`

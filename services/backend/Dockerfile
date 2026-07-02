@@ -1,7 +1,7 @@
 # Build stage: compile the Go binary.
 # The SQLite driver is pure Go (modernc.org/sqlite), so no C toolchain is
 # needed and the binary is fully static — this is what keeps builds fast.
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 
@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Dev stage: hot reload via Air with the source bind-mounted by
 # docker-compose.dev.yml. Media tools match the runtime image so downloads
 # and transcodes work identically in development.
-FROM golang:1.24-alpine AS dev
+FROM golang:1.25-alpine AS dev
 
 COPY --from=denoland/deno:bin-2.1.4 /deno /usr/local/bin/deno
 RUN apk add --no-cache ffmpeg python3 curl gcompat libstdc++ \

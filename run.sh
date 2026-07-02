@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-GO_IMAGE="golang:1.24-alpine"
+GO_IMAGE="golang:1.25-alpine"
 
 # ------------------------------------------------------------------------------
 # Output helpers
@@ -154,7 +154,7 @@ cmd_test() {
         docker run --rm \
             -v "$SCRIPT_DIR/services/backend":/src -w /src \
             "$GO_IMAGE" \
-            sh -c "apk add --no-cache --quiet gcc musl-dev make && make $make_target"
+            sh -c "apk add --no-cache --quiet make && make $make_target"
     fi
 }
 
