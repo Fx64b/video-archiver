@@ -1,0 +1,19 @@
+# Air (hot reload) configuration for ./run.sh dev.
+# Rebuilds and restarts the backend on any Go source change; with the pure-Go
+# SQLite driver an incremental rebuild takes well under a second.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/main ./cmd/api"
+bin = "./tmp/main"
+include_ext = ["go"]
+exclude_dir = ["tmp", "data", "generated"]
+exclude_regex = ["_test\\.go$"]
+delay = 200
+
+[log]
+main_only = true
+
+[misc]
+clean_on_exit = true

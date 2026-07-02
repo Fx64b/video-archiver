@@ -33,6 +33,7 @@ ${BOLD}Usage:${RESET}
 
 ${BOLD}Commands:${RESET}
   start             Start the application (default; builds images on first run)
+  dev               Start the development stack with hot reload (Air + Vite HMR)
   build             Rebuild images, then start
   stop              Stop the application
   logs [service]    Follow container logs (backend, web)
@@ -52,6 +53,7 @@ ${BOLD}Options:${RESET}
 
 ${BOLD}Examples:${RESET}
   ./run.sh                   # start everything
+  ./run.sh dev               # develop with hot reload on :3000
   ./run.sh build --debug     # rebuild and start with debug logging
   ./run.sh reset --yes       # wipe all data without confirmation
   ./run.sh test coverage     # backend tests with coverage report
@@ -100,6 +102,16 @@ cmd_start() {
     local args=(up --remove-orphans)
     [[ "$DETACH" == true ]] && args+=(--detach)
     info "Starting video-archiver (web: http://localhost:3000, api: http://localhost:8080)"
+    "${COMPOSE[@]}" "${args[@]}" ${SERVICES:+"$SERVICES"}
+}
+
+cmd_dev() {
+    require_docker
+    prepare_env
+    local args=(-f docker-compose.dev.yml up --build --remove-orphans)
+    [[ "$DETACH" == true ]] && args+=(--detach)
+    info "Starting dev stack (web: http://localhost:3000, api: http://localhost:8080)"
+    info "Go and frontend changes hot-reload; Ctrl-C to stop"
     "${COMPOSE[@]}" "${args[@]}" ${SERVICES:+"$SERVICES"}
 }
 
@@ -202,7 +214,7 @@ POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        start|build|stop|logs|test|types|clean|reset|help)
+        start|dev|build|stop|logs|test|types|clean|reset|help)
             [[ -n "$COMMAND" ]] && die "multiple commands given: '$COMMAND' and '$1'"
             COMMAND=$1
             ;;

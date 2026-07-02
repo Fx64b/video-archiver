@@ -104,12 +104,11 @@ __     _____ ____  _____ ___
 		toolsService, toolsRepo, tools.NewFFmpeg())
 	toolsHandler := handlers.NewToolsHandler(toolsService)
 
+	// One router, one port: /ws lives next to the REST routes so deployments
+	// only need a single upstream and the frontend can use same-origin URLs.
 	apiRouter := chi.NewRouter()
 	handler.RegisterRoutes(apiRouter)
 	toolsHandler.RegisterRoutes(apiRouter)
-
-	wsRouter := chi.NewRouter()
-	handler.RegisterWSRoutes(wsRouter)
 
 	// Explicit timeouts so slow or stalled clients can't pin server resources
 	// indefinitely. Write timeouts are deliberately absent: /video streams
@@ -120,17 +119,8 @@ __     _____ ____  _____ ___
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-	wsServer := &http.Server{
-		Addr:              cfg.Server.WSPort,
-		Handler:           wsRouter,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
 
-	serverErrors := make(chan error, 2)
-	go func() {
-		fmt.Printf("Starting WebSocket server on %s...\n", cfg.Server.WSPort)
-		serverErrors <- wsServer.ListenAndServe()
-	}()
+	serverErrors := make(chan error, 1)
 	go func() {
 		fmt.Printf("Starting API server on %s...\n", cfg.Server.Port)
 		serverErrors <- apiServer.ListenAndServe()
@@ -155,8 +145,5 @@ __     _____ ____  _____ ___
 	defer cancel()
 	if err := apiServer.Shutdown(shutdownCtx); err != nil {
 		log.WithError(err).Warn("API server shutdown incomplete")
-	}
-	if err := wsServer.Shutdown(shutdownCtx); err != nil {
-		log.WithError(err).Warn("WebSocket server shutdown incomplete")
 	}
 }

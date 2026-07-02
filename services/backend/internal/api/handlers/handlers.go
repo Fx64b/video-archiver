@@ -90,10 +90,6 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Post("/video/{jobID}/transcode", h.HandleRequestTranscode)
 	r.Get("/settings", h.HandleGetSettings)
 	r.Put("/settings", h.HandleUpdateSettings)
-}
-
-func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
-	r.Use(corsMiddleware)
 	r.Get("/ws", h.HandleWebSocket)
 }
 

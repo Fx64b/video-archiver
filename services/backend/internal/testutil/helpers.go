@@ -6,14 +6,14 @@ import (
 	"time"
 	"video-archiver/internal/domain"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // CreateTestDB creates an in-memory SQLite database for testing
 func CreateTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}

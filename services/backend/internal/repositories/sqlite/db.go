@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
+	// The pure-Go driver keeps builds fast: the cgo driver recompiles the
+	// whole SQLite C amalgamation on any cold cache, which took minutes.
+	_ "modernc.org/sqlite"
 	schema "video-archiver/db"
 )
 
@@ -58,8 +60,8 @@ func NewDB(dbPath string) (*sql.DB, error) {
 	// wait for the lock instead of failing with SQLITE_BUSY ("database is
 	// locked") when download workers, progress updates and tools jobs write
 	// concurrently.
-	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on"
-	db, err := sql.Open("sqlite3", dsn)
+	dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

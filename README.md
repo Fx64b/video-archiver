@@ -151,12 +151,14 @@ The application can be configured through environment variables:
 - `DOWNLOAD_PATH`: Directory for downloaded media (default: ./data/downloads)
 - `PROCESSED_PATH`: Directory for processed/converted videos (default: ./data/processed)
 - `DATABASE_PATH`: Path to SQLite database (default: ./data/db/video-archiver.db)
-- `PORT`: API server port (default: 8080)
-- `WS_PORT`: WebSocket server port (default: 8081)
+- `PORT`: API + WebSocket server port (default: 8080; the WebSocket is served at /ws on the same port)
 
 ### Frontend
-- `VITE_SERVER_URL`: URL for backend API, baked in at build time (default: http://localhost:8080)
-- `VITE_SERVER_URL_WS`: URL for WebSocket connection, baked in at build time (default: ws://localhost:8081)
+No configuration is required: the app uses same-origin `/api` URLs and both the
+Vite dev server and the production nginx image proxy them to the backend, so
+one build works on any host. To point a build directly at a backend on a
+different origin, set `VITE_SERVER_URL` / `VITE_SERVER_URL_WS` at build time
+(see `web/.env.local.example`).
 
 ## Known Issues
 
@@ -190,19 +192,20 @@ Please ensure your code follows the project's style and includes appropriate tes
 
 ### Development Setup
 
-For the best development experience:
+```bash
+./run.sh dev
+```
 
-1. Use `./run.sh --build --debug` to start the application with debug logging
-2. For frontend-only changes, you can run the Vite dev server directly:
-   ```bash
-   cd web
-   pnpm install
-   pnpm dev
-   ```
-3. For backend-only changes, you can use the `--backend-only` flag:
-   ```bash
-   ./run.sh --build --backend-only
-   ```
+This starts the hot-reload stack: the backend runs under
+[Air](https://github.com/air-verse/air) and rebuilds in under a second on any
+Go change (the SQLite driver is pure Go — no cgo), and the frontend runs the
+Vite dev server with HMR. Both containers bind-mount your working tree, and
+the Vite proxy forwards `/api` (including the WebSocket) to the backend, so
+there are no URLs to configure and no CORS.
+
+Working without Docker also works: run `cd services/backend && go run ./cmd/api`
+and `cd web && pnpm install && pnpm dev` — the Vite proxy targets
+`http://localhost:8080` by default.
 
 ## License
 

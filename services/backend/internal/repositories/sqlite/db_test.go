@@ -40,7 +40,7 @@ func TestNewDBMigratesLegacyDatabase(t *testing.T) {
 
 	// Simulate a database from before versioning: jobs without the migrated
 	// columns, no tag tables, user_version 0.
-	raw, err := sql.Open("sqlite3", path)
+	raw, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
