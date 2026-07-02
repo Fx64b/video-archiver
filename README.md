@@ -215,7 +215,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ## Roadmap
 
-See the [open issues](https://github.com/Fx64b/video-archiver/issues) for a list of proposed features and known issues.
+See the [open issues](https://github.com/Fx64b/video-archiver/issues) for a list of proposed features and known issues, and [docs/REVISION_PLAN.md](docs/REVISION_PLAN.md) for the phased codebase revision plan (playback fixes, backend stability, dev tooling, frontend architecture).
 
 - ✅ ~~Q3 2025: Media streaming interface & Tools~~ (Tools completed)
 - ✅ ~~Q4 2025: Advanced search and tagging system~~ (Search, tagging and auto-tagging completed)
