@@ -260,6 +260,13 @@ func buildConvertArgs(input string, p *domain.ConvertParameters) ([]string, erro
 	if p.Bitrate != "" {
 		args = append(args, "-b:v", p.Bitrate)
 	}
+
+	// For mp4 output: yuv420p is the only pixel format universally decodable
+	// in browsers, and +faststart moves the moov atom to the front so playback
+	// can begin before the whole file is fetched.
+	if (p.OutputFormat == "" || p.OutputFormat == "mp4") && videoCodec != "copy" {
+		args = append(args, "-pix_fmt", "yuv420p", "-movflags", "+faststart")
+	}
 	return args, nil
 }
 

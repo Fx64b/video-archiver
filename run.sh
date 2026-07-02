@@ -80,7 +80,7 @@ require_docker() {
 prepare_env() {
     CURRENT_UID="$(id -u)" CURRENT_GID="$(id -g)"
     export CURRENT_UID CURRENT_GID
-    mkdir -p data/db data/downloads data/cache
+    mkdir -p data/db data/downloads data/processed data/cache
 }
 
 confirm() {
@@ -179,7 +179,7 @@ cmd_clean() {
 wipe_data() {
     confirm "This deletes the database and ALL downloaded videos. Continue?" || die "aborted"
     "${COMPOSE[@]}" down --remove-orphans
-    rm -rf data/db data/downloads data/cache
+    rm -rf data/db data/downloads data/processed data/cache
     info "All application data removed"
 }
 

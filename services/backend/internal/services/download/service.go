@@ -155,7 +155,7 @@ func (s *Service) DeleteJob(id string) error {
 	}
 
 	if meta, ok := jwm.Metadata.(*domain.VideoMetadata); ok && meta != nil {
-		s.removeVideoFiles(meta)
+		s.removeVideoFiles(jwm.Job.FilePath, meta)
 	}
 
 	if err := s.jobs.DeleteJob(id); err != nil {
@@ -169,8 +169,8 @@ func (s *Service) DeleteJob(id string) error {
 // removeVideoFiles deletes a video's media file and its yt-dlp sidecar files
 // (.info.json etc.) from disk. Missing files are not an error — the library
 // record should be removable even if the file is already gone.
-func (s *Service) removeVideoFiles(meta *domain.VideoMetadata) {
-	path, err := tools.ResolveVideoFile(s.config.DownloadPath, meta)
+func (s *Service) removeVideoFiles(storedPath string, meta *domain.VideoMetadata) {
+	path, err := tools.ResolveVideoFileWithHint(s.config.DownloadPath, storedPath, meta)
 	if err != nil {
 		log.WithField("title", meta.Title).Debug("No media file found to delete")
 		return
@@ -269,7 +269,11 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 		return fmt.Errorf("failed to update job status: %w", err)
 	}
 
-	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s", s.config.DownloadPath)
+	// The explicit %(ext)s matters: without it, merged downloads get an
+	// extension appended by the merger anyway, but single-format downloads
+	// (direct files, extractors offering one muxed format) are written
+	// extension-less, which breaks --add-metadata and container detection.
+	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s.%%(ext)s", s.config.DownloadPath)
 
 	log.Infof("Download Path: %s", basePath)
 
@@ -426,8 +430,6 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	// This provides enough info to distinguish video/audio streams and track progress accurately
 	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
-		"--merge-output-format", "mp4",
 		"--newline", // Important for progress parsing
 		"--progress-template", fmt.Sprintf(
 			"[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s][%%(info.format_id)s][%%(info.format_note)s][%%(info.vcodec)s][%%(info.acodec)s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]",
@@ -444,14 +446,21 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		"--output", outputPath,
 		"--yes-playlist", // Ensure playlist processing is enabled
 	}
-	
+	cmdArgs = append(cmdArgs, downloadFormatArgs(maxQuality)...)
+
+	printFile, cleanupPrintFile := createPrintFile(job.ID)
+	if printFile != "" {
+		defer cleanupPrintFile()
+		cmdArgs = append(cmdArgs, "--print-to-file", "after_move:%(id)s\t%(filepath)s", printFile)
+	}
+
 	// Add channel-specific arguments if this is a channel
 	if _, isChannel := metadataModel.(*domain.ChannelMetadata); isChannel {
 		// For channels, we may want to limit the number of videos or specify sorting
 		// Add any channel-specific parameters here if needed
 		log.Info("Adding channel-specific download parameters")
 	}
-	
+
 	cmdArgs = append(cmdArgs, downloadURL)
 	downloadCmd := exec.CommandContext(ctx, "yt-dlp", cmdArgs...)
 
@@ -483,6 +492,16 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		// But we still log if there's a complete failure
 		log.WithError(err).Warn("Download command completed with error (may be partial failure)")
 	}
+	// Collect where yt-dlp put each finished video so child jobs can record
+	// their media file location.
+	printedPaths := map[string]string{}
+	if printFile != "" {
+		if f, err := os.Open(printFile); err == nil {
+			printedPaths = printedFilepathsByID(f)
+			f.Close()
+		}
+	}
+
 	// Process failed videos from stderr
 	failedVideos := s.parseFailedVideos(stderrBuf.String())
 	if len(failedVideos) > 0 {
@@ -590,6 +609,9 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 				existingJob, err := s.jobs.GetByID(videoJobID)
 				if err == nil && existingJob != nil {
 					log.Debugf("Job already exists for video %s, linking to parent", videoJobID)
+					if existingJob.FilePath == "" {
+						s.recordFilePath(videoJobID, printedPaths[id])
+					}
 					// Job exists, create membership relationship
 					membershipType := "unknown"
 					switch metadataModel.(type) {
@@ -625,6 +647,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					continue
 				}
 				log.Debugf("Successfully created virtual job for video %s", videoJobID)
+				s.recordFilePath(videoJobID, printedPaths[id])
 
 				// Extract and store the video metadata
 				videoMetadata, err := metadata.ExtractMetadata(metadataFilePath)
@@ -887,10 +910,8 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		log.Infof("[Job %s] Starting video download with quality: %dp, concurrency: %d", job.ID, maxQuality, concurrency)
 	}
 
-	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
+	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
-		"--merge-output-format", "mp4",
 		"--newline",
 		// Enhanced progress template with format info to distinguish video/audio streams
 		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s][%(info.format_id)s][%(info.format_note)s][%(info.vcodec)s][%(info.acodec)s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
@@ -902,8 +923,17 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		"--add-metadata",
 		"--write-info-json", // Write metadata with actual downloaded format info
 		"--output", outputPath,
-		job.URL,
-	)
+	}
+	cmdArgs = append(cmdArgs, downloadFormatArgs(maxQuality)...)
+
+	printFile, cleanupPrintFile := createPrintFile(job.ID)
+	if printFile != "" {
+		defer cleanupPrintFile()
+		cmdArgs = append(cmdArgs, "--print-to-file", "after_move:%(filepath)s", printFile)
+	}
+
+	cmdArgs = append(cmdArgs, job.URL)
+	downloadCmd := exec.CommandContext(ctx, "yt-dlp", cmdArgs...)
 
 	stdout, err := downloadCmd.StdoutPipe()
 	if err != nil {
@@ -931,6 +961,13 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 	}
 
 	log.WithField("jobID", job.ID).Info("yt-dlp download completed successfully")
+
+	if printFile != "" {
+		if f, err := os.Open(printFile); err == nil {
+			s.recordFilePath(job.ID, printedFilepath(f))
+			f.Close()
+		}
+	}
 
 	// After download, update metadata with actual downloaded resolution
 	if err := s.updateDownloadedMetadata(job.ID, maxQuality); err != nil {

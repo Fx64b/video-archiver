@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -53,13 +52,20 @@ type Handler struct {
 	downloadService    *download.Service
 	downloadPath       string
 	settingsRepository domain.SettingsRepository
+	toolsService       *tools.Service
+	toolsRepository    domain.ToolsRepository
+	ffmpeg             *tools.FFmpeg
 }
 
-func NewHandler(downloadService *download.Service, downloadPath string, settingsRepository domain.SettingsRepository) *Handler {
+func NewHandler(downloadService *download.Service, downloadPath string, settingsRepository domain.SettingsRepository,
+	toolsService *tools.Service, toolsRepository domain.ToolsRepository, ffmpeg *tools.FFmpeg) *Handler {
 	return &Handler{
 		downloadService:    downloadService,
 		downloadPath:       downloadPath,
 		settingsRepository: settingsRepository,
+		toolsService:       toolsService,
+		toolsRepository:    toolsRepository,
+		ffmpeg:             ffmpeg,
 	}
 }
 
@@ -80,6 +86,8 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Get("/statistics", h.HandleGetStatistics)
 	r.Get("/downloads/{type}", h.HandleGetDownloads)
 	r.Get("/video/{jobID}", h.HandleServeVideo)
+	r.Get("/video/{jobID}/playback-info", h.HandlePlaybackInfo)
+	r.Post("/video/{jobID}/transcode", h.HandleRequestTranscode)
 	r.Get("/settings", h.HandleGetSettings)
 	r.Put("/settings", h.HandleUpdateSettings)
 }
@@ -483,18 +491,9 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Locate the file on disk. yt-dlp's filename sanitization (and the
-	// container extension) cannot be reliably reconstructed from the
-	// title, so this scans the download directory and matches by title.
-	videoPath, err := tools.ResolveVideoFile(h.downloadPath, metadata)
+	videoPath, err := h.locateVideoFile(jobWithMetadata.Job, metadata)
 	if err != nil {
 		log.WithField("title", metadata.Title).Warn("Video file not found")
-		http.Error(w, "Video file not found", http.StatusNotFound)
-		return
-	}
-
-	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
-		log.WithField("path", videoPath).Warn("Video file not found")
 		http.Error(w, "Video file not found", http.StatusNotFound)
 		return
 	}
@@ -504,6 +503,23 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 	// ServeFile handles range requests and content type detection.
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, videoPath)
+}
+
+// locateVideoFile finds a video job's media file, preferring the path recorded
+// at download time. When the file is only found by searching the download
+// directory (legacy rows, moved files), the result is persisted so the next
+// lookup is direct.
+func (h *Handler) locateVideoFile(job *domain.Job, metadata *domain.VideoMetadata) (string, error) {
+	path, err := tools.ResolveVideoFileWithHint(h.downloadPath, job.FilePath, metadata)
+	if err != nil {
+		return "", err
+	}
+	if path != job.FilePath {
+		if err := h.downloadService.GetRepository().SetFilePath(job.ID, path); err != nil {
+			log.WithError(err).WithField("jobID", job.ID).Warn("Failed to persist resolved file path")
+		}
+	}
+	return path, nil
 }
 
 func (h *Handler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {

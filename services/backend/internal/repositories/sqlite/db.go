@@ -135,5 +135,18 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create tag tables: %w", err)
 	}
 
+	// Migration 3: Record the downloaded file's on-disk path on the job
+	hasFilePath, err := columnExists(db, "jobs", "file_path")
+	if err != nil {
+		return fmt.Errorf("check file_path column: %w", err)
+	}
+
+	if !hasFilePath {
+		_, err := db.Exec("ALTER TABLE jobs ADD COLUMN file_path TEXT")
+		if err != nil {
+			return fmt.Errorf("add file_path column: %w", err)
+		}
+	}
+
 	return nil
 }

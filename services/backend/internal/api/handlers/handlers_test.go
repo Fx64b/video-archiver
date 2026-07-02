@@ -52,7 +52,7 @@ func setupTestHandler(t *testing.T) (*Handler, *testutil.MockJobRepository) {
 	}
 	service := download.NewService(config)
 
-	handler := NewHandler(service, "/tmp/test", mockSettings)
+	handler := NewHandler(service, "/tmp/test", mockSettings, nil, nil, nil)
 	return handler, mockRepo
 }
 
@@ -344,7 +344,7 @@ func TestHandleRecent(t *testing.T) {
 				MaxQuality:    1080,
 			}
 			service := download.NewService(config)
-			handler = NewHandler(service, "/tmp/test", mockSettings)
+			handler = NewHandler(service, "/tmp/test", mockSettings, nil, nil, nil)
 
 			// Setup test data
 			for i := 0; i < tt.setupJobs; i++ {

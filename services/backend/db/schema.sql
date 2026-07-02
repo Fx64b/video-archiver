@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS jobs (
                                     status TEXT,
                                     progress REAL,
                                     warnings TEXT,
+                                    file_path TEXT,
                                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

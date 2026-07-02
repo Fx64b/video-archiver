@@ -26,6 +26,7 @@ func CreateTestDB(t *testing.T) *sql.DB {
 		status TEXT NOT NULL,
 		progress REAL NOT NULL,
 		warnings TEXT,
+		file_path TEXT,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
 	);
@@ -223,6 +224,15 @@ func (m *MockJobRepository) Update(job *domain.Job) error {
 		return sql.ErrNoRows
 	}
 	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *MockJobRepository) SetFilePath(jobID string, path string) error {
+	job, exists := m.jobs[jobID]
+	if !exists {
+		return sql.ErrNoRows
+	}
+	job.FilePath = path
 	return nil
 }
 

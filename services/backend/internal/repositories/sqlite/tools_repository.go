@@ -132,6 +132,38 @@ func (r *ToolsRepository) GetByStatus(status domain.ToolsJobStatus) ([]*domain.T
 	return r.scanJobs(rows)
 }
 
+// FindLatestConvertForInput returns the most recent convert job whose only
+// input is the given download job — the transcode-for-playback lookup. Returns
+// nil (no error) when none exists.
+func (r *ToolsRepository) FindLatestConvertForInput(jobID string) (*domain.ToolsJob, error) {
+	inputFilesJSON, err := json.Marshal([]string{jobID})
+	if err != nil {
+		return nil, fmt.Errorf("marshal input files: %w", err)
+	}
+
+	rows, err := r.db.Query(`
+        SELECT id, operation_type, status, progress, input_files, input_type,
+               output_file, parameters, error_message, created_at, updated_at,
+               completed_at, estimated_size, actual_size
+        FROM tools_jobs
+        WHERE operation_type = ? AND input_files = ?
+        ORDER BY created_at DESC
+        LIMIT 1`, domain.OpTypeConvert, string(inputFilesJSON))
+	if err != nil {
+		return nil, fmt.Errorf("query convert job for input: %w", err)
+	}
+	defer rows.Close()
+
+	jobs, err := r.scanJobs(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(jobs) == 0 {
+		return nil, nil
+	}
+	return jobs[0], nil
+}
+
 func (r *ToolsRepository) Delete(id string) error {
 	_, err := r.db.Exec(`DELETE FROM tools_jobs WHERE id = ?`, id)
 	if err != nil {

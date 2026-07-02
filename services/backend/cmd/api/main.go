@@ -100,7 +100,8 @@ __     _____ ____  _____ ___
 	}
 	defer toolsService.Stop()
 
-	handler := handlers.NewHandler(downloadService, cfg.Server.DownloadPath, settingsRepo)
+	handler := handlers.NewHandler(downloadService, cfg.Server.DownloadPath, settingsRepo,
+		toolsService, toolsRepo, tools.NewFFmpeg())
 	toolsHandler := handlers.NewToolsHandler(toolsService)
 
 	apiRouter := chi.NewRouter()

@@ -344,9 +344,14 @@ func (s *Service) resolveVideoPath(jobID string) (string, error) {
 		return "", fmt.Errorf("job %s is not a video", jobID)
 	}
 
-	path, err := ResolveVideoFile(s.downloadPath, meta)
+	path, err := ResolveVideoFileWithHint(s.downloadPath, jwm.Job.FilePath, meta)
 	if err != nil {
 		return "", fmt.Errorf("job %s: %w", jobID, err)
+	}
+	if path != jwm.Job.FilePath {
+		if err := s.jobRepo.SetFilePath(jobID, path); err != nil {
+			log.WithError(err).WithField("jobID", jobID).Warn("Failed to persist resolved file path")
+		}
 	}
 	return path, nil
 }
