@@ -75,6 +75,24 @@ CREATE TABLE IF NOT EXISTS tools_jobs (
                                           actual_size INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS tags (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS job_tags (
+                                        job_id TEXT NOT NULL,
+                                        tag_id INTEGER NOT NULL,
+                                        source TEXT NOT NULL DEFAULT 'user',
+                                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                        PRIMARY KEY (job_id, tag_id),
+                                        FOREIGN KEY (job_id) REFERENCES jobs (job_id),
+                                        FOREIGN KEY (tag_id) REFERENCES tags (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_tags_tag_id ON job_tags(tag_id);
+
 CREATE INDEX IF NOT EXISTS idx_tools_jobs_status ON tools_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_tools_jobs_created_at ON tools_jobs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tools_jobs_operation_type ON tools_jobs(operation_type);

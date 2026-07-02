@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -68,8 +70,13 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Delete("/download/{id}", h.HandleCancelDownload)
 	r.Get("/recent", h.HandleRecent)
 	r.Get("/job/{id}", h.HandleGetJob)
+	r.Delete("/job/{id}", h.HandleDeleteJob)
 	r.Get("/job/{id}/parents", h.HandleGetJobParents)
 	r.Get("/job/{id}/videos", h.HandleGetJobVideos)
+	r.Get("/job/{id}/tags", h.HandleGetJobTags)
+	r.Post("/job/{id}/tags", h.HandleAddJobTags)
+	r.Delete("/job/{id}/tags/{tagID}", h.HandleRemoveJobTag)
+	r.Get("/tags", h.HandleListTags)
 	r.Get("/statistics", h.HandleGetStatistics)
 	r.Get("/downloads/{type}", h.HandleGetDownloads)
 	r.Get("/video/{jobID}", h.HandleServeVideo)
@@ -239,6 +246,114 @@ func (h *Handler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, Response{Message: jobWithMetadata})
 }
 
+// HandleDeleteJob removes a download from the library, including the media
+// file on disk for videos. Running jobs are cancelled before deletion.
+func (h *Handler) HandleDeleteJob(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	if jobID == "" {
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	log.Infof("Received delete request for job: %s", jobID)
+
+	if err := h.downloadService.DeleteJob(jobID); err != nil {
+		log.WithError(err).Error("Failed to delete job")
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Job not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to delete job", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, Response{Message: "Download deleted successfully"})
+}
+
+func (h *Handler) HandleListTags(w http.ResponseWriter, r *http.Request) {
+	tags, err := h.downloadService.GetRepository().ListTags()
+	if err != nil {
+		log.WithError(err).Error("Failed to list tags")
+		http.Error(w, "Failed to list tags", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, Response{Message: tags})
+}
+
+func (h *Handler) HandleGetJobTags(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	if jobID == "" {
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	tags, err := h.downloadService.GetRepository().GetTagsForJob(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get tags for job")
+		http.Error(w, "Failed to get tags", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, Response{Message: tags})
+}
+
+type AddTagsRequest struct {
+	Tags []string `json:"tags"`
+}
+
+func (h *Handler) HandleAddJobTags(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	if jobID == "" {
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	var req AddTagsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	if len(req.Tags) == 0 {
+		http.Error(w, "At least one tag is required", http.StatusBadRequest)
+		return
+	}
+
+	// Make sure the job exists before tagging it.
+	if _, err := h.downloadService.GetRepository().GetByID(jobID); err != nil {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+
+	tags, err := h.downloadService.GetRepository().AddTagsToJob(jobID, req.Tags, domain.TagSourceUser)
+	if err != nil {
+		log.WithError(err).Error("Failed to add tags to job")
+		http.Error(w, "Failed to add tags", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, Response{Message: tags})
+}
+
+func (h *Handler) HandleRemoveJobTag(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	tagIDParam := chi.URLParam(r, "tagID")
+	if jobID == "" || tagIDParam == "" {
+		http.Error(w, "Missing job ID or tag ID", http.StatusBadRequest)
+		return
+	}
+
+	tagID, err := strconv.ParseInt(tagIDParam, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid tag ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.downloadService.GetRepository().RemoveTagFromJob(jobID, tagID); err != nil {
+		log.WithError(err).Error("Failed to remove tag from job")
+		http.Error(w, "Failed to remove tag", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, Response{Message: "Tag removed successfully"})
+}
+
 func (h *Handler) HandleGetJobParents(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 	if jobID == "" {
@@ -315,7 +430,14 @@ func (h *Handler) HandleGetDownloads(w http.ResponseWriter, r *http.Request) {
 		order = "desc"
 	}
 
-	items, totalCount, err := h.downloadService.GetRepository().GetMetadataByType(contentType, page, limit, sortBy, order)
+	items, totalCount, err := h.downloadService.GetRepository().GetMetadataByType(contentType, domain.MetadataQuery{
+		Page:   page,
+		Limit:  limit,
+		SortBy: sortBy,
+		Order:  order,
+		Search: r.URL.Query().Get("search"),
+		Tag:    r.URL.Query().Get("tag"),
+	})
 	if err != nil {
 		log.WithError(err).Errorf("Failed to get %s", contentType)
 		http.Error(w, fmt.Sprintf("Failed to get %s", contentType), http.StatusInternalServerError)

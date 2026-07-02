@@ -21,6 +21,17 @@ export interface Job {
 }
 
 export type JobRepository = any;
+/**
+ * MetadataQuery holds the listing options for GetMetadataByType.
+ */
+export interface MetadataQuery {
+  Page: number /* int */;
+  Limit: number /* int */;
+  SortBy: string;
+  Order: string;
+  Search: string; // case-insensitive match against title/channel
+  Tag: string; // only items carrying this tag
+}
 export type JobType = string;
 export const JobTypeVideo: JobType = "video";
 export const JobTypeAudio: JobType = "audio";
@@ -31,6 +42,7 @@ export const JobTypeMetadata: JobType = "metadata";
 export interface JobWithMetadata {
   job?: Job;
   metadata?: Metadata;
+  tags?: Tag[];
 }
 export interface ProgressUpdate {
   jobID: string;
@@ -191,6 +203,29 @@ export interface VideoStorageInfo {
   title: string;
   size: number /* int */;
   channel: string;
+}
+
+//////////
+// source: tags.go
+
+/**
+ * TagSource records how a tag got attached to a job.
+ */
+export const TagSourceUser = "user";
+/**
+ * TagSource records how a tag got attached to a job.
+ */
+export const TagSourceAuto = "auto";
+/**
+ * Tag is a label attached to a downloaded video, playlist or channel. Count is
+ * only populated when listing the tag catalog; Source is only populated when a
+ * tag is returned in the context of a specific job.
+ */
+export interface Tag {
+  id: number /* int64 */;
+  name: string;
+  source?: string;
+  count?: number /* int */;
 }
 
 //////////

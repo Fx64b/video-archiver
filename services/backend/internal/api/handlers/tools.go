@@ -207,10 +207,18 @@ func (h *ToolsHandler) HandleServeOutput(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(path)))
+	// inline=1 lets the frontend preview the file (video/audio playback in
+	// the browser) instead of forcing a download.
+	disposition := "attachment"
+	if r.URL.Query().Get("inline") == "1" {
+		disposition = "inline"
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, filepath.Base(path)))
 	http.ServeFile(w, r, path)
 }
 
+// HandleCancelJob cancels a queued/running job, or deletes a finished one
+// (record and output file) so processed files don't accumulate forever.
 func (h *ToolsHandler) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 	if jobID == "" {
@@ -218,12 +226,33 @@ func (h *ToolsHandler) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.toolsService.CancelJob(jobID); err != nil {
-		log.WithError(err).Error("Failed to cancel tools job")
+	job, err := h.toolsService.GetJobByID(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get tools job")
+		http.Error(w, "Failed to get job", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+
+	if job.Status == domain.ToolsJobStatusPending || job.Status == domain.ToolsJobStatusProcessing {
+		if err := h.toolsService.CancelJob(jobID); err != nil {
+			log.WithError(err).Error("Failed to cancel tools job")
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, Response{Message: "Job cancelled successfully"})
+		return
+	}
+
+	if err := h.toolsService.DeleteJob(jobID); err != nil {
+		log.WithError(err).Error("Failed to delete tools job")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, Response{Message: "Job cancelled successfully"})
+	writeJSON(w, http.StatusOK, Response{Message: "Job deleted successfully"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

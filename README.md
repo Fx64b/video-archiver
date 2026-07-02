@@ -22,6 +22,9 @@ Video Archiver allows you to download and organize videos from YouTube for offli
 - Dark/Light/System theme support
 - Dashboard with comprehensive statistics about your media collection
 - Complete metadata extraction and display (videos, playlists, channels)
+- **Tagging and auto-tagging**: organize your library with custom tags; categories, channel names and keywords are tagged automatically from metadata
+- **Search and filtering**: full library search by title or channel, plus tag-based filtering
+- Library management: delete downloads (including files on disk) with confirmation
 - Quality selection (360p, 480p, 720p, 1080p, 1440p, 4K)
 - Configurable concurrent downloads (1-10 simultaneous downloads)
 - **Video Processing Tools:**
@@ -33,10 +36,9 @@ Video Archiver allows you to download and organize videos from YouTube for offli
   - Rotate videos (90°, 180°, 270°)
   - Create custom workflows (chain multiple operations)
 - Real-time progress tracking for tool operations
+- Processed file management: preview (in-browser playback), download and delete tool outputs
 
 ### Planned Features
-- Enhanced metadata management and organization
-- Advanced search and categorization
 - Mobile-friendly streaming interface
 - User authentication and multiple user support
 - Download scheduling
@@ -216,5 +218,5 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 See the [open issues](https://github.com/Fx64b/video-archiver/issues) for a list of proposed features and known issues.
 
 - ✅ ~~Q3 2025: Media streaming interface & Tools~~ (Tools completed)
-- Q4 2025: Advanced search and tagging system
+- ✅ ~~Q4 2025: Advanced search and tagging system~~ (Search, tagging and auto-tagging completed)
 - 2026: User authentication, API documentation, and mobile-friendly streaming

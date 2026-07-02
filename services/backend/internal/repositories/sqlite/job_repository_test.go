@@ -370,7 +370,12 @@ func TestJobRepository_GetMetadataByType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			items, total, err := repo.GetMetadataByType(tt.contentType, tt.page, tt.limit, "created_at", "desc")
+			items, total, err := repo.GetMetadataByType(tt.contentType, domain.MetadataQuery{
+				Page:   tt.page,
+				Limit:  tt.limit,
+				SortBy: "created_at",
+				Order:  "desc",
+			})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetMetadataByType() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -187,6 +187,33 @@ func (s *Service) CancelJob(id string) error {
 	return nil
 }
 
+// DeleteJob removes a finished job's record and its output file from the
+// processed directory. Running or queued jobs must be cancelled instead.
+func (s *Service) DeleteJob(id string) error {
+	job, err := s.toolsRepo.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("get job: %w", err)
+	}
+	if job == nil {
+		return fmt.Errorf("job not found")
+	}
+	if job.Status == domain.ToolsJobStatusPending || job.Status == domain.ToolsJobStatusProcessing {
+		return fmt.Errorf("cannot delete a %s job, cancel it first", job.Status)
+	}
+
+	if path, err := s.ResolveOutputFile(job); err == nil {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			log.WithError(err).WithField("path", path).Warn("Failed to delete tools output file")
+		}
+	}
+
+	if err := s.toolsRepo.Delete(id); err != nil {
+		return fmt.Errorf("delete job record: %w", err)
+	}
+	log.WithField("job_id", id).Info("Tools job deleted")
+	return nil
+}
+
 func (s *Service) worker() {
 	defer s.wg.Done()
 	for {

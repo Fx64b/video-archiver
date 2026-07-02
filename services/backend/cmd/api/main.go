@@ -56,6 +56,14 @@ __     _____ ____  _____ ___
 	settingsRepo := sqlite.NewSettingsRepository(db)
 	toolsRepo := sqlite.NewToolsRepository(db)
 
+	// Tag items downloaded before auto-tagging existed; idempotent, so it can
+	// run on every startup without growing the tag set.
+	go func() {
+		if err := jobRepo.BackfillAutoTags(); err != nil {
+			log.WithError(err).Warn("Auto-tag backfill failed")
+		}
+	}()
+
 	fmt.Println("Starting Download Service...")
 	downloadService := download.NewService(&download.Config{
 		JobRepository:      jobRepo,
