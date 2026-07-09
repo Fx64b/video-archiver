@@ -112,7 +112,8 @@ export async function getToolJob(jobId: string): Promise<ToolsJob> {
 export async function listToolJobs(
     page = 1,
     limit = 20,
-    status?: string
+    status?: string,
+    operationType?: string
 ): Promise<PaginatedJobs> {
     // Query built by hand: BASE is a relative path (/api) by default, which
     // the URL constructor rejects.
@@ -122,6 +123,9 @@ export async function listToolJobs(
     })
     if (status) {
         params.set('status', status)
+    }
+    if (operationType) {
+        params.set('operation_type', operationType)
     }
     const res = await fetch(`${BASE}/tools/jobs?${params}`)
     if (!res.ok) {
@@ -139,4 +143,12 @@ export function toolOutputUrl(jobId: string): string {
 /** URL that streams the file inline, for in-browser preview/playback. */
 export function toolOutputPreviewUrl(jobId: string): string {
     return `${BASE}/tools/jobs/${jobId}/output?inline=1`
+}
+
+/**
+ * URL of a completed video job's poster image. The backend answers 404 for
+ * audio outputs, so callers should only request it for video jobs.
+ */
+export function toolThumbnailUrl(jobId: string): string {
+    return `${BASE}/tools/jobs/${jobId}/thumbnail`
 }

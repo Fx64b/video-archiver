@@ -28,6 +28,7 @@ func (h *ToolsHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/jobs", h.HandleListJobs)
 		r.Get("/jobs/{id}", h.HandleGetJob)
 		r.Get("/jobs/{id}/output", h.HandleServeOutput)
+		r.Get("/jobs/{id}/thumbnail", h.HandleServeThumbnail)
 		r.Delete("/jobs/{id}", h.HandleCancelJob)
 	})
 }
@@ -214,6 +215,46 @@ func (h *ToolsHandler) HandleServeOutput(w http.ResponseWriter, r *http.Request)
 		disposition = "inline"
 	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, filepath.Base(path)))
+	http.ServeFile(w, r, path)
+}
+
+// HandleServeThumbnail serves the poster image of a completed video job,
+// generating it on first request when it doesn't exist yet (which also covers
+// jobs completed before thumbnails were introduced). Audio outputs have no
+// poster and return 404.
+func (h *ToolsHandler) HandleServeThumbnail(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	if jobID == "" {
+		http.Error(w, "Missing job ID", http.StatusBadRequest)
+		return
+	}
+
+	job, err := h.toolsService.GetJobByID(jobID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get tools job")
+		http.Error(w, "Failed to get job", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+	if job.Status != domain.ToolsJobStatusComplete {
+		http.Error(w, "Job output is not available yet", http.StatusConflict)
+		return
+	}
+
+	path, err := h.toolsService.ThumbnailPath(job)
+	if err != nil {
+		log.WithError(err).WithField("job_id", jobID).Debug("No thumbnail for tools job")
+		http.Error(w, "Thumbnail not available", http.StatusNotFound)
+		return
+	}
+
+	// A job's thumbnail never changes once generated, and it is deleted
+	// together with the job, so long-lived caching is safe.
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFile(w, r, path)
 }
 

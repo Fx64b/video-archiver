@@ -30,11 +30,13 @@ func (r *ToolsRepository) Create(job *domain.ToolsJob) error {
 	_, err = r.db.Exec(`
         INSERT INTO tools_jobs (id, operation_type, status, progress, input_files, input_type,
                                  output_file, parameters, error_message, created_at, updated_at,
-                                 completed_at, estimated_size, actual_size)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                 completed_at, estimated_size, actual_size,
+                                 media_kind, duration, width, height, video_codec, audio_codec)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		job.ID, job.OperationType, job.Status, job.Progress, string(inputFilesJSON), job.InputType,
 		job.OutputFile, string(paramsJSON), job.ErrorMessage, job.CreatedAt, job.UpdatedAt,
-		job.CompletedAt, job.EstimatedSize, job.ActualSize)
+		job.CompletedAt, job.EstimatedSize, job.ActualSize,
+		job.MediaKind, job.Duration, job.Width, job.Height, job.VideoCodec, job.AudioCodec)
 	if err != nil {
 		return fmt.Errorf("create tools job: %w", err)
 	}
@@ -58,11 +60,13 @@ func (r *ToolsRepository) Update(job *domain.ToolsJob) error {
         UPDATE tools_jobs
         SET operation_type = ?, status = ?, progress = ?, input_files = ?, input_type = ?,
             output_file = ?, parameters = ?, error_message = ?, updated_at = ?,
-            completed_at = ?, estimated_size = ?, actual_size = ?
+            completed_at = ?, estimated_size = ?, actual_size = ?,
+            media_kind = ?, duration = ?, width = ?, height = ?, video_codec = ?, audio_codec = ?
         WHERE id = ?`,
 		job.OperationType, job.Status, job.Progress, string(inputFilesJSON), job.InputType,
 		job.OutputFile, string(paramsJSON), job.ErrorMessage, job.UpdatedAt,
-		job.CompletedAt, job.EstimatedSize, job.ActualSize, job.ID)
+		job.CompletedAt, job.EstimatedSize, job.ActualSize,
+		job.MediaKind, job.Duration, job.Width, job.Height, job.VideoCodec, job.AudioCodec, job.ID)
 	if err != nil {
 		return fmt.Errorf("update tools job: %w", err)
 	}
@@ -76,12 +80,14 @@ func (r *ToolsRepository) GetByID(id string) (*domain.ToolsJob, error) {
 	err := r.db.QueryRow(`
         SELECT id, operation_type, status, progress, input_files, input_type,
                output_file, parameters, error_message, created_at, updated_at,
-               completed_at, estimated_size, actual_size
+               completed_at, estimated_size, actual_size,
+               media_kind, duration, width, height, video_codec, audio_codec
         FROM tools_jobs
         WHERE id = ?`, id).
 		Scan(&job.ID, &job.OperationType, &job.Status, &job.Progress, &inputFilesJSON, &job.InputType,
 			&job.OutputFile, &paramsJSON, &job.ErrorMessage, &job.CreatedAt, &job.UpdatedAt,
-			&job.CompletedAt, &job.EstimatedSize, &job.ActualSize)
+			&job.CompletedAt, &job.EstimatedSize, &job.ActualSize,
+			&job.MediaKind, &job.Duration, &job.Width, &job.Height, &job.VideoCodec, &job.AudioCodec)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -105,7 +111,8 @@ func (r *ToolsRepository) GetAll() ([]*domain.ToolsJob, error) {
 	rows, err := r.db.Query(`
         SELECT id, operation_type, status, progress, input_files, input_type,
                output_file, parameters, error_message, created_at, updated_at,
-               completed_at, estimated_size, actual_size
+               completed_at, estimated_size, actual_size,
+               media_kind, duration, width, height, video_codec, audio_codec
         FROM tools_jobs
         ORDER BY created_at DESC`)
 	if err != nil {
@@ -120,7 +127,8 @@ func (r *ToolsRepository) GetByStatus(status domain.ToolsJobStatus) ([]*domain.T
 	rows, err := r.db.Query(`
         SELECT id, operation_type, status, progress, input_files, input_type,
                output_file, parameters, error_message, created_at, updated_at,
-               completed_at, estimated_size, actual_size
+               completed_at, estimated_size, actual_size,
+               media_kind, duration, width, height, video_codec, audio_codec
         FROM tools_jobs
         WHERE status = ?
         ORDER BY created_at DESC`, status)
@@ -207,7 +215,8 @@ func (r *ToolsRepository) List(page int, limit int, status string, operationType
 	query := fmt.Sprintf(`
         SELECT id, operation_type, status, progress, input_files, input_type,
                output_file, parameters, error_message, created_at, updated_at,
-               completed_at, estimated_size, actual_size
+               completed_at, estimated_size, actual_size,
+               media_kind, duration, width, height, video_codec, audio_codec
         FROM tools_jobs
         %s
         ORDER BY created_at DESC
@@ -237,7 +246,8 @@ func (r *ToolsRepository) scanJobs(rows *sql.Rows) ([]*domain.ToolsJob, error) {
 
 		err := rows.Scan(&job.ID, &job.OperationType, &job.Status, &job.Progress, &inputFilesJSON, &job.InputType,
 			&job.OutputFile, &paramsJSON, &job.ErrorMessage, &job.CreatedAt, &job.UpdatedAt,
-			&job.CompletedAt, &job.EstimatedSize, &job.ActualSize)
+			&job.CompletedAt, &job.EstimatedSize, &job.ActualSize,
+			&job.MediaKind, &job.Duration, &job.Width, &job.Height, &job.VideoCodec, &job.AudioCodec)
 		if err != nil {
 			return nil, fmt.Errorf("scan tools job: %w", err)
 		}

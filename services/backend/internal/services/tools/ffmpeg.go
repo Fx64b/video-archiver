@@ -57,10 +57,13 @@ type ffprobeOutput struct {
 		BitRate  string `json:"bit_rate"`
 	} `json:"format"`
 	Streams []struct {
-		CodecType string `json:"codec_type"`
-		CodecName string `json:"codec_name"`
-		Width     int    `json:"width"`
-		Height    int    `json:"height"`
+		CodecType   string `json:"codec_type"`
+		CodecName   string `json:"codec_name"`
+		Width       int    `json:"width"`
+		Height      int    `json:"height"`
+		Disposition struct {
+			AttachedPic int `json:"attached_pic"`
+		} `json:"disposition"`
 	} `json:"streams"`
 }
 
@@ -104,6 +107,12 @@ func parseProbeOutput(data []byte) (*MediaInfo, error) {
 	for _, s := range raw.Streams {
 		switch s.CodecType {
 		case "video":
+			// Embedded cover art (e.g. in an mp3) shows up as a video stream
+			// with the attached_pic disposition; it must not make an audio
+			// file count as video.
+			if s.Disposition.AttachedPic == 1 {
+				continue
+			}
 			if !info.HasVideo {
 				info.HasVideo = true
 				info.VideoCodec = s.CodecName
@@ -118,6 +127,41 @@ func parseProbeOutput(data []byte) (*MediaInfo, error) {
 		}
 	}
 	return info, nil
+}
+
+// ExtractPoster writes a single scaled JPEG frame from input to output. seek is
+// the offset in seconds to grab the frame from (placed before -i so ffmpeg can
+// seek without decoding the whole file).
+func (f *FFmpeg) ExtractPoster(ctx context.Context, input, output string, seek float64) error {
+	if seek < 0 {
+		seek = 0
+	}
+	args := []string{
+		"-hide_banner", "-nostdin",
+		"-ss", fmt.Sprintf("%.2f", seek),
+		"-i", input,
+		"-frames:v", "1",
+		"-vf", "scale=480:-2",
+		"-q:v", "4",
+		// The caller writes to a temp name without an image extension, so
+		// the format cannot be inferred from the filename.
+		"-f", "image2",
+		"-y", output,
+	}
+	out, err := exec.CommandContext(ctx, f.ffmpegPath, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("extract poster from %s: %w: %s", input, err, tailOf(string(out)))
+	}
+	return nil
+}
+
+// tailOf returns the last few lines of ffmpeg output for error messages.
+func tailOf(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) > maxTailLines {
+		lines = lines[len(lines)-maxTailLines:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Run executes ffmpeg with the supplied operation args, appending the universal

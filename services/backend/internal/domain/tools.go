@@ -51,7 +51,21 @@ type ToolsJob struct {
 	CompletedAt   *time.Time         `json:"completed_at,omitempty"`
 	EstimatedSize int64              `json:"estimated_size,omitempty"`
 	ActualSize    int64              `json:"actual_size,omitempty"`
+	// Probed from the produced file on completion; zero values on legacy rows
+	// or when ffprobe failed.
+	MediaKind  string  `json:"media_kind,omitempty"` // MediaKindVideo or MediaKindAudio
+	Duration   float64 `json:"duration,omitempty"`   // seconds
+	Width      int     `json:"width,omitempty"`
+	Height     int     `json:"height,omitempty"`
+	VideoCodec string  `json:"video_codec,omitempty"`
+	AudioCodec string  `json:"audio_codec,omitempty"`
 }
+
+// Media kind of a produced output file, probed after the job completes.
+const (
+	MediaKindVideo = "video"
+	MediaKindAudio = "audio"
+)
 
 // Operation-specific parameter structures. These mirror the JSON the frontend
 // submits under the "parameters" key for each operation.

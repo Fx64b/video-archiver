@@ -278,7 +278,25 @@ export interface ToolsJob {
   completed_at?: string /* RFC3339 */;
   estimated_size?: number /* int64 */;
   actual_size?: number /* int64 */;
+  /**
+   * Probed from the produced file on completion; zero values on legacy rows
+   * or when ffprobe failed.
+   */
+  media_kind?: string; // MediaKindVideo or MediaKindAudio
+  duration?: number /* float64 */; // seconds
+  width?: number /* int */;
+  height?: number /* int */;
+  video_codec?: string;
+  audio_codec?: string;
 }
+/**
+ * Media kind of a produced output file, probed after the job completes.
+ */
+export const MediaKindVideo = "video";
+/**
+ * Media kind of a produced output file, probed after the job completes.
+ */
+export const MediaKindAudio = "audio";
 export interface TrimParameters {
   start_time: string; // HH:MM:SS(.ms) or seconds
   end_time: string; // HH:MM:SS(.ms) or seconds

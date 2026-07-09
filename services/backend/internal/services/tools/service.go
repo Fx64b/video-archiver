@@ -206,6 +206,7 @@ func (s *Service) DeleteJob(id string) error {
 			log.WithError(err).WithField("path", path).Warn("Failed to delete tools output file")
 		}
 	}
+	s.removeThumbnail(job.ID)
 
 	if err := s.toolsRepo.Delete(id); err != nil {
 		return fmt.Errorf("delete job record: %w", err)
@@ -276,12 +277,42 @@ func (s *Service) processJob(ctx context.Context, job *domain.ToolsJob) {
 	if stat, statErr := os.Stat(outputPath); statErr == nil {
 		job.ActualSize = stat.Size()
 	}
+	s.enrichOutputMetadata(job, outputPath)
 	if err := s.toolsRepo.Update(job); err != nil {
 		log.WithError(err).Error("Failed to update completed job")
 		return
 	}
+	// Warm the poster image so the frontend gets it on first paint. Best
+	// effort — the thumbnail endpoint regenerates lazily if this fails.
+	if job.MediaKind == domain.MediaKindVideo {
+		if _, err := s.ThumbnailPath(job); err != nil {
+			log.WithError(err).WithField("job_id", job.ID).Warn("Failed to pre-generate thumbnail")
+		}
+	}
 	s.broadcast(job, 100, "Complete", 0, 0)
 	log.WithFields(log.Fields{"job_id": job.ID, "output": outputPath}).Info("Tools job completed")
+}
+
+// enrichOutputMetadata probes the produced file and records its media kind,
+// duration, dimensions and codecs on the job. Probe failure is non-fatal: a
+// missing badge in the UI beats failing a job whose output exists.
+func (s *Service) enrichOutputMetadata(job *domain.ToolsJob, outputPath string) {
+	info, err := s.ffmpeg.Probe(outputPath)
+	if err != nil {
+		log.WithError(err).WithField("job_id", job.ID).Warn("Failed to probe tools output")
+		return
+	}
+	job.Duration = info.Duration
+	job.VideoCodec = info.VideoCodec
+	job.AudioCodec = info.AudioCodec
+	switch {
+	case info.HasVideo:
+		job.MediaKind = domain.MediaKindVideo
+		job.Width = info.Width
+		job.Height = info.Height
+	case info.HasAudio:
+		job.MediaKind = domain.MediaKindAudio
+	}
 }
 
 // resolveInputs expands playlist/channel jobs to their videos and resolves each
