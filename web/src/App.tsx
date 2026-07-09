@@ -16,6 +16,7 @@ import Concat from './pages/tools/Concat'
 import Convert from './pages/tools/Convert'
 import ExtractAudio from './pages/tools/ExtractAudio'
 import Quality from './pages/tools/Quality'
+import Results from './pages/tools/Results'
 import Rotate from './pages/tools/Rotate'
 import ToolsHome from './pages/tools/ToolsHome'
 import Trim from './pages/tools/Trim'
@@ -58,6 +59,7 @@ export default function App() {
                         />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/tools" element={<ToolsHome />} />
+                        <Route path="/tools/results" element={<Results />} />
                         <Route path="/tools/trim" element={<Trim />} />
                         <Route path="/tools/concat" element={<Concat />} />
                         <Route path="/tools/convert" element={<Convert />} />

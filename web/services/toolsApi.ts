@@ -112,13 +112,17 @@ export async function getToolJob(jobId: string): Promise<ToolsJob> {
 export async function listToolJobs(
     page = 1,
     limit = 20,
-    status?: string
+    status?: string,
+    operationType?: string
 ): Promise<PaginatedJobs> {
     const url = new URL(`${BASE}/tools/jobs`)
     url.searchParams.set('page', String(page))
     url.searchParams.set('limit', String(limit))
     if (status) {
         url.searchParams.set('status', status)
+    }
+    if (operationType) {
+        url.searchParams.set('operation_type', operationType)
     }
     const res = await fetch(url.toString())
     if (!res.ok) {
@@ -136,4 +140,12 @@ export function toolOutputUrl(jobId: string): string {
 /** URL that streams the file inline, for in-browser preview/playback. */
 export function toolOutputPreviewUrl(jobId: string): string {
     return `${BASE}/tools/jobs/${jobId}/output?inline=1`
+}
+
+/**
+ * URL of a completed video job's poster image. The backend answers 404 for
+ * audio outputs, so callers should only request it for video jobs.
+ */
+export function toolThumbnailUrl(jobId: string): string {
+    return `${BASE}/tools/jobs/${jobId}/thumbnail`
 }
