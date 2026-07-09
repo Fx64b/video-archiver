@@ -20,12 +20,14 @@ interface VideoPlayerProps {
     jobId: string
     metadata?: VideoMetadata
     className?: string
+    isAudio?: boolean
 }
 
 export default function VideoPlayer({
     jobId,
     metadata,
     className = '',
+    isAudio = false,
 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -159,6 +161,16 @@ export default function VideoPlayer({
                 poster={metadata?.thumbnail}
             />
 
+            {/* Audio-only files have no video track, so keep the thumbnail
+                visible during playback instead of a black frame. */}
+            {isAudio && metadata?.thumbnail && (
+                <img
+                    src={metadata.thumbnail}
+                    alt=""
+                    className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                />
+            )}
+
             {/* Controls overlay */}
             <div
                 className={`absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent transition-opacity duration-300 ${
@@ -249,14 +261,16 @@ export default function VideoPlayer({
                             </span>
                         </div>
 
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-white hover:bg-white/20"
-                            onClick={toggleFullscreen}
-                        >
-                            <Maximize2 className="h-4 w-4" />
-                        </Button>
+                        {!isAudio && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-white hover:bg-white/20"
+                                onClick={toggleFullscreen}
+                            >
+                                <Maximize2 className="h-4 w-4" />
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>

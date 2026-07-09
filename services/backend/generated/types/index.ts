@@ -9,11 +9,19 @@ export const JobStatusInProgress: JobStatus = "in_progress";
 export const JobStatusComplete: JobStatus = "complete";
 export const JobStatusError: JobStatus = "error";
 export const JobStatusCancelled: JobStatus = "cancelled";
+/**
+ * MediaType selects what a download job produces: the full video or an
+ * audio-only extraction.
+ */
+export type MediaType = string;
+export const MediaTypeVideo: MediaType = "video";
+export const MediaTypeAudio: MediaType = "audio";
 export interface Job {
   id: string;
   url: string;
   status: JobStatus;
   progress: number /* float64 */;
+  media_type?: MediaType;
   custom_quality?: number /* int */;
   warnings?: string[];
   created_at: string /* RFC3339 */;

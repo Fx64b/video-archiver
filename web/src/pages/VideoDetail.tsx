@@ -1,11 +1,18 @@
 import { deleteDownload } from '@/services/libraryApi'
-import { JobStatusError, JobWithMetadata, Tag, VideoMetadata } from '@/types'
+import {
+    JobStatusError,
+    JobWithMetadata,
+    MediaTypeAudio,
+    Tag,
+    VideoMetadata,
+} from '@/types'
 import {
     AlertTriangle,
     ArrowLeft,
     Calendar,
     Eye,
     List,
+    Music,
     ThumbsUp,
     Trash2,
     User,
@@ -223,6 +230,7 @@ export default function VideoDetailPage() {
                             jobId={video.job?.id || ''}
                             metadata={metadata}
                             className="mb-4"
+                            isAudio={video.job?.media_type === MediaTypeAudio}
                         />
                     )}
 
@@ -233,6 +241,15 @@ export default function VideoDetailPage() {
                                 {metadata?.title || 'Untitled Video'}
                             </h1>
                             <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-4 text-sm">
+                                {video.job?.media_type === MediaTypeAudio && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="flex items-center gap-1"
+                                    >
+                                        <Music className="h-3 w-3" />
+                                        Audio
+                                    </Badge>
+                                )}
                                 {metadata?.view_count && (
                                     <div className="flex items-center gap-1">
                                         <Eye className="h-4 w-4" />

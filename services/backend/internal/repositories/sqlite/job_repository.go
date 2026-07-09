@@ -25,10 +25,15 @@ func (r *JobRepository) Create(job *domain.Job) error {
 		return fmt.Errorf("marshal warnings: %w", err)
 	}
 
+	mediaType := job.MediaType
+	if mediaType == "" {
+		mediaType = domain.MediaTypeVideo
+	}
+
 	_, err = r.db.Exec(`
-        INSERT INTO jobs (job_id, url, status, progress, warnings, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		job.ID, job.URL, job.Status, job.Progress, string(warningsJSON), job.CreatedAt, job.UpdatedAt)
+        INSERT INTO jobs (job_id, url, status, progress, media_type, warnings, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		job.ID, job.URL, job.Status, job.Progress, mediaType, string(warningsJSON), job.CreatedAt, job.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create job: %w", err)
 	}
@@ -59,10 +64,10 @@ func (r *JobRepository) GetByID(id string) (*domain.Job, error) {
 	var warningsJSON sql.NullString
 
 	err := r.db.QueryRow(`
-        SELECT job_id, url, status, progress, warnings, created_at, updated_at
+        SELECT job_id, url, status, progress, media_type, warnings, created_at, updated_at
         FROM jobs
         WHERE job_id = ?`, id).
-		Scan(&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
+		Scan(&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get job by id: %w", err)
 	}
@@ -80,7 +85,7 @@ func (r *JobRepository) GetByID(id string) (*domain.Job, error) {
 
 func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 	rows, err := r.db.Query(`
-        SELECT job_id, url, status, progress, warnings, created_at, updated_at
+        SELECT job_id, url, status, progress, media_type, warnings, created_at, updated_at
         FROM jobs
         ORDER BY updated_at DESC
         LIMIT ?`, limit)
@@ -95,7 +100,7 @@ func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 		var warningsJSON sql.NullString
 
 		err := rows.Scan(&job.ID, &job.URL, &job.Status, &job.Progress,
-			&warningsJSON, &job.CreatedAt, &job.UpdatedAt)
+			&job.MediaType, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
 		}
@@ -329,7 +334,7 @@ func (r *JobRepository) GetAllJobsWithMetadata() ([]*domain.JobWithMetadata, err
 
 func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 	rows, err := r.db.Query(`
-		SELECT job_id, url, status, progress, warnings, created_at, updated_at
+		SELECT job_id, url, status, progress, media_type, warnings, created_at, updated_at
 		FROM jobs`)
 	if err != nil {
 		return nil, fmt.Errorf("get jobs: %w", err)
@@ -342,7 +347,7 @@ func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 		var warningsJSON sql.NullString
 
 		err := rows.Scan(&job.ID, &job.URL, &job.Status, &job.Progress,
-			&warningsJSON, &job.CreatedAt, &job.UpdatedAt)
+			&job.MediaType, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
 		}
@@ -548,7 +553,7 @@ func (r *JobRepository) GetMetadataByType(contentType string, opts domain.Metada
 
 	// Build the query using only validated table names and sort fields
 	query := `
-        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.warnings, jobs.created_at, jobs.updated_at, ` +
+        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.media_type, jobs.warnings, jobs.created_at, jobs.updated_at, ` +
 		tableName + `.metadata_json
         FROM ` + tableName + `
         JOIN jobs ON ` + tableName + `.job_id = jobs.job_id` +
@@ -576,7 +581,7 @@ func (r *JobRepository) GetMetadataByType(contentType string, opts domain.Metada
 		var warningsJSON sql.NullString
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON,
 			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
 		)
 		if err != nil {
@@ -729,7 +734,7 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
             FROM video_memberships
             WHERE video_job_id = ?
         )
-        SELECT j.job_id, j.url, j.status, j.progress, j.warnings, j.created_at, j.updated_at,
+        SELECT j.job_id, j.url, j.status, j.progress, j.media_type, j.warnings, j.created_at, j.updated_at,
                pt.membership_type,
                CASE
                    WHEN pt.membership_type = 'playlist' THEN p.metadata_json
@@ -756,7 +761,7 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
 		var warningsJSON sql.NullString
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON,
 			&job.CreatedAt, &job.UpdatedAt, &membershipType, &metadataJSON,
 		)
 
@@ -803,7 +808,7 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
 
 func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWithMetadata, error) {
 	rows, err := r.db.Query(`
-        SELECT j.job_id, j.url, j.status, j.progress, j.warnings, j.created_at, j.updated_at,
+        SELECT j.job_id, j.url, j.status, j.progress, j.media_type, j.warnings, j.created_at, j.updated_at,
                v.metadata_json
         FROM jobs j
         JOIN video_memberships vm ON j.job_id = vm.video_job_id
@@ -824,7 +829,7 @@ func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWit
 		var warningsJSON sql.NullString
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress, &warningsJSON,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON,
 			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
 		)
 

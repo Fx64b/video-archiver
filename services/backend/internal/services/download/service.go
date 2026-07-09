@@ -125,7 +125,7 @@ func (s *Service) CancelJob(id string) error {
 	// Broadcast cancellation status via WebSocket
 	cancelUpdate := domain.ProgressUpdate{
 		JobID:    job.ID,
-		JobType:  string(domain.JobTypeVideo),
+		JobType:  jobTypeFor(*job),
 		Status:   domain.JobStatusCancelled,
 		Progress: job.Progress,
 	}
@@ -233,7 +233,7 @@ func (s *Service) processJobs() {
 					// Broadcast error status via WebSocket
 					errorUpdate := domain.ProgressUpdate{
 						JobID:    job.ID,
-						JobType:  string(domain.JobTypeVideo),
+						JobType:  jobTypeFor(job),
 						Status:   domain.JobStatusError,
 						Progress: job.Progress,
 					}
@@ -343,6 +343,33 @@ func (s *Service) getSettings() (int, int) {
 	return settings.ConcurrentDownloads, settings.DownloadQuality
 }
 
+// jobTypeFor maps a job's media type onto the job type reported in progress
+// updates, defaulting to video for legacy jobs without a media type.
+func jobTypeFor(job domain.Job) string {
+	if job.IsAudio() {
+		return string(domain.JobTypeAudio)
+	}
+	return string(domain.JobTypeVideo)
+}
+
+// formatArgs returns the yt-dlp format selection arguments for a job. Video
+// jobs pick the best streams within the quality limit and merge to mp4; audio
+// jobs pick the best audio stream and extract it to mp3.
+func formatArgs(job domain.Job, maxQuality int) []string {
+	if job.IsAudio() {
+		return []string{
+			"--format", "bestaudio/best",
+			"--extract-audio",
+			"--audio-format", "mp3",
+			"--audio-quality", "0",
+		}
+	}
+	return []string{
+		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
+		"--merge-output-format", "mp4",
+	}
+}
+
 func (s *Service) getQualityForJob(job domain.Job) int {
 	// If job has custom quality, use it
 	if job.CustomQuality != nil {
@@ -426,8 +453,9 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	// This provides enough info to distinguish video/audio streams and track progress accurately
 	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
-		"--merge-output-format", "mp4",
+	}
+	cmdArgs = append(cmdArgs, formatArgs(job, maxQuality)...)
+	cmdArgs = append(cmdArgs,
 		"--newline", // Important for progress parsing
 		"--progress-template", fmt.Sprintf(
 			"[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s][%%(info.format_id)s][%%(info.format_note)s][%%(info.vcodec)s][%%(info.acodec)s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]",
@@ -443,8 +471,8 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		"--download-archive", archiveFile, // Track downloaded videos
 		"--output", outputPath,
 		"--yes-playlist", // Ensure playlist processing is enabled
-	}
-	
+	)
+
 	// Add channel-specific arguments if this is a channel
 	if _, isChannel := metadataModel.(*domain.ChannelMetadata); isChannel {
 		// For channels, we may want to limit the number of videos or specify sorting
@@ -474,8 +502,8 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	stderrReader := io.TeeReader(stderr, &stderrBuf)
 
 	// Track progress in separate goroutines
-	go s.trackProgress(stdout, job.ID, string(domain.JobTypeVideo))
-	go s.trackProgress(stderrReader, job.ID, string(domain.JobTypeVideo))
+	go s.trackProgress(stdout, job.ID, jobTypeFor(job))
+	go s.trackProgress(stderrReader, job.ID, jobTypeFor(job))
 
 	// Wait for command to complete
 	if err := downloadCmd.Wait(); err != nil {
@@ -613,6 +641,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					URL:       fmt.Sprintf("https://%s.com/watch?v=%s", extractor, id),
 					Status:    domain.JobStatusComplete,
 					Progress:  100.0,
+					MediaType: job.MediaType,
 					CreatedAt: time.Now(),
 					UpdatedAt: time.Now(),
 				}
@@ -715,6 +744,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 				URL:       fmt.Sprintf("https://%s.com/watch?v=%s", failedVideo.Extractor, failedVideo.ID),
 				Status:    domain.JobStatusError,
 				Progress:  0.0,
+				MediaType: job.MediaType,
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
 			}
@@ -887,15 +917,16 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		log.Infof("[Job %s] Starting video download with quality: %dp, concurrency: %d", job.ID, maxQuality, concurrency)
 	}
 
-	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
+	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
-		"--merge-output-format", "mp4",
+	}
+	cmdArgs = append(cmdArgs, formatArgs(job, maxQuality)...)
+	cmdArgs = append(cmdArgs,
 		"--newline",
 		// Enhanced progress template with format info to distinguish video/audio streams
 		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s][%(info.format_id)s][%(info.format_note)s][%(info.vcodec)s][%(info.acodec)s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
-		"--retries", "3",            // Retry up to 3 times per fragment
-		"--fragment-retries", "5",   // Retry fragments up to 5 times
+		"--retries", "3",             // Retry up to 3 times per fragment
+		"--fragment-retries", "5",    // Retry fragments up to 5 times
 		"--file-access-retries", "2", // Retry file access operations
 		"--continue",
 		"--ignore-errors",
@@ -904,6 +935,7 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		"--output", outputPath,
 		job.URL,
 	)
+	downloadCmd := exec.CommandContext(ctx, "yt-dlp", cmdArgs...)
 
 	stdout, err := downloadCmd.StdoutPipe()
 	if err != nil {
@@ -920,8 +952,8 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 	}
 
 	// Track progress in separate goroutines
-	go s.trackProgress(stdout, job.ID, string(domain.JobTypeVideo))
-	go s.trackProgress(stderr, job.ID, string(domain.JobTypeVideo))
+	go s.trackProgress(stdout, job.ID, jobTypeFor(job))
+	go s.trackProgress(stderr, job.ID, jobTypeFor(job))
 
 	// Wait for command to complete
 	err = downloadCmd.Wait()
@@ -932,9 +964,12 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 
 	log.WithField("jobID", job.ID).Info("yt-dlp download completed successfully")
 
-	// After download, update metadata with actual downloaded resolution
-	if err := s.updateDownloadedMetadata(job.ID, maxQuality); err != nil {
-		log.WithError(err).Warn("Failed to update downloaded metadata, continuing...")
+	// After download, update metadata with actual downloaded resolution.
+	// Audio-only downloads have no resolution to cap.
+	if !job.IsAudio() {
+		if err := s.updateDownloadedMetadata(job.ID, maxQuality); err != nil {
+			log.WithError(err).Warn("Failed to update downloaded metadata, continuing...")
+		}
 	}
 
 	return nil

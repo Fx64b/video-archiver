@@ -114,7 +114,20 @@ func runMigrations(db *sql.DB) error {
 		}
 	}
 
-	// Migration 2: Tagging tables for databases created before tags existed
+	// Migration 2: Add media_type column to jobs table (audio-only downloads)
+	hasMediaType, err := columnExists(db, "jobs", "media_type")
+	if err != nil {
+		return fmt.Errorf("check media_type column: %w", err)
+	}
+
+	if !hasMediaType {
+		_, err := db.Exec("ALTER TABLE jobs ADD COLUMN media_type TEXT NOT NULL DEFAULT 'video'")
+		if err != nil {
+			return fmt.Errorf("add media_type column: %w", err)
+		}
+	}
+
+	// Migration 3: Tagging tables for databases created before tags existed
 	if _, err := db.Exec(`
         CREATE TABLE IF NOT EXISTS tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,7 +148,7 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create tag tables: %w", err)
 	}
 
-	// Migration 3: output media metadata on tools_jobs. Guarded on the table
+	// Migration 4: output media metadata on tools_jobs. Guarded on the table
 	// existing — a database created before the tools feature has no tools_jobs
 	// and ALTER TABLE on a missing table would fail startup.
 	hasToolsJobs, err := tableExists(db, "tools_jobs")

@@ -1,6 +1,13 @@
 import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
-import { AlertCircle, Check, LoaderCircle, Settings, X } from 'lucide-react'
+import {
+    AlertCircle,
+    Check,
+    LoaderCircle,
+    Music,
+    Settings,
+    X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
@@ -25,6 +32,7 @@ export function UrlInput() {
     const [error, setError] = useState('')
     const [dotIndex, setDotIndex] = useState(0) // for reconnecting dots . .. ...
     const [customQuality, setCustomQuality] = useState<number | null>(null)
+    const [audioOnly, setAudioOnly] = useState(false)
 
     const setIsDownloading = useAppState((state) => state.setIsDownloading)
     const isDownloading = useAppState((state) => state.isDownloading)
@@ -50,8 +58,11 @@ export function UrlInput() {
 
         setIsDownloading(true)
         try {
-            const body: { url: string; quality?: number } = { url }
-            if (customQuality !== null) {
+            const body: { url: string; quality?: number; media_type?: string } =
+                { url }
+            if (audioOnly) {
+                body.media_type = 'audio'
+            } else if (customQuality !== null) {
                 body.quality = customQuality
             }
 
@@ -129,11 +140,24 @@ export function UrlInput() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Format</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setAudioOnly(false)}>
+                            Video
+                            {!audioOnly && (
+                                <Check className="ml-auto h-4 w-4" />
+                            )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAudioOnly(true)}>
+                            Audio only (MP3)
+                            {audioOnly && <Check className="ml-auto h-4 w-4" />}
+                        </DropdownMenuItem>
                         <DropdownMenuLabel>Quality Override</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         {qualityOptions.map((option) => (
                             <DropdownMenuItem
                                 key={option.value}
+                                disabled={audioOnly}
                                 onClick={() => setCustomQuality(option.value)}
                             >
                                 {option.label}
@@ -158,16 +182,29 @@ export function UrlInput() {
                 </Button>
             </div>
 
-            {customQuality !== null && (
+            {(audioOnly || customQuality !== null) && (
                 <div className="mt-2 flex items-center gap-2">
-                    <Badge
-                        variant="secondary"
-                        className="flex cursor-pointer items-center gap-1"
-                        onClick={() => setCustomQuality(null)}
-                    >
-                        {getQualityLabel(customQuality)}
-                        <X className="h-3 w-3" />
-                    </Badge>
+                    {audioOnly && (
+                        <Badge
+                            variant="secondary"
+                            className="flex cursor-pointer items-center gap-1"
+                            onClick={() => setAudioOnly(false)}
+                        >
+                            <Music className="h-3 w-3" />
+                            Audio only
+                            <X className="h-3 w-3" />
+                        </Badge>
+                    )}
+                    {!audioOnly && customQuality !== null && (
+                        <Badge
+                            variant="secondary"
+                            className="flex cursor-pointer items-center gap-1"
+                            onClick={() => setCustomQuality(null)}
+                        >
+                            {getQualityLabel(customQuality)}
+                            <X className="h-3 w-3" />
+                        </Badge>
+                    )}
                 </div>
             )}
 

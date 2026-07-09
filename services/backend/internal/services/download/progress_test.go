@@ -488,3 +488,66 @@ func TestAlreadyDownloadedPattern(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectPhaseAudioOnlyJob(t *testing.T) {
+	mockRepo := testutil.NewMockJobRepository()
+	config := &Config{
+		JobRepository: mockRepo,
+		DownloadPath:  "/tmp/test",
+		Concurrency:   2,
+		MaxQuality:    1080,
+	}
+	service := NewService(config)
+
+	tracker := NewProgressTracker(service, "test-job", string(domain.JobTypeAudio))
+
+	// A single audio stream maps directly onto the job progress (scaled to
+	// 0-95%), instead of the 80/20 video/audio split used for video jobs.
+	line := "[1][NA][testID][Test Video][251][opus][none][opus]prog:[2621440/5242880][  50.0%][800KiB/s][00:03]"
+	tracker.detectPhase(line)
+
+	if tracker.state.Phase != domain.DownloadPhaseAudio {
+		t.Errorf("Phase = %v, want %v", tracker.state.Phase, domain.DownloadPhaseAudio)
+	}
+	if tracker.state.CurrentProgress < 45 || tracker.state.CurrentProgress > 50 {
+		t.Errorf("CurrentProgress = %v, want ~47.5 (50%% of a single audio stream)", tracker.state.CurrentProgress)
+	}
+
+	// Audio extraction post-processing is reported as the merging phase.
+	tracker.detectPhase("[ExtractAudio] Destination: /downloads/Uploader/Test Video.mp3")
+	if tracker.state.Phase != domain.DownloadPhaseMerging {
+		t.Errorf("Phase = %v, want %v after ExtractAudio", tracker.state.Phase, domain.DownloadPhaseMerging)
+	}
+	if tracker.state.CurrentProgress != 95 {
+		t.Errorf("CurrentProgress = %v, want 95 during audio extraction", tracker.state.CurrentProgress)
+	}
+}
+
+func TestFormatArgs(t *testing.T) {
+	videoJob := domain.Job{ID: "v1", MediaType: domain.MediaTypeVideo}
+	args := strings.Join(formatArgs(videoJob, 1080), " ")
+	if !strings.Contains(args, "bestvideo[height<=1080]+bestaudio/best") {
+		t.Errorf("video job format args missing quality-capped selector: %s", args)
+	}
+	if !strings.Contains(args, "--merge-output-format mp4") {
+		t.Errorf("video job format args missing mp4 merge: %s", args)
+	}
+
+	// Legacy jobs without a media type behave like video jobs.
+	legacyJob := domain.Job{ID: "v2"}
+	if legacy := strings.Join(formatArgs(legacyJob, 1080), " "); legacy != args {
+		t.Errorf("legacy job args = %s, want same as video job: %s", legacy, args)
+	}
+
+	audioJob := domain.Job{ID: "a1", MediaType: domain.MediaTypeAudio}
+	args = strings.Join(formatArgs(audioJob, 1080), " ")
+	if !strings.Contains(args, "--format bestaudio/best") {
+		t.Errorf("audio job format args missing bestaudio selector: %s", args)
+	}
+	if !strings.Contains(args, "--extract-audio") || !strings.Contains(args, "--audio-format mp3") {
+		t.Errorf("audio job format args missing extraction flags: %s", args)
+	}
+	if strings.Contains(args, "--merge-output-format") {
+		t.Errorf("audio job format args should not merge containers: %s", args)
+	}
+}

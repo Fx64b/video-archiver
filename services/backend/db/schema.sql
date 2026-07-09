@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS jobs (
                                     is_playlist BOOLEAN DEFAULT FALSE,
                                     status TEXT,
                                     progress REAL,
+                                    media_type TEXT NOT NULL DEFAULT 'video',
                                     warnings TEXT,
                                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

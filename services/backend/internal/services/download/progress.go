@@ -31,6 +31,7 @@ var (
 	metadataPattern       = regexp.MustCompile(`\[youtube\] [^:]+: Downloading (webpage|tv.*API JSON|tv client config)`)
 	streamDownloadPattern = regexp.MustCompile(`\[download\] Destination: (.+) \[([A-Za-z0-9_-]+)\]\.f(\d+)\.(mp4|webm|m4a)`)
 	mergePattern          = regexp.MustCompile(`\[Merger\] Merging formats into`)
+	extractAudioPattern   = regexp.MustCompile(`\[ExtractAudio\] Destination:`)
 
 	// Progress parsing pattern for yt-dlp template output
 	// Format: [totalItems][playlist_index][video_id][title][format_id][format_note][vcodec][acodec]prog:[bytes/total][percent][speed][eta]
@@ -106,6 +107,13 @@ func NewProgressTracker(service *Service, jobID, jobType string) *ProgressTracke
 		service:        service,
 		updateThrottle: 100 * time.Millisecond, // 0.1 seconds max for more responsive updates
 	}
+}
+
+// isAudioOnly reports whether the tracked job downloads a single audio stream.
+// Audio-only jobs have no video/audio phase split, so yt-dlp's percentage maps
+// directly onto the job progress.
+func (pt *ProgressTracker) isAudioOnly() bool {
+	return pt.state.JobType == string(domain.JobTypeAudio)
 }
 
 // trackProgress is the main entry point for progress tracking
@@ -301,7 +309,12 @@ func (pt *ProgressTracker) detectPhase(line string) {
 				pt.state.RawProgress[videoID] = percent
 
 				// Determine phase and progress based on current stream type
-				if streamType == "audio" {
+				if pt.isAudioOnly() {
+					// Audio-only download: a single stream, mapped to 0-95%
+					// with the remainder reserved for audio extraction.
+					pt.state.Phase = domain.DownloadPhaseAudio
+					pt.state.CurrentProgress = percent * 0.95
+				} else if streamType == "audio" {
 					pt.state.Phase = domain.DownloadPhaseAudio
 					// Use saved video progress as base (default to 80 if not set)
 					videoBaseProgress := pt.state.VideoProgress[videoID]
@@ -368,8 +381,11 @@ func (pt *ProgressTracker) detectPhase(line string) {
 		previousStreamType := pt.state.CurrentStreamType[videoID]
 		pt.state.CurrentStreamType[videoID] = streamType
 
-		// If transitioning from video to audio, update phase immediately
-		if previousStreamType == "video" && streamType == "audio" {
+		// Audio-only downloads have exactly one stream; format-code
+		// heuristics for the video/audio split don't apply.
+		if pt.isAudioOnly() {
+			pt.state.Phase = domain.DownloadPhaseAudio
+		} else if previousStreamType == "video" && streamType == "audio" {
 			pt.state.Phase = domain.DownloadPhaseAudio
 			log.WithFields(log.Fields{
 				"videoID":            videoID,
@@ -394,6 +410,11 @@ func (pt *ProgressTracker) detectPhase(line string) {
 		pt.state.Phase = domain.DownloadPhaseMerging
 		pt.state.CurrentProgress = 95 // Merging phase
 		log.WithField("line", line).Debug("Merge phase detected")
+	} else if extractAudioPattern.MatchString(line) {
+		// Audio extraction/conversion after the download finishes
+		pt.state.Phase = domain.DownloadPhaseMerging
+		pt.state.CurrentProgress = 95
+		log.WithField("line", line).Debug("Audio extraction phase detected")
 	}
 
 	// Check for item completion patterns
