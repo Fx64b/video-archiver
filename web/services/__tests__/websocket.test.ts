@@ -1,244 +1,141 @@
-// Mock the toast from sonner
+import useWebSocketStore from '@/services/websocket'
+
 vi.mock('sonner', () => ({
     toast: vi.fn(),
 }))
 
-// TODO: Update these tests to match the new WebSocket implementation with ping/pong and onReconnect
-describe.skip('websocket service', () => {
-    let mockWebSocket: Record<string, unknown>
-    let onOpenCallback: (() => void) | null = null
-    let onMessageCallback: ((event: MessageEvent) => void) | null = null
-    let onCloseCallback: (() => void) | null = null
+// Minimal WebSocket stand-in the store can drive.
+class MockWebSocket {
+    static instances: MockWebSocket[] = []
+    static OPEN = 1
+    static CONNECTING = 0
 
-    beforeAll(() => {
-        // Set up mocks before any module loads
-        // Mock WebSocket
-        mockWebSocket = {
-            readyState: WebSocket.CONNECTING,
-            close: vi.fn(),
-            send: vi.fn(),
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-        }
+    url: string
+    readyState = MockWebSocket.CONNECTING
+    onopen: (() => void) | null = null
+    onmessage: ((event: { data: string }) => void) | null = null
+    onclose: (() => void) | null = null
+    onerror: ((err: unknown) => void) | null = null
 
-        // @ts-expect-error -- replacing the global WebSocket constructor with a mock
-        global.WebSocket = vi.fn().mockImplementation(() => {
-            return mockWebSocket
-        })
+    constructor(url: string) {
+        this.url = url
+        MockWebSocket.instances.push(this)
+    }
 
-        // Capture event listeners
-        Object.defineProperty(mockWebSocket, 'onopen', {
-            set: (callback: () => void) => {
-                onOpenCallback = callback
-            },
-            configurable: true,
-        })
+    open() {
+        this.readyState = MockWebSocket.OPEN
+        this.onopen?.()
+    }
 
-        Object.defineProperty(mockWebSocket, 'onmessage', {
-            set: (callback: (event: MessageEvent) => void) => {
-                onMessageCallback = callback
-            },
-            configurable: true,
-        })
+    receive(data: unknown) {
+        this.onmessage?.({ data: JSON.stringify(data) })
+    }
 
-        Object.defineProperty(mockWebSocket, 'onclose', {
-            set: (callback: () => void) => {
-                onCloseCallback = callback
-            },
-            configurable: true,
-        })
-    })
+    close() {
+        this.readyState = 3
+        this.onclose?.()
+    }
+}
 
-    beforeEach(async () => {
-        vi.clearAllMocks()
+describe('websocket store', () => {
+    const RealWebSocket = global.WebSocket
+
+    beforeEach(() => {
         vi.useFakeTimers()
-
-        // Reset callbacks
-        onOpenCallback = null
-        onMessageCallback = null
-        onCloseCallback = null
-
-        // Reset mock readyState
-        mockWebSocket.readyState = WebSocket.CONNECTING
-
-        // Reset the WebSocket store state
-        vi.resetModules()
+        MockWebSocket.instances = []
+        global.WebSocket = MockWebSocket as unknown as typeof WebSocket
+        useWebSocketStore.setState({
+            socket: null,
+            isConnected: false,
+            reconnectTimer: null,
+            reconnectAttempts: 0,
+            isReconnecting: false,
+            listeners: new Map(),
+            onReconnectCallbacks: new Set(),
+        })
     })
 
     afterEach(() => {
-        vi.clearAllTimers()
+        useWebSocketStore.getState().disconnect()
+        global.WebSocket = RealWebSocket
         vi.useRealTimers()
+        vi.restoreAllMocks()
     })
 
-    it('should connect to websocket when connect() is called', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
+    function connectAndOpen(): MockWebSocket {
+        useWebSocketStore.getState().connect()
+        const ws = MockWebSocket.instances.at(-1)!
+        ws.open()
+        return ws
+    }
 
-        const store = useWebSocketStore.getState()
-        store.connect()
+    it('routes messages by their type discriminator only', () => {
+        const ws = connectAndOpen()
 
-        expect(global.WebSocket).toHaveBeenCalledWith('ws://localhost:8081/ws')
+        const progress = vi.fn()
+        const tools = vi.fn()
+        useWebSocketStore.getState().subscribe('download-progress', progress)
+        useWebSocketStore.getState().subscribe('tools-progress', tools)
+
+        ws.receive({ type: 'download-progress', jobID: 'a', progress: 50 })
+        ws.receive({ type: 'tools-progress', jobID: 'b', progress: 10 })
+        // Untyped messages (old-style field sniffing bait) are dropped.
+        ws.receive({ jobID: 'c', progress: 99 })
+
+        expect(progress).toHaveBeenCalledTimes(1)
+        expect(progress).toHaveBeenCalledWith(
+            expect.objectContaining({ jobID: 'a' })
+        )
+        expect(tools).toHaveBeenCalledTimes(1)
+        expect(tools).toHaveBeenCalledWith(
+            expect.objectContaining({ jobID: 'b' })
+        )
     })
 
-    it('should set isConnected to true when websocket opens', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
+    it('unsubscribe stops delivery', () => {
+        const ws = connectAndOpen()
+        const cb = vi.fn()
+        const unsubscribe = useWebSocketStore
+            .getState()
+            .subscribe('download-progress', cb)
 
-        const store = useWebSocketStore.getState()
-        store.connect()
-
-        mockWebSocket.readyState = WebSocket.OPEN
-        onOpenCallback?.()
-
-        expect(useWebSocketStore.getState().isConnected).toBe(true)
-    })
-
-    it('should handle metadata messages', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
-
-        const callback = vi.fn()
-        const store = useWebSocketStore.getState()
-        store.subscribe('metadata', callback)
-        store.connect()
-
-        mockWebSocket.readyState = WebSocket.OPEN
-        onOpenCallback?.()
-
-        const metadataMessage = {
-            metadata: {
-                _type: 'video',
-                id: 'test-id',
-                title: 'Test Video',
-            },
-        }
-
-        onMessageCallback?.({
-            data: JSON.stringify(metadataMessage),
-        } as MessageEvent)
-
-        expect(callback).toHaveBeenCalledWith(metadataMessage)
-    })
-
-    it('should handle progress messages', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
-
-        const callback = vi.fn()
-        const store = useWebSocketStore.getState()
-        store.subscribe('progress', callback)
-        store.connect()
-
-        mockWebSocket.readyState = WebSocket.OPEN
-        onOpenCallback?.()
-
-        const progressMessage = {
-            jobID: 'job-1',
-            progress: 50,
-            currentVideoProgress: 75,
-        }
-
-        onMessageCallback?.({
-            data: JSON.stringify(progressMessage),
-        } as MessageEvent)
-
-        expect(callback).toHaveBeenCalledWith(progressMessage)
-    })
-
-    it('should notify all listeners with "all" subscription', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
-
-        const allCallback = vi.fn()
-        const metadataCallback = vi.fn()
-        const store = useWebSocketStore.getState()
-        store.subscribe('all', allCallback)
-        store.subscribe('metadata', metadataCallback)
-        store.connect()
-
-        mockWebSocket.readyState = WebSocket.OPEN
-        onOpenCallback?.()
-
-        const metadataMessage = {
-            metadata: {
-                _type: 'video',
-                id: 'test-id',
-            },
-        }
-
-        onMessageCallback?.({
-            data: JSON.stringify(metadataMessage),
-        } as MessageEvent)
-
-        expect(allCallback).toHaveBeenCalledWith(metadataMessage)
-        expect(metadataCallback).toHaveBeenCalledWith(metadataMessage)
-    })
-
-    it('should unsubscribe listeners', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
-
-        const callback = vi.fn()
-        const store = useWebSocketStore.getState()
-        const unsubscribe = store.subscribe('metadata', callback)
-        store.connect()
-
-        mockWebSocket.readyState = WebSocket.OPEN
-        onOpenCallback?.()
-
-        const metadataMessage = {
-            metadata: {
-                _type: 'video',
-                id: 'test-id',
-            },
-        }
-
-        onMessageCallback?.({
-            data: JSON.stringify(metadataMessage),
-        } as MessageEvent)
-
-        expect(callback).toHaveBeenCalledTimes(1)
-
+        ws.receive({ type: 'download-progress', jobID: 'a' })
         unsubscribe()
+        ws.receive({ type: 'download-progress', jobID: 'a' })
 
-        onMessageCallback?.({
-            data: JSON.stringify(metadataMessage),
-        } as MessageEvent)
-
-        // Should still be 1, not 2
-        expect(callback).toHaveBeenCalledTimes(1)
+        expect(cb).toHaveBeenCalledTimes(1)
     })
 
-    it('should attempt to reconnect when connection closes', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
-
-        const store = useWebSocketStore.getState()
-        store.connect()
-
-        mockWebSocket.readyState = WebSocket.OPEN
-        onOpenCallback?.()
-
+    it('reconnects with growing backoff and resets on success', () => {
+        const ws = connectAndOpen()
         expect(useWebSocketStore.getState().isConnected).toBe(true)
 
-        // Simulate connection close
-        onCloseCallback?.()
-
+        // First close → attempt 0 delay (~1s + jitter <= 1.5s)
+        ws.close()
         expect(useWebSocketStore.getState().isConnected).toBe(false)
+        vi.advanceTimersByTime(1_600)
+        expect(MockWebSocket.instances).toHaveLength(2)
 
-        // Fast-forward timer
-        vi.advanceTimersByTime(5000)
+        // Second close before opening → attempt 1 delay (~2s). Not yet at 1.5s…
+        MockWebSocket.instances.at(-1)!.close()
+        vi.advanceTimersByTime(1_500)
+        expect(MockWebSocket.instances).toHaveLength(2)
+        // …but reconnects by 2.5s.
+        vi.advanceTimersByTime(1_100)
+        expect(MockWebSocket.instances).toHaveLength(3)
 
-        // Should attempt to reconnect
-        expect(global.WebSocket).toHaveBeenCalledTimes(2)
+        // Successful open resets the attempt counter and fires callbacks.
+        const cb = vi.fn()
+        useWebSocketStore.getState().onReconnect(cb)
+        MockWebSocket.instances.at(-1)!.open()
+        expect(useWebSocketStore.getState().reconnectAttempts).toBe(0)
+        expect(cb).toHaveBeenCalledTimes(1)
     })
 
-    it('should disconnect and cleanup', async () => {
-        const { default: useWebSocketStore } = await import('../websocket')
-
-        const store = useWebSocketStore.getState()
-        store.connect()
-
-        mockWebSocket.readyState = WebSocket.OPEN
-        onOpenCallback?.()
-
-        store.disconnect()
-
-        expect(mockWebSocket.close).toHaveBeenCalled()
-        expect(useWebSocketStore.getState().socket).toBe(null)
-        expect(useWebSocketStore.getState().isConnected).toBe(false)
+    it('disconnect prevents any further reconnects', () => {
+        connectAndOpen()
+        useWebSocketStore.getState().disconnect()
+        vi.advanceTimersByTime(60_000)
+        expect(MockWebSocket.instances).toHaveLength(1)
     })
 })

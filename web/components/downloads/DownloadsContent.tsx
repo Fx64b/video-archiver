@@ -1,11 +1,8 @@
-import { JobWithMetadata } from '@/types'
+import { DownloadsType, getDownloads } from '@/services/api'
+import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 
-import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-
-import { SERVER_URL } from '@/lib/env'
-import { ensureMinimumDelay } from '@/lib/loading'
 
 import { ChannelsGrid } from '@/components/downloads/ChannelsGrid'
 import { LibraryFilters } from '@/components/downloads/LibraryFilters'
@@ -18,14 +15,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-
-interface PaginatedResponse {
-    items: JobWithMetadata[]
-    total_count: number
-    page: number
-    limit: number
-    total_pages: number
-}
 
 interface SortOption {
     label: string
@@ -61,10 +50,6 @@ export default function DownloadsContent() {
     const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc'
     const search = searchParams.get('search') || ''
     const tag = searchParams.get('tag') || ''
-
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [data, setData] = useState<PaginatedResponse | null>(null)
 
     // Update URL query params; empty values remove the param
     const updateUrlParams = (params: Record<string, string | number>) => {
@@ -111,82 +96,37 @@ export default function DownloadsContent() {
         updateUrlParams({ page })
     }
 
-    useEffect(() => {
-        const fetchDownloads = async () => {
-            setLoading(true)
-            setError(null)
-
-            // Keep the skeleton visible long enough to avoid a flash
-            const start = Date.now()
-
-            try {
-                // Query built by hand: SERVER_URL is a relative path (/api)
-                // by default, which the URL constructor rejects.
-                const params = new URLSearchParams({
-                    page: String(currentPage),
-                    limit: String(pageSize),
-                    sort_by: sortBy,
-                    order: order,
-                })
-                if (search) {
-                    params.append('search', search)
-                }
-                if (tag) {
-                    params.append('tag', tag)
-                }
-
-                const response = await fetch(
-                    `${SERVER_URL}/downloads/${activeTab}?${params}`
-                )
-
-                if (response.status === 404) {
-                    setData({
-                        items: [],
-                        total_count: 0,
-                        page: 1,
-                        limit: pageSize,
-                        total_pages: 1,
-                    })
-                    return
-                }
-
-                if (!response.ok) {
-                    throw new Error(
-                        `Failed to fetch ${activeTab}: ${response.statusText}`
-                    )
-                }
-
-                const responseData = await response.json()
-
-                if (responseData && responseData.message) {
-                    setData(responseData.message)
-                } else {
-                    setData({
-                        items: [],
-                        total_count: 0,
-                        page: 1,
-                        limit: pageSize,
-                        total_pages: 1,
-                    })
-                }
-            } catch (error) {
-                console.error(`Error fetching ${activeTab}:`, error)
-                setError(`Failed to load ${activeTab}. Please try again later.`)
-                setData({
-                    items: [],
-                    total_count: 0,
-                    page: 1,
-                    limit: pageSize,
-                    total_pages: 1,
-                })
-            } finally {
-                await ensureMinimumDelay(start)
-                setLoading(false)
-            }
-        }
-
-        fetchDownloads()
-    }, [activeTab, currentPage, pageSize, sortBy, order, search, tag])
+    // Every filter is part of the query key, so tab/page/sort/search changes
+    // fetch exactly once and revisits serve straight from the cache.
+    const {
+        data,
+        isPending: loading,
+        isError,
+    } = useQuery({
+        queryKey: [
+            'downloads',
+            activeTab,
+            currentPage,
+            pageSize,
+            sortBy,
+            order,
+            search,
+            tag,
+        ],
+        queryFn: () =>
+            getDownloads(activeTab as DownloadsType, {
+                page: currentPage,
+                limit: pageSize,
+                sortBy,
+                order,
+                search,
+                tag,
+            }),
+        placeholderData: (previous) => previous,
+    })
+    const error = isError
+        ? `Failed to load ${activeTab}. Please try again later.`
+        : null
 
     const renderLoadingState = () => (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

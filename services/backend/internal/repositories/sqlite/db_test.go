@@ -55,6 +55,22 @@ func TestNewDBMigratesLegacyDatabase(t *testing.T) {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         INSERT INTO jobs (job_id, url, status, progress) VALUES ('old-1', 'https://example.com', 'complete', 100);
+        CREATE TABLE tools_jobs (
+            id TEXT PRIMARY KEY,
+            operation_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            progress REAL NOT NULL DEFAULT 0,
+            input_files TEXT NOT NULL,
+            input_type TEXT NOT NULL DEFAULT 'videos',
+            output_file TEXT,
+            parameters TEXT,
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            estimated_size INTEGER,
+            actual_size INTEGER
+        );
     `); err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +95,14 @@ func TestNewDBMigratesLegacyDatabase(t *testing.T) {
 	ok, err := tableExists(db, "tags")
 	if err != nil || !ok {
 		t.Errorf("migration did not create tags table (err=%v)", err)
+	}
+	// Media metadata columns on tools_jobs (migration 4 — dropped once in a
+	// merge resolution; this guards against regressing it again).
+	for _, col := range []string{"media_kind", "duration", "video_codec"} {
+		ok, err := columnExists(db, "tools_jobs", col)
+		if err != nil || !ok {
+			t.Errorf("migration did not add tools_jobs.%s (err=%v)", col, err)
+		}
 	}
 
 	// Existing data must survive.

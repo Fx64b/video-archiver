@@ -133,6 +133,7 @@ func (s *Service) CancelJob(id string) error {
 
 	// Broadcast cancellation status via WebSocket
 	cancelUpdate := domain.ProgressUpdate{
+		Type:     domain.WSTypeDownloadProgress,
 		JobID:    job.ID,
 		JobType:  string(domain.JobTypeVideo),
 		Status:   domain.JobStatusCancelled,
@@ -237,6 +238,7 @@ func (s *Service) processJobs() {
 
 					// Broadcast error status via WebSocket
 					errorUpdate := domain.ProgressUpdate{
+						Type:     domain.WSTypeDownloadProgress,
 						JobID:    job.ID,
 						JobType:  string(domain.JobTypeVideo),
 						Status:   domain.JobStatusError,
@@ -427,8 +429,8 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 			"[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s][%%(info.format_id)s][%%(info.format_note)s][%%(info.vcodec)s][%%(info.acodec)s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]",
 			totalItems,
 		),
-		"--retries", "3",             // Retry up to 3 times per fragment
-		"--fragment-retries", "5",    // Retry fragments up to 5 times
+		"--retries", "3", // Retry up to 3 times per fragment
+		"--fragment-retries", "5", // Retry fragments up to 5 times
 		"--file-access-retries", "2", // Retry file access operations
 		"--continue",
 		"--ignore-errors",
@@ -613,7 +615,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					case *domain.ChannelMetadata:
 						membershipType = "channel"
 					}
-					
+
 					if err := s.jobs.AddVideoToParent(videoJobID, job.ID, membershipType); err != nil {
 						log.WithError(err).Warnf("Failed to link existing video %s to %s %s", videoJobID, membershipType, job.ID)
 					} else {
@@ -908,8 +910,8 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		"--newline",
 		// Enhanced progress template with format info to distinguish video/audio streams
 		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s][%(info.format_id)s][%(info.format_note)s][%(info.vcodec)s][%(info.acodec)s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
-		"--retries", "3",            // Retry up to 3 times per fragment
-		"--fragment-retries", "5",   // Retry fragments up to 5 times
+		"--retries", "3", // Retry up to 3 times per fragment
+		"--fragment-retries", "5", // Retry fragments up to 5 times
 		"--file-access-retries", "2", // Retry file access operations
 		"--continue",
 		"--ignore-errors",
@@ -1001,6 +1003,7 @@ func (s *Service) extractBasicMetadata(ctx context.Context, job domain.Job, outp
 	go io.Copy(stderrWriter, stderrPipe)
 
 	update := domain.ProgressUpdate{
+		Type:     domain.WSTypeDownloadProgress,
 		JobID:    job.ID,
 		JobType:  string(domain.JobTypeMetadata),
 		Progress: 0,
@@ -1041,6 +1044,7 @@ func (s *Service) extractBasicMetadata(ctx context.Context, job domain.Job, outp
 	} else {
 		// Send the basic metadata update immediately
 		basicMetadataUpdate := domain.MetadataUpdate{
+			Type:     domain.WSTypeMetadataUpdate,
 			JobID:    job.ID,
 			Metadata: extractedMetadata,
 		}
@@ -1086,6 +1090,7 @@ func (s *Service) enhanceMetadataAsync(ctx context.Context, job domain.Job, basi
 		log.WithError(err).Warn("Failed to store enhanced metadata")
 	} else {
 		enhancedMetadataUpdate := domain.MetadataUpdate{
+			Type:     domain.WSTypeMetadataUpdate,
 			JobID:    job.ID,
 			Metadata: basicMetadata,
 		}
@@ -1352,14 +1357,14 @@ func copyMetadata(metadata domain.Metadata) domain.Metadata {
 	case *domain.ChannelMetadata:
 		// Create a copy of the channel metadata
 		metaCopy := &domain.ChannelMetadata{
-			ID:           m.ID,
-			Channel:      m.Channel,
-			URL:          m.URL,
-			Description:  m.Description,
-			VideoCount:   m.VideoCount,
+			ID:            m.ID,
+			Channel:       m.Channel,
+			URL:           m.URL,
+			Description:   m.Description,
+			VideoCount:    m.VideoCount,
 			PlaylistCount: m.PlaylistCount,
-			TotalStorage: m.TotalStorage,
-			TotalViews:   m.TotalViews,
+			TotalStorage:  m.TotalStorage,
+			TotalViews:    m.TotalViews,
 		}
 
 		// Deep copy thumbnails slice
@@ -1410,27 +1415,27 @@ func copyMetadata(metadata domain.Metadata) domain.Metadata {
 	case *domain.VideoMetadata:
 		// For video metadata, create a shallow copy (no nested slices to worry about)
 		metaCopy := &domain.VideoMetadata{
-			ID:          m.ID,
-			Title:       m.Title,
-			Description: m.Description,
-			Thumbnail:   m.Thumbnail,
-			Duration:    m.Duration,
+			ID:             m.ID,
+			Title:          m.Title,
+			Description:    m.Description,
+			Thumbnail:      m.Thumbnail,
+			Duration:       m.Duration,
 			DurationString: m.DurationString,
-			UploadDate:  m.UploadDate,
-			Uploader:    m.Uploader,
-			UploaderID:  m.UploaderID,
-			UploaderURL: m.UploaderURL,
-			Channel:     m.Channel,
-			ChannelID:   m.ChannelID,
-			ChannelURL:  m.ChannelURL,
-			ViewCount:   m.ViewCount,
-			LikeCount:   m.LikeCount,
-			Width:       m.Width,
-			Height:      m.Height,
-			Resolution:  m.Resolution,
-			FPS:         m.FPS,
-			Format:      m.Format,
-			FileSize:    m.FileSize,
+			UploadDate:     m.UploadDate,
+			Uploader:       m.Uploader,
+			UploaderID:     m.UploaderID,
+			UploaderURL:    m.UploaderURL,
+			Channel:        m.Channel,
+			ChannelID:      m.ChannelID,
+			ChannelURL:     m.ChannelURL,
+			ViewCount:      m.ViewCount,
+			LikeCount:      m.LikeCount,
+			Width:          m.Width,
+			Height:         m.Height,
+			Resolution:     m.Resolution,
+			FPS:            m.FPS,
+			Format:         m.Format,
+			FileSize:       m.FileSize,
 		}
 
 		// Deep copy tags slice (always create new slice, even if empty)

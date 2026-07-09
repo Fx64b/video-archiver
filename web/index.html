@@ -11,11 +11,16 @@
         <title>Video Archiver</title>
         <script>
             // Apply the stored theme before first paint to avoid a flash.
+            // Reads the persisted settings store (store/settingsState.ts) —
+            // the same source applyTheme uses once React is up.
             try {
-                const theme = localStorage.getItem('theme')
+                const stored = JSON.parse(
+                    localStorage.getItem('settings-storage') || 'null'
+                )
+                const theme = stored?.state?.settings?.theme ?? 'system'
                 const dark =
                     theme === 'dark' ||
-                    ((theme === null || theme === 'system') &&
+                    (theme !== 'light' &&
                         window.matchMedia('(prefers-color-scheme: dark)')
                             .matches)
                 document.documentElement.classList.toggle('dark', dark)

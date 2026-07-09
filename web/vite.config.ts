@@ -24,7 +24,8 @@ export default defineConfig({
         // VITE_PROXY_TARGET points at the backend container in `run.sh dev`.
         proxy: {
             '/api': {
-                target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
+                target:
+                    process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
                 changeOrigin: true,
                 ws: true,
                 rewrite: (path) => path.replace(/^\/api/, ''),

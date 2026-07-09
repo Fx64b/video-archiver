@@ -1,6 +1,7 @@
 import { getPlaybackInfo, requestTranscode } from '@/services/libraryApi'
 import { getToolJob, toolOutputPreviewUrl } from '@/services/toolsApi'
-import { PlaybackInfo, PlaybackTranscode, VideoMetadata } from '@/types'
+import { PlaybackTranscode, VideoMetadata } from '@/types'
+import { useQuery } from '@tanstack/react-query'
 import {
     Maximize2,
     Pause,
@@ -40,9 +41,16 @@ export default function VideoPlayer({
     const [, setIsFullscreen] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [retryKey, setRetryKey] = useState(0)
-    const [playback, setPlayback] = useState<PlaybackInfo | null>(null)
     const [transcode, setTranscode] = useState<PlaybackTranscode | null>(null)
     const [transcodeError, setTranscodeError] = useState<string | null>(null)
+
+    // Playback info is advisory — without it the player simply tries the
+    // original file as before (hence retry: false and ignoring errors).
+    const { data: playback = null } = useQuery({
+        queryKey: ['playback-info', jobId],
+        queryFn: () => getPlaybackInfo(jobId),
+        retry: false,
+    })
 
     // A finished transcode is a browser-safe mp4 served by the tools output
     // endpoint; otherwise play the original download.
@@ -57,40 +65,28 @@ export default function VideoPlayer({
     const needsTranscode =
         playback !== null && !playback.browser_safe && !usingTranscode
 
+    // Seed the transcode state from playback info; button presses and the
+    // polling query below keep it current afterwards.
     useEffect(() => {
-        let cancelled = false
-        getPlaybackInfo(jobId)
-            .then((info) => {
-                if (cancelled) return
-                setPlayback(info)
-                setTranscode(info.transcode ?? null)
-            })
-            .catch(() => {
-                // Playback info is advisory — without it the player simply
-                // tries the original file as before.
-            })
-        return () => {
-            cancelled = true
-        }
-    }, [jobId])
+        setTranscode(playback?.transcode ?? null)
+    }, [playback])
 
     const transcodeJobId = transcode?.job_id
+    const { data: polledTranscode } = useQuery({
+        queryKey: ['tools-job', transcodeJobId],
+        queryFn: () => getToolJob(transcodeJobId!),
+        enabled: transcodeRunning && !!transcodeJobId,
+        refetchInterval: 3000,
+    })
     useEffect(() => {
-        if (!transcodeRunning || !transcodeJobId) return
-        const timer = setInterval(async () => {
-            try {
-                const job = await getToolJob(transcodeJobId)
-                setTranscode({
-                    job_id: job.id,
-                    status: job.status,
-                    progress: job.progress,
-                })
-            } catch {
-                // Keep polling; transient fetch errors shouldn't kill the UI.
-            }
-        }, 3000)
-        return () => clearInterval(timer)
-    }, [transcodeRunning, transcodeJobId])
+        if (polledTranscode) {
+            setTranscode({
+                job_id: polledTranscode.id,
+                status: polledTranscode.status,
+                progress: polledTranscode.progress,
+            })
+        }
+    }, [polledTranscode])
 
     useEffect(() => {
         const video = videoRef.current

@@ -1,11 +1,8 @@
-import { Statistics } from '@/types'
+import { getStatistics } from '@/services/api'
+import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, MonitorDown, RefreshCw } from 'lucide-react'
 
-import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-
-import { SERVER_URL } from '@/lib/env'
-import { ensureMinimumDelay } from '@/lib/loading'
 
 import { DownloadsChart } from '@/components/dashboard/DownloadsChart'
 import { StorageChart } from '@/components/dashboard/StorageChart'
@@ -15,36 +12,17 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function Dashboard() {
-    const [statistics, setStatistics] = useState<Statistics | null>(null)
-    const [error, setError] = useState('')
-    const [loading, setLoading] = useState(true)
-
-    const fetchStatistics = useCallback(async () => {
-        setLoading(true)
-        setError('')
-
-        // Keep the skeleton visible long enough to avoid a flash
-        const start = Date.now()
-
-        try {
-            const response = await fetch(`${SERVER_URL}/statistics`)
-            if (!response.ok) {
-                throw new Error(`Request failed with ${response.status}`)
-            }
-            const data = await response.json()
-            setStatistics(data.message)
-        } catch (err) {
-            console.error('Failed to load statistics:', err)
-            setError('Failed to load statistics.')
-        } finally {
-            await ensureMinimumDelay(start)
-            setLoading(false)
-        }
-    }, [])
-
-    useEffect(() => {
-        fetchStatistics()
-    }, [fetchStatistics])
+    const {
+        data: statistics,
+        isError,
+        isFetching,
+        isPending: loading,
+        refetch,
+    } = useQuery({
+        queryKey: ['statistics'],
+        queryFn: getStatistics,
+    })
+    const error = isError ? 'Failed to load statistics.' : ''
 
     const renderChartSkeleton = () => (
         <Card className="flex flex-col">
@@ -79,12 +57,12 @@ export default function Dashboard() {
                 <Button
                     variant="outline"
                     size="icon"
-                    onClick={fetchStatistics}
-                    disabled={loading}
+                    onClick={() => refetch()}
+                    disabled={isFetching}
                     title="Refresh statistics"
                 >
                     <RefreshCw
-                        className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+                        className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`}
                     />
                 </Button>
             </div>
@@ -122,8 +100,8 @@ export default function Dashboard() {
                         </>
                     ) : (
                         <>
-                            <DownloadsChart statistics={statistics} />
-                            <StorageChart statistics={statistics} />
+                            <DownloadsChart statistics={statistics ?? null} />
+                            <StorageChart statistics={statistics ?? null} />
                         </>
                     )}
                 </main>

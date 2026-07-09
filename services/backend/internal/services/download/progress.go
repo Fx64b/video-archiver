@@ -81,30 +81,30 @@ type ProgressState struct {
 // download and is fed from both the stdout and stderr pipes; mu serializes
 // those two readers over the shared state.
 type ProgressTracker struct {
-	mu              sync.Mutex
-	state           *ProgressState
-	service         *Service
-	updateThrottle  time.Duration
-	lastBroadcast   time.Time
+	mu             sync.Mutex
+	state          *ProgressState
+	service        *Service
+	updateThrottle time.Duration
+	lastBroadcast  time.Time
 }
 
 // NewProgressTracker creates a new progress tracker
 func NewProgressTracker(service *Service, jobID, jobType string) *ProgressTracker {
 	return &ProgressTracker{
 		state: &ProgressState{
-			JobID:          jobID,
-			JobType:        jobType,
-			ContentType:    "video", // default
-			Phase:          domain.DownloadPhaseMetadata,
-			CurrentItem:    1,
-			TotalItems:     1,
-			ItemsCompleted: 0,
-			LastUpdate:     time.Now(),
-			VideoStreams:   make(map[string]int),
-			RawProgress:    make(map[string]float64),
+			JobID:             jobID,
+			JobType:           jobType,
+			ContentType:       "video", // default
+			Phase:             domain.DownloadPhaseMetadata,
+			CurrentItem:       1,
+			TotalItems:        1,
+			ItemsCompleted:    0,
+			LastUpdate:        time.Now(),
+			VideoStreams:      make(map[string]int),
+			RawProgress:       make(map[string]float64),
 			CurrentStreamType: make(map[string]string),
-			VideoProgress: make(map[string]float64),
-			Warnings:      make([]string, 0),
+			VideoProgress:     make(map[string]float64),
+			Warnings:          make([]string, 0),
 		},
 		service:        service,
 		updateThrottle: 100 * time.Millisecond, // 0.1 seconds max for more responsive updates
@@ -201,7 +201,6 @@ func (pt *ProgressTracker) processLine(line string) {
 	// 6. Send throttled update (this handles the 0.25s throttling)
 	pt.sendThrottledUpdate()
 }
-
 
 // detectContentType determines if this is a video, playlist, or channel download
 func (pt *ProgressTracker) detectContentType(line string) {
@@ -360,7 +359,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 		// Handle stream destination announcements to determine stream type
 		videoID := streamMatch[2]
 		formatCode := streamMatch[3] // Extract format code (e.g., "401", "251")
-		extension := streamMatch[4]   // Extract extension (e.g., "mp4", "webm", "m4a")
+		extension := streamMatch[4]  // Extract extension (e.g., "mp4", "webm", "m4a")
 
 		// Initialize maps if needed
 		if pt.state.CurrentStreamType == nil {
@@ -429,12 +428,11 @@ func (pt *ProgressTracker) detectPhase(line string) {
 	if previousPhase != pt.state.Phase {
 		log.WithFields(log.Fields{
 			"previousPhase": previousPhase,
-			"newPhase":     pt.state.Phase,
-			"line":         line,
+			"newPhase":      pt.state.Phase,
+			"line":          line,
 		}).Debug("Phase transition detected")
 	}
 }
-
 
 // handleSpecialCases deals with edge cases like already downloaded files and retries
 func (pt *ProgressTracker) handleSpecialCases(line string) {
@@ -650,6 +648,7 @@ func (pt *ProgressTracker) sendFinalUpdate() {
 // broadcastUpdate sends the progress update via WebSocket
 func (pt *ProgressTracker) broadcastUpdate() {
 	update := domain.ProgressUpdate{
+		Type:                 domain.WSTypeDownloadProgress,
 		JobID:                pt.state.JobID,
 		JobType:              pt.state.JobType,
 		CurrentItem:          pt.state.CurrentItem,
@@ -668,16 +667,16 @@ func (pt *ProgressTracker) broadcastUpdate() {
 
 	if os.Getenv("DEBUG") == "true" {
 		log.WithFields(log.Fields{
-			"jobID":              update.JobID,
-			"currentItem":        update.CurrentItem,
-			"totalItems":         update.TotalItems,
-			"overallProgress":    update.Progress,
-			"currentProgress":    update.CurrentVideoProgress,
-			"phase":              update.DownloadPhase,
-			"contentType":        pt.state.ContentType,
-			"isRetrying":         update.IsRetrying,
-			"retryCount":         update.RetryCount,
-			"warningCount":       len(update.Warnings),
+			"jobID":           update.JobID,
+			"currentItem":     update.CurrentItem,
+			"totalItems":      update.TotalItems,
+			"overallProgress": update.Progress,
+			"currentProgress": update.CurrentVideoProgress,
+			"phase":           update.DownloadPhase,
+			"contentType":     pt.state.ContentType,
+			"isRetrying":      update.IsRetrying,
+			"retryCount":      update.RetryCount,
+			"warningCount":    len(update.Warnings),
 		}).Debug("Progress update broadcast")
 	}
 }
@@ -715,4 +714,3 @@ func (pt *ProgressTracker) updateJobProgress(jobID string, progress float64) err
 	job.Warnings = pt.state.Warnings
 	return pt.service.jobs.Update(job)
 }
-

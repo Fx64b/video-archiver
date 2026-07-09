@@ -5,10 +5,34 @@ import { serverWsUrl } from '@/lib/env'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+/**
+ * WebSocket connection store.
+ *
+ * Every message from the backend carries a `type` discriminator
+ * (WSTypeDownloadProgress / WSTypeMetadataUpdate / WSTypeToolsProgress in the
+ * generated types) and is routed to subscribers of exactly that type — no
+ * shape sniffing. Reconnects use exponential backoff with jitter, and the
+ * connection is opened explicitly from the app root, not as an import side
+ * effect.
+ */
+
+const BASE_RECONNECT_DELAY_MS = 1_000
+const MAX_RECONNECT_DELAY_MS = 30_000
+
+function reconnectDelay(attempt: number): number {
+    const exponential = Math.min(
+        MAX_RECONNECT_DELAY_MS,
+        BASE_RECONNECT_DELAY_MS * 2 ** attempt
+    )
+    // Jitter spreads clients out so they don't reconnect in lockstep.
+    return exponential + Math.random() * 500
+}
+
 interface WebSocketState {
     socket: WebSocket | null
     isConnected: boolean
-    reconnectTimer: NodeJS.Timeout | null
+    reconnectTimer: ReturnType<typeof setTimeout> | null
+    reconnectAttempts: number
     isReconnecting: boolean
     listeners: Map<string, Set<(data: any) => void>>
     onReconnectCallbacks: Set<() => void>
@@ -23,6 +47,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
     socket: null,
     isConnected: false,
     reconnectTimer: null,
+    reconnectAttempts: 0,
     isReconnecting: false,
     listeners: new Map(),
     onReconnectCallbacks: new Set(),
@@ -30,33 +55,35 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
     connect: () => {
         const { socket, disconnect } = get()
 
-        if (socket?.readyState === WebSocket.OPEN) return
+        if (
+            socket?.readyState === WebSocket.OPEN ||
+            socket?.readyState === WebSocket.CONNECTING
+        ) {
+            return
+        }
 
         // Close existing socket if it exists but isn't open
         if (socket) disconnect()
 
-        const wsUrl = serverWsUrl() + '/ws'
-        const newSocket = new WebSocket(wsUrl)
+        const newSocket = new WebSocket(serverWsUrl() + '/ws')
 
         newSocket.onopen = () => {
             console.log('WebSocket connected')
 
-            const { isReconnecting, onReconnectCallbacks } = get()
-            const wasReconnecting = isReconnecting
-            set({ isConnected: true })
+            const { isReconnecting, onReconnectCallbacks, reconnectTimer } =
+                get()
+            if (reconnectTimer) clearTimeout(reconnectTimer)
+            set({
+                isConnected: true,
+                reconnectAttempts: 0,
+                reconnectTimer: null,
+            })
 
-            // Clear any reconnect timer
-            const { reconnectTimer } = get()
-            if (reconnectTimer) {
-                clearTimeout(reconnectTimer)
-                set({ reconnectTimer: null })
-            }
-
-            if (wasReconnecting) {
+            if (isReconnecting) {
                 toast('Reconnected to server successfully.')
                 set({ isReconnecting: false })
 
-                // Call all reconnect callbacks to reload data after reconnection
+                // Reload data that may have changed while disconnected.
                 onReconnectCallbacks.forEach((callback) => callback())
             }
         }
@@ -64,56 +91,40 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
         newSocket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data)
+                const type = typeof data?.type === 'string' ? data.type : ''
+                if (!type) {
+                    console.warn('WebSocket message without type — dropped')
+                    return
+                }
+
                 const { listeners } = get()
-
-                // Determine message type. Tools progress updates carry an
-                // explicit `type` discriminator; download messages are matched
-                // by their distinctive fields.
-                let type = 'unknown'
-
-                if (data && data.type === 'tools-progress') {
-                    type = 'tools-progress'
-                } else if (data && 'metadata' in data) {
-                    type = 'metadata'
-                } else if (data && 'jobID' in data) {
-                    if ('progress' in data || 'currentVideoProgress' in data) {
-                        type = 'progress'
-                    }
-                }
-
-                if (type !== 'unknown') {
-                    const typeListeners = listeners.get(type)
-                    if (typeListeners) {
-                        typeListeners.forEach((callback) => callback(data))
-                    }
-
-                    const allListeners = listeners.get('all')
-                    if (allListeners) {
-                        allListeners.forEach((callback) => callback(data))
-                    }
-                }
+                listeners.get(type)?.forEach((callback) => callback(data))
+                listeners.get('all')?.forEach((callback) => callback(data))
             } catch (error) {
                 console.error('Error processing WebSocket message:', error)
             }
         }
 
         newSocket.onclose = () => {
-            console.log('WebSocket connection closed')
             set({ isConnected: false })
 
-            const { reconnectTimer } = get()
-            if (!reconnectTimer) {
-                const timer = setTimeout(() => {
-                    console.log('Attempting to reconnect WebSocket...')
-                    set({
-                        reconnectTimer: null,
-                        isReconnecting: true,
-                    })
-                    get().connect()
-                }, 5000)
+            const { reconnectTimer, reconnectAttempts } = get()
+            if (reconnectTimer) return
 
-                set({ reconnectTimer: timer })
-            }
+            const delay = reconnectDelay(reconnectAttempts)
+            console.log(
+                `WebSocket closed — reconnecting in ${Math.round(delay)}ms`
+            )
+            const timer = setTimeout(() => {
+                set({
+                    reconnectTimer: null,
+                    reconnectAttempts: reconnectAttempts + 1,
+                    isReconnecting: true,
+                })
+                get().connect()
+            }, delay)
+
+            set({ reconnectTimer: timer })
         }
 
         newSocket.onerror = (error) => {
@@ -128,6 +139,8 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
         const { socket, reconnectTimer } = get()
 
         if (socket) {
+            // Prevent the close handler from scheduling a reconnect.
+            socket.onclose = null
             socket.close()
             set({ socket: null, isConnected: false })
         }
@@ -149,10 +162,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
         typeListeners.add(callback)
 
         return () => {
-            const currentListeners = get().listeners.get(type)
-            if (currentListeners) {
-                currentListeners.delete(callback)
-            }
+            get().listeners.get(type)?.delete(callback)
         }
     },
 
@@ -161,18 +171,10 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
         onReconnectCallbacks.add(callback)
 
         return () => {
-            const currentCallbacks = get().onReconnectCallbacks
-            currentCallbacks.delete(callback)
+            get().onReconnectCallbacks.delete(callback)
         }
     },
 }))
-
-// Automatically connect when the service is imported (unless in test environment)
-if (typeof window !== 'undefined' && import.meta.env.MODE !== 'test') {
-    setTimeout(() => {
-        useWebSocketStore.getState().connect()
-    }, 0)
-}
 
 export default useWebSocketStore
 

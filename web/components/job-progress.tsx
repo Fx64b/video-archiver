@@ -1,6 +1,12 @@
 import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
-import { Metadata, MetadataUpdate, ProgressUpdate } from '@/types'
+import {
+    Metadata,
+    MetadataUpdate,
+    ProgressUpdate,
+    WSTypeDownloadProgress,
+    WSTypeMetadataUpdate,
+} from '@/types'
 
 import React, { useEffect, useState } from 'react'
 
@@ -11,16 +17,13 @@ import { MetadataCard } from '@/components/metadata-card'
 const JobProgress: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, ProgressUpdate>>({})
     const [metadata, setMetadata] = useState<Record<string, Metadata>>({})
-    const { connect, subscribe } = useWebSocketStore()
+    const subscribe = useWebSocketStore((state) => state.subscribe)
     const { addActiveDownload, getRecentMetadata } = useAppState()
 
     useEffect(() => {
-        // Connect websocket
-        connect()
-
         // Subscribe to progress updates
         const unsubscribeProgress = subscribe(
-            'progress',
+            WSTypeDownloadProgress,
             (data: ProgressUpdate) => {
                 addActiveDownload(data.jobID)
 
@@ -41,7 +44,7 @@ const JobProgress: React.FC = () => {
 
         // Subscribe to metadata updates
         const unsubscribeMetadata = subscribe(
-            'metadata',
+            WSTypeMetadataUpdate,
             (data: MetadataUpdate) => {
                 if (data?.metadata) {
                     setMetadata((prev) => ({
@@ -56,7 +59,7 @@ const JobProgress: React.FC = () => {
             unsubscribeProgress()
             unsubscribeMetadata()
         }
-    }, [connect, subscribe, addActiveDownload, getRecentMetadata])
+    }, [subscribe, addActiveDownload, getRecentMetadata])
 
     const jobEntries = Object.entries(jobs)
 

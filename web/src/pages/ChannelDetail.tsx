@@ -1,13 +1,14 @@
+import { getJob, getJobVideos } from '@/services/api'
 import { deleteDownload } from '@/services/libraryApi'
-import { ChannelMetadata, JobWithMetadata, PlaylistItem } from '@/types'
+import { ChannelMetadata, PlaylistItem, VideoMetadata } from '@/types'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Calendar, Play, Trash2, Users, Video } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { SERVER_URL } from '@/lib/env'
 import { getThumbnailUrl } from '@/lib/metadata'
 import { formatBytes, formatSubscriberNumber } from '@/lib/utils'
 
@@ -20,9 +21,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 export default function ChannelDetailPage() {
     const { id } = useParams()
     const navigate = useNavigate()
-    const [channel, setChannel] = useState<JobWithMetadata | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [deleteOpen, setDeleteOpen] = useState(false)
 
     const handleDelete = async () => {
@@ -36,30 +34,42 @@ export default function ChannelDetailPage() {
         }
     }
 
-    useEffect(() => {
-        const fetchChannel = async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/job/${id}`)
-                if (!response.ok) {
-                    throw new Error('Failed to fetch channel')
-                }
-                const data = await response.json()
-                setChannel(data.message || data)
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Unknown error')
-            } finally {
-                setLoading(false)
+    const {
+        data: channel,
+        isPending: loading,
+        error,
+    } = useQuery({
+        queryKey: ['job', id],
+        queryFn: () => getJob(id!),
+        enabled: !!id,
+    })
+
+    // The channel metadata lists videos by their source (YouTube) id, but the
+    // detail route needs the download job id. The membership endpoint returns
+    // the actual downloaded jobs — map source id → job id through it.
+    const { data: channelVideos = [] } = useQuery({
+        queryKey: ['job', id, 'videos'],
+        queryFn: () => getJobVideos(id!),
+        enabled: !!id,
+    })
+    const jobIdByVideoId = useMemo(() => {
+        const map = new Map<string, string>()
+        for (const item of channelVideos) {
+            const meta = item.metadata as VideoMetadata | undefined
+            if (item.job && meta?.id) {
+                map.set(meta.id, item.job.id)
             }
         }
-
-        if (id) {
-            fetchChannel()
-        }
-    }, [id])
+        return map
+    }, [channelVideos])
 
     const handleVideoClick = (videoId: string) => {
-        // Navigate to video page - you'll need to implement mapping video IDs to job IDs
-        navigate(`/downloads/video/${videoId}`)
+        const jobId = jobIdByVideoId.get(videoId)
+        if (jobId) {
+            navigate(`/downloads/video/${jobId}`)
+        } else {
+            toast.info('This video has not been downloaded individually yet.')
+        }
     }
 
     if (loading) {
@@ -93,7 +103,7 @@ export default function ChannelDetailPage() {
                 </div>
                 <div className="text-center">
                     <p className="text-muted-foreground">
-                        {error || 'Channel not found'}
+                        {error?.message || 'Channel not found'}
                     </p>
                 </div>
             </div>

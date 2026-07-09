@@ -50,7 +50,26 @@ export interface JobWithMetadata {
   metadata?: Metadata;
   tags?: Tag[];
 }
+/**
+ * WebSocket message type discriminators. Every message broadcast over /ws
+ * carries one in its "type" field so clients can route without sniffing
+ * message shapes.
+ */
+export const WSTypeDownloadProgress = "download-progress";
+/**
+ * WebSocket message type discriminators. Every message broadcast over /ws
+ * carries one in its "type" field so clients can route without sniffing
+ * message shapes.
+ */
+export const WSTypeMetadataUpdate = "metadata-update";
+/**
+ * WebSocket message type discriminators. Every message broadcast over /ws
+ * carries one in its "type" field so clients can route without sniffing
+ * message shapes.
+ */
+export const WSTypeToolsProgress = "tools-progress";
 export interface ProgressUpdate {
+  type: string; // always WSTypeDownloadProgress
   jobID: string;
   jobType: string;
   status?: JobStatus;
@@ -169,6 +188,7 @@ export interface ChannelMetadata {
   recent_videos?: PlaylistItem[];
 }
 export interface MetadataUpdate {
+  type: string; // always WSTypeMetadataUpdate
   jobID: string;
   metadata: Metadata;
 }

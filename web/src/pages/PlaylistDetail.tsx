@@ -1,5 +1,7 @@
+import { getJob, getJobVideos } from '@/services/api'
 import { deleteDownload } from '@/services/libraryApi'
 import { JobWithMetadata, PlaylistMetadata, VideoMetadata } from '@/types'
+import { useQuery } from '@tanstack/react-query'
 import {
     AlertTriangle,
     ArrowLeft,
@@ -12,11 +14,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { SERVER_URL } from '@/lib/env'
 import { getThumbnailUrl } from '@/lib/metadata'
 import { formatSubscriberNumber } from '@/lib/utils'
 
@@ -28,10 +29,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 export default function PlaylistDetailPage() {
     const { id } = useParams()
     const navigate = useNavigate()
-    const [playlist, setPlaylist] = useState<JobWithMetadata | null>(null)
-    const [videos, setVideos] = useState<JobWithMetadata[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [deleteOpen, setDeleteOpen] = useState(false)
 
     const handleDelete = async () => {
@@ -45,40 +42,21 @@ export default function PlaylistDetailPage() {
         }
     }
 
-    useEffect(() => {
-        const fetchPlaylist = async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/job/${id}`)
-                if (!response.ok) {
-                    throw new Error('Failed to fetch playlist')
-                }
-                const data = await response.json()
-                setPlaylist(data.message || data)
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Unknown error')
-            } finally {
-                setLoading(false)
-            }
-        }
+    const {
+        data: playlist,
+        isPending: loading,
+        error,
+    } = useQuery({
+        queryKey: ['job', id],
+        queryFn: () => getJob(id!),
+        enabled: !!id,
+    })
 
-        const fetchVideos = async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/job/${id}/videos`)
-                if (!response.ok) {
-                    throw new Error('Failed to fetch videos')
-                }
-                const data = await response.json()
-                setVideos(data.message || [])
-            } catch (err) {
-                console.error('Failed to fetch videos:', err)
-            }
-        }
-
-        if (id) {
-            fetchPlaylist()
-            fetchVideos()
-        }
-    }, [id])
+    const { data: videos = [] } = useQuery({
+        queryKey: ['job', id, 'videos'],
+        queryFn: () => getJobVideos(id!),
+        enabled: !!id,
+    })
 
     const handleVideoClick = (jobId: string) => {
         navigate(`/downloads/video/${jobId}`)
@@ -121,7 +99,7 @@ export default function PlaylistDetailPage() {
                 </div>
                 <div className="text-center">
                     <p className="text-muted-foreground">
-                        {error || 'Playlist not found'}
+                        {error?.message || 'Playlist not found'}
                     </p>
                 </div>
             </div>

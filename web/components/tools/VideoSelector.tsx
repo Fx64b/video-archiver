@@ -1,10 +1,10 @@
+import { DownloadsType, getDownloads } from '@/services/api'
 import useToolsState from '@/store/toolsState'
 import { JobWithMetadata } from '@/types'
+import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Check } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
-
-import { SERVER_URL } from '@/lib/env'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -23,14 +23,6 @@ interface MetadataWithCounts {
     duration_string?: string
 }
 
-interface PaginatedResponse {
-    items: JobWithMetadata[]
-    total_count: number
-    page: number
-    limit: number
-    total_pages: number
-}
-
 interface VideoSelectorProps {
     mode?: 'single' | 'multiple' // Whether to allow selecting single or multiple items
     inputType?: 'videos' | 'playlist' | 'channel' // Restrict to specific type
@@ -43,9 +35,6 @@ export default function VideoSelector({
     onSelectionChange,
 }: VideoSelectorProps) {
     const [activeTab, setActiveTab] = useState<string>(inputType || 'videos')
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [data, setData] = useState<PaginatedResponse | null>(null)
     const [currentPage, setCurrentPage] = useState(1)
     const pageSize = 12
 
@@ -56,64 +45,20 @@ export default function VideoSelector({
         isInputSelected,
     } = useToolsState()
 
-    // Fetch data based on active tab
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true)
-            setError(null)
-
-            try {
-                // Query built by hand: SERVER_URL is a relative path (/api)
-                // by default, which the URL constructor rejects.
-                const params = new URLSearchParams({
-                    page: String(currentPage),
-                    limit: String(pageSize),
-                    sort_by: 'created_at',
-                    order: 'desc',
-                })
-
-                const response = await fetch(
-                    `${SERVER_URL}/downloads/${activeTab}?${params}`
-                )
-
-                if (response.status === 404) {
-                    setData({
-                        items: [],
-                        total_count: 0,
-                        page: 1,
-                        limit: pageSize,
-                        total_pages: 1,
-                    })
-                    setLoading(false)
-                    return
-                }
-
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch ${activeTab}`)
-                }
-
-                const responseData = await response.json()
-
-                // Backend returns data in responseData.message
-                const result: PaginatedResponse = responseData.message || {
-                    items: [],
-                    total_count: 0,
-                    page: 1,
-                    limit: pageSize,
-                    total_pages: 1,
-                }
-                setData(result)
-            } catch (err) {
-                setError(
-                    err instanceof Error ? err.message : 'Failed to load data'
-                )
-            } finally {
-                setLoading(false)
-            }
-        }
-
-        fetchData()
-    }, [activeTab, currentPage])
+    const {
+        data,
+        isPending: loading,
+        error: queryError,
+    } = useQuery({
+        queryKey: ['downloads', activeTab, currentPage, pageSize],
+        queryFn: () =>
+            getDownloads(activeTab as DownloadsType, {
+                page: currentPage,
+                limit: pageSize,
+            }),
+        placeholderData: (previous) => previous,
+    })
+    const error = queryError ? queryError.message : null
 
     // Notify parent component of selection changes
     useEffect(() => {

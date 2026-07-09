@@ -1,73 +1,45 @@
+import { getRecent } from '@/services/api'
 import useWebSocketStore from '@/services/websocket'
 import useAppState from '@/store/appState'
-import { JobWithMetadata } from '@/types'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
-import React, { useCallback, useEffect, useState } from 'react'
-
-import { SERVER_URL } from '@/lib/env'
+import React, { useEffect } from 'react'
 
 import { MetadataCard } from '@/components/metadata-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const Recent: React.FC = () => {
-    const [jobs, setJobs] = useState<JobWithMetadata[]>([])
-    const [loading, setLoading] = useState(true)
-    const [message, setMessage] = useState('')
     const { isActiveDownload, setRecentMetadata } = useAppState()
     const onReconnect = useWebSocketStore((state) => state.onReconnect)
+    const queryClient = useQueryClient()
 
-    const fetchRecentJobs = useCallback(() => {
-        fetch(SERVER_URL + '/recent')
-            .then((res) => {
-                if (!res.ok) {
-                    setMessage('No recent jobs found.')
-                    return null
-                }
-                return res.json()
-            })
-            .then((data) => {
-                if (data) {
-                    const recentJobs = data.message
-                    setJobs(recentJobs)
+    const {
+        data: jobs = [],
+        isPending,
+        isError,
+    } = useQuery({
+        queryKey: ['recent'],
+        queryFn: () => getRecent(),
+    })
 
-                    // Store metadata from recent jobs in global state
-                    recentJobs.forEach((job: JobWithMetadata) => {
-                        if (job.job && job.metadata) {
-                            setRecentMetadata(job.job.id, job.metadata)
-                        }
-                    })
-                }
-                setLoading(false)
-            })
-            .catch((err) => {
-                console.error('Error fetching recent jobs:', err)
-                setMessage('Error loading recent jobs.')
-                setLoading(false)
-            })
-    }, [setRecentMetadata])
-
+    // Keep metadata from recent jobs available to the progress cards.
     useEffect(() => {
-        fetchRecentJobs()
-
-        const unsubscribe = useAppState.subscribe((state) => {
-            if (state.isDownloading) {
-                setMessage('')
-                unsubscribe()
+        jobs.forEach((job) => {
+            if (job.job && job.metadata) {
+                setRecentMetadata(job.job.id, job.metadata)
             }
         })
+    }, [jobs, setRecentMetadata])
 
-        // Refetch recent jobs on WebSocket reconnection
-        const unsubscribeReconnect = onReconnect(() => {
-            fetchRecentJobs()
+    // Data may have changed while the WebSocket was down — refetch on reconnect.
+    useEffect(() => {
+        return onReconnect(() => {
+            queryClient.invalidateQueries({ queryKey: ['recent'] })
         })
+    }, [onReconnect, queryClient])
 
-        return () => {
-            unsubscribeReconnect()
-        }
-    }, [fetchRecentJobs, onReconnect])
-
-    if (loading) {
+    if (isPending) {
         return (
             <div className="max-w-(--breakpoint-md) space-y-4">
                 <Card>
@@ -97,7 +69,9 @@ const Recent: React.FC = () => {
             ) : jobs.length === 0 ? (
                 <Card>
                     <CardContent className="text-muted-foreground p-8 text-center text-sm">
-                        {message || 'No recent downloads yet.'}
+                        {isError
+                            ? 'Error loading recent jobs.'
+                            : 'No recent downloads yet.'}
                     </CardContent>
                 </Card>
             ) : null}

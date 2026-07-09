@@ -4,6 +4,19 @@ import { persist } from 'zustand/middleware'
 
 import { SERVER_URL } from '@/lib/env'
 
+/**
+ * applyTheme is the single place the theme touches the DOM. The pre-paint
+ * script in index.html mirrors this logic (reading the same persisted store)
+ * to avoid a flash of the wrong theme before React hydrates.
+ */
+export function applyTheme(theme: string) {
+    const dark =
+        theme === 'dark' ||
+        (theme !== 'light' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+    document.documentElement.classList.toggle('dark', dark)
+}
+
 interface SettingsState {
     settings: Settings | null
     isLoading: boolean
@@ -68,22 +81,7 @@ const useSettingsState = create<SettingsState>()(
                     const data = await response.json()
                     set({ settings: data.message, isLoading: false })
 
-                    // Apply theme immediately
-                    if (theme === 'dark') {
-                        document.documentElement.classList.add('dark')
-                    } else if (theme === 'light') {
-                        document.documentElement.classList.remove('dark')
-                    } else {
-                        // system
-                        const systemTheme = window.matchMedia(
-                            '(prefers-color-scheme: dark)'
-                        ).matches
-                        if (systemTheme) {
-                            document.documentElement.classList.add('dark')
-                        } else {
-                            document.documentElement.classList.remove('dark')
-                        }
-                    }
+                    applyTheme(theme)
                 } catch (error) {
                     set({
                         error:
@@ -96,21 +94,7 @@ const useSettingsState = create<SettingsState>()(
             },
 
             setTheme: (theme: string) => {
-                if (theme === 'dark') {
-                    document.documentElement.classList.add('dark')
-                } else if (theme === 'light') {
-                    document.documentElement.classList.remove('dark')
-                } else {
-                    // system
-                    const systemTheme = window.matchMedia(
-                        '(prefers-color-scheme: dark)'
-                    ).matches
-                    if (systemTheme) {
-                        document.documentElement.classList.add('dark')
-                    } else {
-                        document.documentElement.classList.remove('dark')
-                    }
-                }
+                applyTheme(theme)
             },
         }),
         {

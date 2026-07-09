@@ -1,4 +1,6 @@
-import { Suspense, lazy } from 'react'
+import useWebSocketStore from '@/services/websocket'
+
+import { Suspense, lazy, useEffect } from 'react'
 import { Route, Routes } from 'react-router-dom'
 
 import { AppSidebar } from '@/components/app-sidebar'
@@ -27,6 +29,14 @@ import Workflow from './pages/tools/Workflow'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 
 export default function App() {
+    // The WebSocket lives for the whole session; connecting here (instead of
+    // as an import side effect) keeps startup order explicit and testable.
+    const connect = useWebSocketStore((state) => state.connect)
+    useEffect(() => {
+        connect()
+        return () => useWebSocketStore.getState().disconnect()
+    }, [connect])
+
     return (
         <>
             <SettingsInitializer />

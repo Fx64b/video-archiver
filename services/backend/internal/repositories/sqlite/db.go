@@ -48,6 +48,31 @@ var migrations = []func(*sql.DB) error{
 	func(db *sql.DB) error {
 		return addColumnIfMissing(db, "jobs", "file_path", "TEXT")
 	},
+	// 4: probed output media metadata on tools_jobs (thumbnails/overview
+	// feature). Restores the migration lost when that feature's branch was
+	// merge-resolved against the versioned-migration rewrite.
+	func(db *sql.DB) error {
+		exists, err := tableExists(db, "tools_jobs")
+		if err != nil || !exists {
+			// A database from before the tools feature has no tools_jobs
+			// table; the full schema (which includes these columns) is
+			// created elsewhere in that case.
+			return err
+		}
+		for _, col := range []struct{ name, columnType string }{
+			{"media_kind", "TEXT NOT NULL DEFAULT ''"},
+			{"duration", "REAL NOT NULL DEFAULT 0"},
+			{"width", "INTEGER NOT NULL DEFAULT 0"},
+			{"height", "INTEGER NOT NULL DEFAULT 0"},
+			{"video_codec", "TEXT NOT NULL DEFAULT ''"},
+			{"audio_codec", "TEXT NOT NULL DEFAULT ''"},
+		} {
+			if err := addColumnIfMissing(db, "tools_jobs", col.name, col.columnType); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
 }
 
 func NewDB(dbPath string) (*sql.DB, error) {

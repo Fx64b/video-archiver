@@ -1,11 +1,10 @@
+import useSettingsState from '@/store/settingsState'
 import { Toaster as Sonner } from 'sonner'
-
-import { useTheme } from '@/components/ui/theme-provider'
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
-    const { theme = 'system' } = useTheme()
+    const theme = useSettingsState((state) => state.settings?.theme ?? 'system')
 
     return (
         <Sonner

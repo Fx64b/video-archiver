@@ -22,9 +22,9 @@ type Job struct {
 	// FilePath is the absolute on-disk path of the downloaded media file,
 	// captured from yt-dlp when the download finishes. Empty for playlist and
 	// channel parent jobs and for downloads made before this field existed.
-	FilePath string `json:"file_path,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	FilePath  string    `json:"file_path,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 //tygo:ignore
@@ -79,7 +79,17 @@ type JobWithMetadata struct {
 	Tags     []Tag    `json:"tags,omitempty"`
 }
 
+// WebSocket message type discriminators. Every message broadcast over /ws
+// carries one in its "type" field so clients can route without sniffing
+// message shapes.
+const (
+	WSTypeDownloadProgress = "download-progress"
+	WSTypeMetadataUpdate   = "metadata-update"
+	WSTypeToolsProgress    = "tools-progress"
+)
+
 type ProgressUpdate struct {
+	Type                 string    `json:"type"` // always WSTypeDownloadProgress
 	JobID                string    `json:"jobID"`
 	JobType              string    `json:"jobType"`
 	Status               JobStatus `json:"status,omitempty"`
@@ -207,6 +217,7 @@ type ChannelMetadata struct {
 }
 
 type MetadataUpdate struct {
+	Type     string   `json:"type"` // always WSTypeMetadataUpdate
 	JobID    string   `json:"jobID"`
 	Metadata Metadata `json:"metadata"`
 }

@@ -1,5 +1,7 @@
+import { getJob, getJobParents } from '@/services/api'
 import { deleteDownload } from '@/services/libraryApi'
-import { JobStatusError, JobWithMetadata, Tag, VideoMetadata } from '@/types'
+import { JobStatusError, Tag, VideoMetadata } from '@/types'
+import { useQuery } from '@tanstack/react-query'
 import {
     AlertTriangle,
     ArrowLeft,
@@ -16,7 +18,6 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useParams } from 'react-router-dom'
 
-import { SERVER_URL } from '@/lib/env'
 import { formatBytes, formatSeconds, formatSubscriberNumber } from '@/lib/utils'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -30,11 +31,9 @@ import VideoPlayer from '@/components/video-player'
 export default function VideoDetailPage() {
     const { id } = useParams()
     const navigate = useNavigate()
-    const [video, setVideo] = useState<JobWithMetadata | null>(null)
-    const [parents, setParents] = useState<JobWithMetadata[]>([])
+    // Tags live in local state so the TagEditor can mutate them; the query
+    // result only seeds them.
     const [tags, setTags] = useState<Tag[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [deleteOpen, setDeleteOpen] = useState(false)
 
     const handleDelete = async () => {
@@ -48,48 +47,26 @@ export default function VideoDetailPage() {
         }
     }
 
+    const {
+        data: video,
+        isPending: loading,
+        error,
+    } = useQuery({
+        queryKey: ['job', id],
+        queryFn: () => getJob(id!),
+        enabled: !!id,
+    })
+
+    // Don't fail the whole page if parents can't be fetched.
+    const { data: parents = [] } = useQuery({
+        queryKey: ['job', id, 'parents'],
+        queryFn: () => getJobParents(id!),
+        enabled: !!id,
+    })
+
     useEffect(() => {
-        const fetchVideo = async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/job/${id}`)
-
-                if (!response.ok) {
-                    throw new Error(
-                        `Failed to fetch video: ${response.status} ${response.statusText}`
-                    )
-                }
-
-                const data = await response.json()
-                const job: JobWithMetadata = data.message || data
-                setVideo(job)
-                setTags(job.tags || [])
-            } catch (err) {
-                console.error('Video fetch error:', err)
-                setError(err instanceof Error ? err.message : 'Unknown error')
-            } finally {
-                setLoading(false)
-            }
-        }
-
-        const fetchParents = async () => {
-            // Don't fail the whole page if parents can't be fetched
-            try {
-                const response = await fetch(`${SERVER_URL}/job/${id}/parents`)
-
-                if (response.ok) {
-                    const data = await response.json()
-                    setParents(data.message || [])
-                }
-            } catch (err) {
-                console.error('Failed to fetch parents:', err)
-            }
-        }
-
-        if (id) {
-            fetchVideo()
-            fetchParents()
-        }
-    }, [id])
+        setTags(video?.tags || [])
+    }, [video])
 
     if (loading) {
         return (
@@ -127,7 +104,7 @@ export default function VideoDetailPage() {
                 </div>
                 <div className="text-center">
                     <p className="text-muted-foreground">
-                        {error || 'Video not found'}
+                        {error?.message || 'Video not found'}
                     </p>
                 </div>
             </div>
