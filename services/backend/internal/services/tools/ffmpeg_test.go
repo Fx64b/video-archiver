@@ -70,6 +70,29 @@ func TestParseProbeOutput(t *testing.T) {
 	}
 }
 
+func TestParseProbeOutputSkipsAttachedPic(t *testing.T) {
+	// An mp3 with embedded cover art reports a video stream flagged as
+	// attached_pic; it must still classify as audio-only.
+	data := []byte(`{
+		"format": {"duration": "60.0"},
+		"streams": [
+			{"codec_type": "video", "codec_name": "mjpeg", "width": 600, "height": 600, "disposition": {"attached_pic": 1}},
+			{"codec_type": "audio", "codec_name": "mp3"}
+		]
+	}`)
+
+	info, err := parseProbeOutput(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.HasVideo {
+		t.Errorf("expected attached_pic stream to be ignored: %+v", info)
+	}
+	if !info.HasAudio || info.AudioCodec != "mp3" {
+		t.Errorf("unexpected audio info: %+v", info)
+	}
+}
+
 func TestParseProbeOutputInvalid(t *testing.T) {
 	if _, err := parseProbeOutput([]byte("not json")); err == nil {
 		t.Error("expected error for invalid json")

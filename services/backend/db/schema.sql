@@ -72,7 +72,13 @@ CREATE TABLE IF NOT EXISTS tools_jobs (
                                           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                           completed_at TIMESTAMP,
                                           estimated_size INTEGER,
-                                          actual_size INTEGER
+                                          actual_size INTEGER,
+                                          media_kind TEXT NOT NULL DEFAULT '',
+                                          duration REAL NOT NULL DEFAULT 0,
+                                          width INTEGER NOT NULL DEFAULT 0,
+                                          height INTEGER NOT NULL DEFAULT 0,
+                                          video_codec TEXT NOT NULL DEFAULT '',
+                                          audio_codec TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS tags (

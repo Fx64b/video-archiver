@@ -135,5 +135,34 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create tag tables: %w", err)
 	}
 
+	// Migration 3: output media metadata on tools_jobs. Guarded on the table
+	// existing — a database created before the tools feature has no tools_jobs
+	// and ALTER TABLE on a missing table would fail startup.
+	hasToolsJobs, err := tableExists(db, "tools_jobs")
+	if err != nil {
+		return fmt.Errorf("check tools_jobs table: %w", err)
+	}
+	if hasToolsJobs {
+		toolsColumns := []struct{ name, ddl string }{
+			{"media_kind", "ALTER TABLE tools_jobs ADD COLUMN media_kind TEXT NOT NULL DEFAULT ''"},
+			{"duration", "ALTER TABLE tools_jobs ADD COLUMN duration REAL NOT NULL DEFAULT 0"},
+			{"width", "ALTER TABLE tools_jobs ADD COLUMN width INTEGER NOT NULL DEFAULT 0"},
+			{"height", "ALTER TABLE tools_jobs ADD COLUMN height INTEGER NOT NULL DEFAULT 0"},
+			{"video_codec", "ALTER TABLE tools_jobs ADD COLUMN video_codec TEXT NOT NULL DEFAULT ''"},
+			{"audio_codec", "ALTER TABLE tools_jobs ADD COLUMN audio_codec TEXT NOT NULL DEFAULT ''"},
+		}
+		for _, column := range toolsColumns {
+			has, err := columnExists(db, "tools_jobs", column.name)
+			if err != nil {
+				return fmt.Errorf("check tools_jobs %s column: %w", column.name, err)
+			}
+			if !has {
+				if _, err := db.Exec(column.ddl); err != nil {
+					return fmt.Errorf("add tools_jobs %s column: %w", column.name, err)
+				}
+			}
+		}
+	}
+
 	return nil
 }
