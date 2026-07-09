@@ -159,6 +159,98 @@ func TestResolveVideoFileTraversalSafe(t *testing.T) {
 	}
 }
 
+func TestResolveVideoFileWithHintStoredPath(t *testing.T) {
+	downloads := t.TempDir()
+	// The stored path wins even when reconstruction would find nothing
+	// (uploader directory intentionally unrelated to the metadata).
+	dir := filepath.Join(downloads, "Some Random Dir")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stored := filepath.Join(dir, "actual file.mp4")
+	if err := os.WriteFile(stored, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := &domain.VideoMetadata{Uploader: "Elsewhere", Title: "Unfindable", Extension: "mp4"}
+	got, err := ResolveVideoFileWithHint(downloads, stored, meta)
+	if err != nil || got != stored {
+		t.Fatalf("ResolveVideoFileWithHint = %q, %v; want %q", got, err, stored)
+	}
+}
+
+func TestResolveVideoFileWithHintStaleFallsBack(t *testing.T) {
+	downloads := t.TempDir()
+	dir := filepath.Join(downloads, "Fireship")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	onDisk := filepath.Join(dir, "Real Video.mp4")
+	if err := os.WriteFile(onDisk, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := &domain.VideoMetadata{Uploader: "Fireship", Title: "Real Video", Extension: "mp4"}
+	stale := filepath.Join(dir, "deleted.mp4")
+	got, err := ResolveVideoFileWithHint(downloads, stale, meta)
+	if err != nil || got != onDisk {
+		t.Fatalf("ResolveVideoFileWithHint = %q, %v; want fallback to %q", got, err, onDisk)
+	}
+}
+
+func TestResolveVideoFileWithHintRejectsEscapingHint(t *testing.T) {
+	downloads := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.mp4")
+	if err := os.WriteFile(outside, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta := &domain.VideoMetadata{Uploader: "Nobody", Title: "Nope", Extension: "mp4"}
+	if _, err := ResolveVideoFileWithHint(downloads, outside, meta); err == nil {
+		t.Error("expected stored path outside the download directory to be rejected")
+	}
+}
+
+func TestResolveVideoFileYtdlpSanitizedDirectory(t *testing.T) {
+	downloads := t.TempDir()
+	// yt-dlp writes '/' as '⧸' and ':' as '：' in directory names; the
+	// backend's own sanitizer maps them to '_', so exact reconstruction
+	// misses. The normalized directory scan must still find the file.
+	dir := filepath.Join(downloads, "AC⧸DC Official")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	onDisk := filepath.Join(dir, "Thunderstruck： Live.mp4")
+	if err := os.WriteFile(onDisk, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := &domain.VideoMetadata{
+		Uploader:  "AC/DC Official",
+		Title:     "Thunderstruck: Live",
+		Extension: "mp4",
+	}
+	got, err := ResolveVideoFileWithHint(downloads, "", meta)
+	if err != nil {
+		t.Fatalf("ResolveVideoFileWithHint: %v", err)
+	}
+	if got != onDisk {
+		t.Errorf("ResolveVideoFileWithHint = %q, want %q", got, onDisk)
+	}
+}
+
+func TestNormalizedCandidateDirsSkipsTried(t *testing.T) {
+	downloads := t.TempDir()
+	exact := filepath.Join(downloads, "Fireship")
+	if err := os.MkdirAll(exact, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := &domain.VideoMetadata{Uploader: "Fireship"}
+	dirs := normalizedCandidateDirs(downloads, meta, []string{exact})
+	if len(dirs) != 0 {
+		t.Errorf("expected already-tried directory to be skipped, got %v", dirs)
+	}
+}
+
 func TestEnsureWithin(t *testing.T) {
 	if err := ensureWithin("/base", "/base/sub/file.mp4"); err != nil {
 		t.Errorf("expected within: %v", err)

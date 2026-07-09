@@ -24,6 +24,12 @@ export interface Job {
   media_type?: MediaType;
   custom_quality?: number /* int */;
   warnings?: string[];
+  /**
+   * FilePath is the absolute on-disk path of the downloaded media file,
+   * captured from yt-dlp when the download finishes. Empty for playlist and
+   * channel parent jobs and for downloads made before this field existed.
+   */
+  file_path?: string;
   created_at: string /* RFC3339 */;
   updated_at: string /* RFC3339 */;
 }
@@ -357,3 +363,23 @@ export interface ToolsProgressUpdate {
 }
 
 export type ToolsRepository = any;
+/**
+ * PlaybackInfo describes whether a downloaded video's codecs can be decoded by
+ * browsers, and any transcode job that produces a compatible version.
+ */
+export interface PlaybackInfo {
+  container: string;
+  video_codec: string;
+  audio_codec: string;
+  browser_safe: boolean;
+  transcode?: PlaybackTranscode;
+}
+/**
+ * PlaybackTranscode is the state of the convert job backing a browser-safe
+ * version of a video.
+ */
+export interface PlaybackTranscode {
+  job_id: string;
+  status: ToolsJobStatus;
+  progress: number /* float64 */;
+}

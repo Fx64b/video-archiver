@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Docker-based Development (Recommended)
+- `./run.sh dev` - Hot-reload dev stack: backend via Air (<1s rebuilds), frontend via Vite HMR, both bind-mounted
 - `./run.sh` - Start the full application (builds images on first run)
 - `./run.sh build` - Rebuild images and start (use after pulling changes)
 - `./run.sh stop` - Stop the application
@@ -80,9 +81,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Accurate progress calculation**: Video (80%) + Audio (20%) for single videos
 
 ### Environment Configuration
-- Backend: `DEBUG`, `DOWNLOAD_PATH`, `DATABASE_PATH`, `PORT`, `WS_PORT`
-- Frontend: `VITE_SERVER_URL`, `VITE_SERVER_URL_WS` (baked in at build time, see `web/lib/env.ts`)
-- Default development URLs: Backend on :8080, WebSocket on :8081, Frontend on :3000
+- Backend: `DEBUG`, `DOWNLOAD_PATH`, `PROCESSED_PATH`, `DATABASE_PATH`, `PORT` (REST and the /ws WebSocket share the port)
+- Frontend: no config needed — same-origin `/api` URLs, proxied by Vite in dev and nginx in prod; `VITE_SERVER_URL`/`VITE_SERVER_URL_WS` are optional build-time overrides (see `web/lib/env.ts`)
+- Default development URLs: Backend on :8080 (REST + /ws), Frontend on :3000
+- The SQLite driver is pure Go (modernc.org/sqlite); build with `CGO_ENABLED=0`. Do not reintroduce cgo dependencies — they cost minutes of cold build time
 
 ## Future Improvements
 

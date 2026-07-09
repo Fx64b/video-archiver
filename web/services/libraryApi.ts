@@ -1,4 +1,4 @@
-import { Tag } from '@/types'
+import { PlaybackInfo, PlaybackTranscode, Tag } from '@/types'
 
 import { SERVER_URL } from '@/lib/env'
 
@@ -84,4 +84,36 @@ export async function deleteDownload(jobId: string): Promise<void> {
     if (!res.ok) {
         throw new Error(await parseError(res))
     }
+}
+
+/**
+ * Container/codec info for a downloaded video, whether the browser can play
+ * it directly, and the state of any transcode job producing a compatible
+ * version.
+ */
+export async function getPlaybackInfo(jobId: string): Promise<PlaybackInfo> {
+    const res = await fetch(`${BASE}/video/${jobId}/playback-info`)
+    if (!res.ok) {
+        throw new Error(await parseError(res))
+    }
+    const data: ApiResponse<PlaybackInfo> = await res.json()
+    return data.message
+}
+
+/**
+ * Request a browser-safe (h264/aac mp4) version of a video. Idempotent: if a
+ * transcode is already pending or running, its state is returned instead of
+ * starting a duplicate.
+ */
+export async function requestTranscode(
+    jobId: string
+): Promise<PlaybackTranscode> {
+    const res = await fetch(`${BASE}/video/${jobId}/transcode`, {
+        method: 'POST',
+    })
+    if (!res.ok) {
+        throw new Error(await parseError(res))
+    }
+    const data: ApiResponse<PlaybackTranscode> = await res.json()
+    return data.message
 }

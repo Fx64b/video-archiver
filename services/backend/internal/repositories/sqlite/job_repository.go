@@ -24,16 +24,15 @@ func (r *JobRepository) Create(job *domain.Job) error {
 	if err != nil {
 		return fmt.Errorf("marshal warnings: %w", err)
 	}
-
 	mediaType := job.MediaType
 	if mediaType == "" {
 		mediaType = domain.MediaTypeVideo
 	}
 
 	_, err = r.db.Exec(`
-        INSERT INTO jobs (job_id, url, status, progress, media_type, warnings, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		job.ID, job.URL, job.Status, job.Progress, mediaType, string(warningsJSON), job.CreatedAt, job.UpdatedAt)
+        INSERT INTO jobs (job_id, url, status, progress, media_type, warnings, file_path, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		job.ID, job.URL, job.Status, job.Progress, mediaType, string(warningsJSON), job.FilePath, job.CreatedAt, job.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create job: %w", err)
 	}
@@ -59,15 +58,29 @@ func (r *JobRepository) Update(job *domain.Job) error {
 	return nil
 }
 
+// SetFilePath records the downloaded media file's on-disk location. It is a
+// dedicated update so progress writes (Update) can never clobber the path.
+func (r *JobRepository) SetFilePath(jobID string, path string) error {
+	_, err := r.db.Exec(`
+        UPDATE jobs
+        SET file_path = ?
+        WHERE job_id = ?`, path, jobID)
+	if err != nil {
+		return fmt.Errorf("set job file path: %w", err)
+	}
+	return nil
+}
+
 func (r *JobRepository) GetByID(id string) (*domain.Job, error) {
 	job := &domain.Job{}
-	var warningsJSON sql.NullString
+	var warningsJSON, filePath sql.NullString
+	var mediaType string
 
 	err := r.db.QueryRow(`
-        SELECT job_id, url, status, progress, media_type, warnings, created_at, updated_at
+        SELECT job_id, url, status, progress, media_type, warnings, file_path, created_at, updated_at
         FROM jobs
         WHERE job_id = ?`, id).
-		Scan(&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
+		Scan(&job.ID, &job.URL, &job.Status, &job.Progress, &mediaType, &warningsJSON, &filePath, &job.CreatedAt, &job.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get job by id: %w", err)
 	}
@@ -79,13 +92,15 @@ func (r *JobRepository) GetByID(id string) (*domain.Job, error) {
 			job.Warnings = []string{}
 		}
 	}
+	job.MediaType = domain.MediaType(mediaType)
+	job.FilePath = filePath.String
 
 	return job, nil
 }
 
 func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 	rows, err := r.db.Query(`
-        SELECT job_id, url, status, progress, media_type, warnings, created_at, updated_at
+        SELECT job_id, url, status, progress, media_type, warnings, file_path, created_at, updated_at
         FROM jobs
         ORDER BY updated_at DESC
         LIMIT ?`, limit)
@@ -97,10 +112,11 @@ func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 	var jobs []*domain.Job
 	for rows.Next() {
 		job := &domain.Job{}
-		var warningsJSON sql.NullString
+		var warningsJSON, filePath sql.NullString
+		var mediaType string
 
 		err := rows.Scan(&job.ID, &job.URL, &job.Status, &job.Progress,
-			&job.MediaType, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
+			&mediaType, &warningsJSON, &filePath, &job.CreatedAt, &job.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
 		}
@@ -112,6 +128,8 @@ func (r *JobRepository) GetRecent(limit int) ([]*domain.Job, error) {
 				job.Warnings = []string{}
 			}
 		}
+		job.MediaType = domain.MediaType(mediaType)
+		job.FilePath = filePath.String
 
 		jobs = append(jobs, job)
 	}
@@ -334,7 +352,7 @@ func (r *JobRepository) GetAllJobsWithMetadata() ([]*domain.JobWithMetadata, err
 
 func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 	rows, err := r.db.Query(`
-		SELECT job_id, url, status, progress, media_type, warnings, created_at, updated_at
+		SELECT job_id, url, status, progress, media_type, warnings, file_path, created_at, updated_at
 		FROM jobs`)
 	if err != nil {
 		return nil, fmt.Errorf("get jobs: %w", err)
@@ -344,10 +362,11 @@ func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 	var jobs []*domain.Job
 	for rows.Next() {
 		job := &domain.Job{}
-		var warningsJSON sql.NullString
+		var warningsJSON, filePath sql.NullString
+		var mediaType string
 
 		err := rows.Scan(&job.ID, &job.URL, &job.Status, &job.Progress,
-			&job.MediaType, &warningsJSON, &job.CreatedAt, &job.UpdatedAt)
+			&mediaType, &warningsJSON, &filePath, &job.CreatedAt, &job.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
 		}
@@ -359,6 +378,8 @@ func (r *JobRepository) GetJobs() ([]*domain.Job, error) {
 				job.Warnings = []string{}
 			}
 		}
+		job.MediaType = domain.MediaType(mediaType)
+		job.FilePath = filePath.String
 
 		jobs = append(jobs, job)
 	}
@@ -553,7 +574,7 @@ func (r *JobRepository) GetMetadataByType(contentType string, opts domain.Metada
 
 	// Build the query using only validated table names and sort fields
 	query := `
-        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.media_type, jobs.warnings, jobs.created_at, jobs.updated_at, ` +
+        SELECT jobs.job_id, jobs.url, jobs.status, jobs.progress, jobs.media_type, jobs.warnings, jobs.file_path, jobs.created_at, jobs.updated_at, ` +
 		tableName + `.metadata_json
         FROM ` + tableName + `
         JOIN jobs ON ` + tableName + `.job_id = jobs.job_id` +
@@ -578,10 +599,11 @@ func (r *JobRepository) GetMetadataByType(contentType string, opts domain.Metada
 	for rows.Next() {
 		job := &domain.Job{}
 		var metadataJSON string
-		var warningsJSON sql.NullString
+		var warningsJSON, filePath sql.NullString
+		var mediaType string
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &mediaType, &warningsJSON, &filePath,
 			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
 		)
 		if err != nil {
@@ -595,6 +617,8 @@ func (r *JobRepository) GetMetadataByType(contentType string, opts domain.Metada
 				job.Warnings = []string{}
 			}
 		}
+		job.MediaType = domain.MediaType(mediaType)
+		job.FilePath = filePath.String
 
 		// Unmarshal metadata based on content type
 		var metadata domain.Metadata
@@ -734,7 +758,7 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
             FROM video_memberships
             WHERE video_job_id = ?
         )
-        SELECT j.job_id, j.url, j.status, j.progress, j.media_type, j.warnings, j.created_at, j.updated_at,
+        SELECT j.job_id, j.url, j.status, j.progress, j.media_type, j.warnings, j.file_path, j.created_at, j.updated_at,
                pt.membership_type,
                CASE
                    WHEN pt.membership_type = 'playlist' THEN p.metadata_json
@@ -758,10 +782,11 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
 		job := &domain.Job{}
 		var membershipType string
 		var metadataJSON sql.NullString
-		var warningsJSON sql.NullString
+		var warningsJSON, filePath sql.NullString
+		var mediaType string
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &mediaType, &warningsJSON, &filePath,
 			&job.CreatedAt, &job.UpdatedAt, &membershipType, &metadataJSON,
 		)
 
@@ -776,6 +801,8 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
 				job.Warnings = []string{}
 			}
 		}
+		job.MediaType = domain.MediaType(mediaType)
+		job.FilePath = filePath.String
 
 		jobWithMetadata := &domain.JobWithMetadata{
 			Job: job,
@@ -808,7 +835,7 @@ func (r *JobRepository) GetParentsForVideo(videoJobID string) ([]*domain.JobWith
 
 func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWithMetadata, error) {
 	rows, err := r.db.Query(`
-        SELECT j.job_id, j.url, j.status, j.progress, j.media_type, j.warnings, j.created_at, j.updated_at,
+        SELECT j.job_id, j.url, j.status, j.progress, j.media_type, j.warnings, j.file_path, j.created_at, j.updated_at,
                v.metadata_json
         FROM jobs j
         JOIN video_memberships vm ON j.job_id = vm.video_job_id
@@ -826,10 +853,11 @@ func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWit
 	for rows.Next() {
 		job := &domain.Job{}
 		var metadataJSON string
-		var warningsJSON sql.NullString
+		var warningsJSON, filePath sql.NullString
+		var mediaType string
 
 		err := rows.Scan(
-			&job.ID, &job.URL, &job.Status, &job.Progress, &job.MediaType, &warningsJSON,
+			&job.ID, &job.URL, &job.Status, &job.Progress, &mediaType, &warningsJSON, &filePath,
 			&job.CreatedAt, &job.UpdatedAt, &metadataJSON,
 		)
 
@@ -844,6 +872,8 @@ func (r *JobRepository) GetVideosForParent(parentJobID string) ([]*domain.JobWit
 				job.Warnings = []string{}
 			}
 		}
+		job.MediaType = domain.MediaType(mediaType)
+		job.FilePath = filePath.String
 
 		var videoMetadata domain.VideoMetadata
 		if err := json.Unmarshal([]byte(metadataJSON), &videoMetadata); err != nil {

@@ -6,14 +6,14 @@ import (
 	"time"
 	"video-archiver/internal/domain"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // CreateTestDB creates an in-memory SQLite database for testing
 func CreateTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
@@ -27,6 +27,7 @@ func CreateTestDB(t *testing.T) *sql.DB {
 		progress REAL NOT NULL,
 		media_type TEXT NOT NULL DEFAULT 'video',
 		warnings TEXT,
+		file_path TEXT,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
 	);
@@ -224,6 +225,15 @@ func (m *MockJobRepository) Update(job *domain.Job) error {
 		return sql.ErrNoRows
 	}
 	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *MockJobRepository) SetFilePath(jobID string, path string) error {
+	job, exists := m.jobs[jobID]
+	if !exists {
+		return sql.ErrNoRows
+	}
+	job.FilePath = path
 	return nil
 }
 

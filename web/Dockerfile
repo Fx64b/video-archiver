@@ -16,12 +16,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 COPY . .
 
-# Backend endpoints are baked into the static bundle at build time
-ARG VITE_SERVER_URL=http://localhost:8080
-ARG VITE_SERVER_URL_WS=ws://localhost:8081
-ENV VITE_SERVER_URL=$VITE_SERVER_URL
-ENV VITE_SERVER_URL_WS=$VITE_SERVER_URL_WS
-
+# No URLs are baked in: the bundle uses same-origin /api paths and nginx
+# proxies them to the backend, so one image works on any host. Set
+# VITE_SERVER_URL / VITE_SERVER_URL_WS here only to target a backend on a
+# different origin.
 RUN pnpm build
 
 # Runtime stage: serve the static bundle with nginx

@@ -38,28 +38,28 @@ func TestNewProgressTracker(t *testing.T) {
 
 func TestProgressTemplatePattern(t *testing.T) {
 	tests := []struct {
-		name      string
-		line      string
+		name        string
+		line        string
 		shouldMatch bool
 	}{
 		{
-			name:      "valid progress line",
-			line:      "[1][NA][dQw4w9WgXcQ][Never Gonna Give You Up][401][1080p][avc1][none]prog:[1048576/10485760][  10.0%][1.5MiB/s][00:06]",
+			name:        "valid progress line",
+			line:        "[1][NA][dQw4w9WgXcQ][Never Gonna Give You Up][401][1080p][avc1][none]prog:[1048576/10485760][  10.0%][1.5MiB/s][00:06]",
 			shouldMatch: true,
 		},
 		{
-			name:      "audio progress line",
-			line:      "[1][NA][dQw4w9WgXcQ][Test Video][251][opus][none][opus]prog:[524288/5242880][  50.0%][800KiB/s][00:03]",
+			name:        "audio progress line",
+			line:        "[1][NA][dQw4w9WgXcQ][Test Video][251][opus][none][opus]prog:[524288/5242880][  50.0%][800KiB/s][00:03]",
 			shouldMatch: true,
 		},
 		{
-			name:      "invalid line",
-			line:      "[download] Downloading video 1 of 1",
+			name:        "invalid line",
+			line:        "[download] Downloading video 1 of 1",
 			shouldMatch: false,
 		},
 		{
-			name:      "metadata line",
-			line:      "[youtube] Extracting URL: https://www.youtube.com/watch?v=test",
+			name:        "metadata line",
+			line:        "[youtube] Extracting URL: https://www.youtube.com/watch?v=test",
 			shouldMatch: false,
 		},
 	}
@@ -194,28 +194,28 @@ func TestDetectPhaseWithProgressTemplate(t *testing.T) {
 	service := NewService(config)
 
 	tests := []struct {
-		name            string
-		line            string
-		expectedPhase   string
+		name             string
+		line             string
+		expectedPhase    string
 		expectedProgress float64
-		minProgress     float64
-		maxProgress     float64
+		minProgress      float64
+		maxProgress      float64
 	}{
 		{
-			name:            "video stream 50%",
-			line:            "[1][NA][testID][Test Video][401][1080p][avc1][none]prog:[5242880/10485760][  50.0%][1.5MiB/s][00:05]",
-			expectedPhase:   domain.DownloadPhaseVideo,
+			name:             "video stream 50%",
+			line:             "[1][NA][testID][Test Video][401][1080p][avc1][none]prog:[5242880/10485760][  50.0%][1.5MiB/s][00:05]",
+			expectedPhase:    domain.DownloadPhaseVideo,
 			expectedProgress: 40.0, // 50% of video = 40% overall (video is 80% of total)
-			minProgress:     39.0,
-			maxProgress:     41.0,
+			minProgress:      39.0,
+			maxProgress:      41.0,
 		},
 		{
-			name:            "audio stream 50%",
-			line:            "[1][NA][testID][Test Video][251][opus][none][opus]prog:[2621440/5242880][  50.0%][800KiB/s][00:03]",
-			expectedPhase:   domain.DownloadPhaseAudio,
+			name:             "audio stream 50%",
+			line:             "[1][NA][testID][Test Video][251][opus][none][opus]prog:[2621440/5242880][  50.0%][800KiB/s][00:03]",
+			expectedPhase:    domain.DownloadPhaseAudio,
 			expectedProgress: 90.0, // 80% (video base) + 50% of 20% = 90%
-			minProgress:     85.0,
-			maxProgress:     95.0,
+			minProgress:      85.0,
+			maxProgress:      95.0,
 		},
 	}
 
@@ -298,12 +298,12 @@ func TestCalculateProgress(t *testing.T) {
 	service := NewService(config)
 
 	tests := []struct {
-		name             string
-		totalItems       int
-		currentItem      int
-		itemsCompleted   int
-		currentProgress  float64
-		expectedOverall  float64
+		name            string
+		totalItems      int
+		currentItem     int
+		itemsCompleted  int
+		currentProgress float64
+		expectedOverall float64
 	}{
 		{
 			name:            "single video 50%",
@@ -367,14 +367,14 @@ func TestCompleteCurrentItem(t *testing.T) {
 	service := NewService(config)
 
 	tests := []struct {
-		name                 string
-		initialCompleted     int
-		currentItem          int
-		totalItems           int
-		expectedCompleted    int
-		expectedPhase        string
-		expectedProgress     float64
-		expectedOverallDone  bool
+		name                string
+		initialCompleted    int
+		currentItem         int
+		totalItems          int
+		expectedCompleted   int
+		expectedPhase       string
+		expectedProgress    float64
+		expectedOverallDone bool
 	}{
 		{
 			name:                "complete first item of many",
@@ -523,11 +523,14 @@ func TestDetectPhaseAudioOnlyJob(t *testing.T) {
 	}
 }
 
-func TestFormatArgs(t *testing.T) {
+func TestDownloadFormatArgsByMediaType(t *testing.T) {
 	videoJob := domain.Job{ID: "v1", MediaType: domain.MediaTypeVideo}
-	args := strings.Join(formatArgs(videoJob, 1080), " ")
-	if !strings.Contains(args, "bestvideo[height<=1080]+bestaudio/best") {
-		t.Errorf("video job format args missing quality-capped selector: %s", args)
+	args := strings.Join(downloadFormatArgs(videoJob, 1080), " ")
+	if !strings.Contains(args, "-f bv*+ba/b") {
+		t.Errorf("video job format args missing selector: %s", args)
+	}
+	if !strings.Contains(args, "-S res:1080,vcodec:h264,acodec:m4a") {
+		t.Errorf("video job format args missing sort profile: %s", args)
 	}
 	if !strings.Contains(args, "--merge-output-format mp4") {
 		t.Errorf("video job format args missing mp4 merge: %s", args)
@@ -535,12 +538,12 @@ func TestFormatArgs(t *testing.T) {
 
 	// Legacy jobs without a media type behave like video jobs.
 	legacyJob := domain.Job{ID: "v2"}
-	if legacy := strings.Join(formatArgs(legacyJob, 1080), " "); legacy != args {
+	if legacy := strings.Join(downloadFormatArgs(legacyJob, 1080), " "); legacy != args {
 		t.Errorf("legacy job args = %s, want same as video job: %s", legacy, args)
 	}
 
 	audioJob := domain.Job{ID: "a1", MediaType: domain.MediaTypeAudio}
-	args = strings.Join(formatArgs(audioJob, 1080), " ")
+	args = strings.Join(downloadFormatArgs(audioJob, 1080), " ")
 	if !strings.Contains(args, "--format bestaudio/best") {
 		t.Errorf("audio job format args missing bestaudio selector: %s", args)
 	}

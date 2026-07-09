@@ -51,6 +51,24 @@ func (r *memToolsRepo) GetAll() ([]*domain.ToolsJob, error) { return nil, nil }
 func (r *memToolsRepo) GetByStatus(domain.ToolsJobStatus) ([]*domain.ToolsJob, error) {
 	return nil, nil
 }
+func (r *memToolsRepo) FindLatestConvertForInput(jobID string) (*domain.ToolsJob, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var latest *domain.ToolsJob
+	for _, job := range r.jobs {
+		if job.OperationType != domain.OpTypeConvert {
+			continue
+		}
+		if len(job.InputFiles) != 1 || job.InputFiles[0] != jobID {
+			continue
+		}
+		if latest == nil || job.CreatedAt.After(latest.CreatedAt) {
+			cp := *job
+			latest = &cp
+		}
+	}
+	return latest, nil
+}
 func (r *memToolsRepo) Delete(string) error { return nil }
 func (r *memToolsRepo) List(int, int, string, string) ([]*domain.ToolsJob, int, error) {
 	return nil, 0, nil

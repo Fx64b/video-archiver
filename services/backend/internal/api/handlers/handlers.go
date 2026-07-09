@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -54,13 +53,20 @@ type Handler struct {
 	downloadService    *download.Service
 	downloadPath       string
 	settingsRepository domain.SettingsRepository
+	toolsService       *tools.Service
+	toolsRepository    domain.ToolsRepository
+	ffmpeg             *tools.FFmpeg
 }
 
-func NewHandler(downloadService *download.Service, downloadPath string, settingsRepository domain.SettingsRepository) *Handler {
+func NewHandler(downloadService *download.Service, downloadPath string, settingsRepository domain.SettingsRepository,
+	toolsService *tools.Service, toolsRepository domain.ToolsRepository, ffmpeg *tools.FFmpeg) *Handler {
 	return &Handler{
 		downloadService:    downloadService,
 		downloadPath:       downloadPath,
 		settingsRepository: settingsRepository,
+		toolsService:       toolsService,
+		toolsRepository:    toolsRepository,
+		ffmpeg:             ffmpeg,
 	}
 }
 
@@ -81,12 +87,10 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 	r.Get("/statistics", h.HandleGetStatistics)
 	r.Get("/downloads/{type}", h.HandleGetDownloads)
 	r.Get("/video/{jobID}", h.HandleServeVideo)
+	r.Get("/video/{jobID}/playback-info", h.HandlePlaybackInfo)
+	r.Post("/video/{jobID}/transcode", h.HandleRequestTranscode)
 	r.Get("/settings", h.HandleGetSettings)
 	r.Put("/settings", h.HandleUpdateSettings)
-}
-
-func (h *Handler) RegisterWSRoutes(r *chi.Mux) {
-	r.Use(corsMiddleware)
 	r.Get("/ws", h.HandleWebSocket)
 }
 
@@ -111,36 +115,16 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 	}()
 
-	// Set up ping/pong handlers for connection health
-	const (
-		pongWait   = 60 * time.Second
-		pingPeriod = (pongWait * 9) / 10 // Send pings at 90% of pong deadline
-	)
+	// Connection health: pings are sent by the hub's per-client writer (the
+	// connection's single writer); this side only refreshes the read deadline
+	// as pongs arrive.
+	const pongWait = 60 * time.Second
 
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-
-	// Start ping ticker in a goroutine
-	done := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(pingPeriod)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
-					log.WithError(err).Debug("Failed to send ping")
-					return
-				}
-			case <-done:
-				return
-			}
-		}
-	}()
-	defer close(done)
 
 	// Read loop - waits for messages or pong responses
 	for {
@@ -495,18 +479,9 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Locate the file on disk. yt-dlp's filename sanitization (and the
-	// container extension) cannot be reliably reconstructed from the
-	// title, so this scans the download directory and matches by title.
-	videoPath, err := tools.ResolveVideoFile(h.downloadPath, metadata)
+	videoPath, err := h.locateVideoFile(jobWithMetadata.Job, metadata)
 	if err != nil {
 		log.WithField("title", metadata.Title).Warn("Video file not found")
-		http.Error(w, "Video file not found", http.StatusNotFound)
-		return
-	}
-
-	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
-		log.WithField("path", videoPath).Warn("Video file not found")
 		http.Error(w, "Video file not found", http.StatusNotFound)
 		return
 	}
@@ -516,6 +491,23 @@ func (h *Handler) HandleServeVideo(w http.ResponseWriter, r *http.Request) {
 	// ServeFile handles range requests and content type detection.
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, videoPath)
+}
+
+// locateVideoFile finds a video job's media file, preferring the path recorded
+// at download time. When the file is only found by searching the download
+// directory (legacy rows, moved files), the result is persisted so the next
+// lookup is direct.
+func (h *Handler) locateVideoFile(job *domain.Job, metadata *domain.VideoMetadata) (string, error) {
+	path, err := tools.ResolveVideoFileWithHint(h.downloadPath, job.FilePath, metadata)
+	if err != nil {
+		return "", err
+	}
+	if path != job.FilePath {
+		if err := h.downloadService.GetRepository().SetFilePath(job.ID, path); err != nil {
+			log.WithError(err).WithField("jobID", job.ID).Warn("Failed to persist resolved file path")
+		}
+	}
+	return path, nil
 }
 
 func (h *Handler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -533,6 +525,12 @@ type UpdateSettingsRequest struct {
 	Theme               string `json:"theme"`
 	DownloadQuality     int    `json:"download_quality"`
 	ConcurrentDownloads int    `json:"concurrent_downloads"`
+	// Tools preferences are optional (pointers) so requests that omit them —
+	// like the current settings page — don't clobber stored values.
+	ToolsDefaultFormat    *string `json:"tools_default_format,omitempty"`
+	ToolsDefaultQuality   *string `json:"tools_default_quality,omitempty"`
+	ToolsPreserveOriginal *bool   `json:"tools_preserve_original,omitempty"`
+	ToolsOutputPath       *string `json:"tools_output_path,omitempty"`
 }
 
 func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
@@ -567,6 +565,18 @@ func (h *Handler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	settings.Theme = req.Theme
 	settings.DownloadQuality = req.DownloadQuality
 	settings.ConcurrentDownloads = req.ConcurrentDownloads
+	if req.ToolsDefaultFormat != nil {
+		settings.ToolsDefaultFormat = *req.ToolsDefaultFormat
+	}
+	if req.ToolsDefaultQuality != nil {
+		settings.ToolsDefaultQuality = *req.ToolsDefaultQuality
+	}
+	if req.ToolsPreserveOriginal != nil {
+		settings.ToolsPreserveOriginal = *req.ToolsPreserveOriginal
+	}
+	if req.ToolsOutputPath != nil {
+		settings.ToolsOutputPath = *req.ToolsOutputPath
+	}
 
 	if err := h.settingsRepository.Update(settings); err != nil {
 		log.WithError(err).Error("Failed to update settings")

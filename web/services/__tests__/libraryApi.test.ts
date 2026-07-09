@@ -1,8 +1,10 @@
 import {
     addJobTags,
     deleteDownload,
+    getPlaybackInfo,
     listTags,
     removeJobTag,
+    requestTranscode,
 } from '@/services/libraryApi'
 
 describe('libraryApi', () => {
@@ -73,5 +75,43 @@ describe('libraryApi', () => {
         const [url, opts] = fetchMock.mock.calls[0]
         expect(url).toContain('/job/missing')
         expect(opts.method).toBe('DELETE')
+    })
+
+    it('fetches playback info for a video', async () => {
+        const info = {
+            container: 'mp4',
+            video_codec: 'vp9',
+            audio_codec: 'opus',
+            browser_safe: false,
+        }
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ message: info }),
+        })
+        mockFetch(fetchMock)
+
+        const result = await getPlaybackInfo('job-1')
+
+        expect(result).toEqual(info)
+        expect(fetchMock.mock.calls[0][0]).toContain(
+            '/video/job-1/playback-info'
+        )
+    })
+
+    it('requests a transcode with a POST and unwraps the job state', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                message: { job_id: 'tj-1', status: 'pending', progress: 0 },
+            }),
+        })
+        mockFetch(fetchMock)
+
+        const result = await requestTranscode('job-1')
+
+        expect(result.job_id).toBe('tj-1')
+        const [url, opts] = fetchMock.mock.calls[0]
+        expect(url).toContain('/video/job-1/transcode')
+        expect(opts.method).toBe('POST')
     })
 })

@@ -63,13 +63,18 @@ export default function VideoSelector({
             setError(null)
 
             try {
-                const url = new URL(`${SERVER_URL}/downloads/${activeTab}`)
-                url.searchParams.append('page', String(currentPage))
-                url.searchParams.append('limit', String(pageSize))
-                url.searchParams.append('sort_by', 'created_at')
-                url.searchParams.append('order', 'desc')
+                // Query built by hand: SERVER_URL is a relative path (/api)
+                // by default, which the URL constructor rejects.
+                const params = new URLSearchParams({
+                    page: String(currentPage),
+                    limit: String(pageSize),
+                    sort_by: 'created_at',
+                    order: 'desc',
+                })
 
-                const response = await fetch(url.toString())
+                const response = await fetch(
+                    `${SERVER_URL}/downloads/${activeTab}?${params}`
+                )
 
                 if (response.status === 404) {
                     setData({

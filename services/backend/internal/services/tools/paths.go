@@ -153,14 +153,35 @@ func findVideoInDir(dir, title string) (string, bool) {
 	return "", false
 }
 
-// ResolveVideoFile locates the on-disk file for a downloaded video. Downloads are
-// written by yt-dlp as <downloadPath>/<uploader>/<title>.<ext>, but yt-dlp's
-// filename sanitization does not match a naive reconstruction for titles with
-// characters like '/', '…' or curly quotes, and the container extension is not
-// guaranteed. ResolveVideoFile tries the reconstructed paths first, then falls
-// back to scanning the directory and matching the title with normalization.
+// ResolveVideoFile locates the on-disk file for a downloaded video without a
+// stored path hint. Prefer ResolveVideoFileWithHint when the job has a
+// recorded file_path.
 func ResolveVideoFile(downloadPath string, meta *domain.VideoMetadata) (string, error) {
+	return ResolveVideoFileWithHint(downloadPath, "", meta)
+}
+
+// ResolveVideoFileWithHint locates the on-disk file for a downloaded video.
+// storedPath is the path recorded at download time and wins when it still
+// exists. Otherwise the file is found under
+// <downloadPath>/<uploader>/<title>.<ext>: first by exact reconstruction, then
+// by normalized title matching inside the reconstructed directories, and
+// finally by a normalized scan of the uploader directories themselves —
+// yt-dlp's own sanitization maps characters like '/' and ':' to lookalikes
+// ('⧸', '：') that reconstruction can't reproduce, so directory names must be
+// matched the same way titles are.
+func ResolveVideoFileWithHint(downloadPath string, storedPath string, meta *domain.VideoMetadata) (string, error) {
 	base := filepath.Clean(downloadPath)
+
+	if storedPath != "" {
+		p := filepath.Clean(storedPath)
+		if ensureWithin(base, p) == nil {
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				return p, nil
+			}
+		}
+		// Stale or invalid hint (file moved/deleted): fall through to search.
+	}
+
 	dirs := candidateDirs(downloadPath, meta)
 	title := sanitizeFilename(meta.Title)
 	exts := orderedExtensions(meta.Extension)
@@ -185,7 +206,54 @@ func ResolveVideoFile(downloadPath string, meta *domain.VideoMetadata) (string, 
 		}
 	}
 
+	// Last resort: the uploader directory itself may be named with yt-dlp's
+	// sanitization. Match directory names by normalization, then look for the
+	// title inside. Downloads are always exactly one level deep, so a single
+	// directory scan is sufficient.
+	for _, dir := range normalizedCandidateDirs(base, meta, dirs) {
+		if p, ok := findVideoInDir(dir, meta.Title); ok {
+			return p, nil
+		}
+	}
+
 	return "", fmt.Errorf("video file for %q not found on disk", meta.Title)
+}
+
+// normalizedCandidateDirs scans base for directories whose normalized name
+// matches the video's uploader or channel, skipping any directory already in
+// tried.
+func normalizedCandidateDirs(base string, meta *domain.VideoMetadata, tried []string) []string {
+	targets := map[string]bool{}
+	for _, name := range []string{meta.Uploader, meta.Channel} {
+		if n := normalizeForMatch(name); n != "" {
+			targets[n] = true
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+
+	alreadyTried := map[string]bool{}
+	for _, dir := range tried {
+		alreadyTried[dir] = true
+	}
+
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return nil
+	}
+
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir() || !targets[normalizeForMatch(e.Name())] {
+			continue
+		}
+		dir := filepath.Join(base, e.Name())
+		if !alreadyTried[dir] {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs
 }
 
 // outputExtension determines the extension of the produced file for a job.

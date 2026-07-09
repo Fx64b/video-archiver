@@ -4,11 +4,11 @@ CREATE TABLE IF NOT EXISTS jobs (
                                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                                     job_id TEXT UNIQUE,
                                     url TEXT NOT NULL,
-                                    is_playlist BOOLEAN DEFAULT FALSE,
                                     status TEXT,
                                     progress REAL,
                                     media_type TEXT NOT NULL DEFAULT 'video',
                                     warnings TEXT,
+                                    file_path TEXT,
                                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

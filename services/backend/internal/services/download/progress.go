@@ -2,13 +2,13 @@ package download
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"video-archiver/internal/domain"
 
@@ -78,71 +78,92 @@ type ProgressState struct {
 	Warnings          []string           // Collected warnings/errors during download
 }
 
-// ProgressTracker handles robust progress tracking
+// ProgressTracker handles robust progress tracking. One tracker exists per
+// download and is fed from both the stdout and stderr pipes; mu serializes
+// those two readers over the shared state.
 type ProgressTracker struct {
-	state           *ProgressState
-	service         *Service
-	updateThrottle  time.Duration
-	lastBroadcast   time.Time
+	mu             sync.Mutex
+	state          *ProgressState
+	service        *Service
+	updateThrottle time.Duration
+	lastBroadcast  time.Time
 }
 
 // NewProgressTracker creates a new progress tracker
 func NewProgressTracker(service *Service, jobID, jobType string) *ProgressTracker {
 	return &ProgressTracker{
 		state: &ProgressState{
-			JobID:          jobID,
-			JobType:        jobType,
-			ContentType:    "video", // default
-			Phase:          domain.DownloadPhaseMetadata,
-			CurrentItem:    1,
-			TotalItems:     1,
-			ItemsCompleted: 0,
-			LastUpdate:     time.Now(),
-			VideoStreams:   make(map[string]int),
-			RawProgress:    make(map[string]float64),
+			JobID:             jobID,
+			JobType:           jobType,
+			ContentType:       "video", // default
+			Phase:             domain.DownloadPhaseMetadata,
+			CurrentItem:       1,
+			TotalItems:        1,
+			ItemsCompleted:    0,
+			LastUpdate:        time.Now(),
+			VideoStreams:      make(map[string]int),
+			RawProgress:       make(map[string]float64),
 			CurrentStreamType: make(map[string]string),
-			VideoProgress: make(map[string]float64),
-			Warnings:      make([]string, 0),
+			VideoProgress:     make(map[string]float64),
+			Warnings:          make([]string, 0),
 		},
 		service:        service,
 		updateThrottle: 100 * time.Millisecond, // 0.1 seconds max for more responsive updates
 	}
 }
 
-// isAudioOnly reports whether the tracked job downloads a single audio stream.
-// Audio-only jobs have no video/audio phase split, so yt-dlp's percentage maps
-// directly onto the job progress.
 func (pt *ProgressTracker) isAudioOnly() bool {
 	return pt.state.JobType == string(domain.JobTypeAudio)
 }
 
-// trackProgress is the main entry point for progress tracking
-func (s *Service) trackProgress(pipe io.Reader, jobID string, jobType string) {
-	tracker := NewProgressTracker(s, jobID, jobType)
-
+// consume reads one of yt-dlp's output pipes to exhaustion, feeding each line
+// into the shared tracker state. The caller sends the final update once after
+// every pipe has been consumed — never per pipe, which used to produce
+// duplicate completion broadcasts and database writes.
+func (pt *ProgressTracker) consume(pipe io.Reader) {
 	scanner := bufio.NewScanner(pipe)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
-
+		line := strings.TrimSpace(scanner.Text())
 		if len(line) == 0 {
 			continue
 		}
 
-		tracker.processLine(line)
+		pt.mu.Lock()
+		pt.processLine(line)
+		pt.mu.Unlock()
 	}
-
-	// Send final completion update
-	tracker.sendFinalUpdate()
 
 	if err := scanner.Err(); err != nil {
 		if !strings.Contains(err.Error(), "file already closed") && !strings.Contains(err.Error(), "broken pipe") {
 			log.WithError(err).Error("Error reading progress output")
 		}
 	}
+}
+
+// track consumes both output pipes concurrently and returns a wait function
+// that blocks until they are drained. Callers must invoke wait() BEFORE
+// cmd.Wait() — os/exec closes the pipes on Wait, so reads have to finish
+// first — and then call finish() once the command's outcome is known.
+func (pt *ProgressTracker) track(stdout, stderr io.Reader) (wait func()) {
+	var wg sync.WaitGroup
+	for _, pipe := range []io.Reader{stdout, stderr} {
+		wg.Add(1)
+		go func(p io.Reader) {
+			defer wg.Done()
+			pt.consume(p)
+		}(pipe)
+	}
+	return wg.Wait
+}
+
+// finish sends the single final completion update for the download.
+func (pt *ProgressTracker) finish() {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	pt.sendFinalUpdate()
 }
 
 // processLine analyzes each line and updates state accordingly
@@ -185,7 +206,6 @@ func (pt *ProgressTracker) processLine(line string) {
 	// 6. Send throttled update (this handles the 0.25s throttling)
 	pt.sendThrottledUpdate()
 }
-
 
 // detectContentType determines if this is a video, playlist, or channel download
 func (pt *ProgressTracker) detectContentType(line string) {
@@ -310,8 +330,6 @@ func (pt *ProgressTracker) detectPhase(line string) {
 
 				// Determine phase and progress based on current stream type
 				if pt.isAudioOnly() {
-					// Audio-only download: a single stream, mapped to 0-95%
-					// with the remainder reserved for audio extraction.
 					pt.state.Phase = domain.DownloadPhaseAudio
 					pt.state.CurrentProgress = percent * 0.95
 				} else if streamType == "audio" {
@@ -349,7 +367,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 		// Handle stream destination announcements to determine stream type
 		videoID := streamMatch[2]
 		formatCode := streamMatch[3] // Extract format code (e.g., "401", "251")
-		extension := streamMatch[4]   // Extract extension (e.g., "mp4", "webm", "m4a")
+		extension := streamMatch[4]  // Extract extension (e.g., "mp4", "webm", "m4a")
 
 		// Initialize maps if needed
 		if pt.state.CurrentStreamType == nil {
@@ -381,8 +399,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 		previousStreamType := pt.state.CurrentStreamType[videoID]
 		pt.state.CurrentStreamType[videoID] = streamType
 
-		// Audio-only downloads have exactly one stream; format-code
-		// heuristics for the video/audio split don't apply.
+		// If transitioning from video to audio, update phase immediately
 		if pt.isAudioOnly() {
 			pt.state.Phase = domain.DownloadPhaseAudio
 		} else if previousStreamType == "video" && streamType == "audio" {
@@ -406,15 +423,10 @@ func (pt *ProgressTracker) detectPhase(line string) {
 			"line":       line,
 		}).Debug("Stream destination detected - stream type determined")
 
-	} else if mergePattern.MatchString(line) {
+	} else if mergePattern.MatchString(line) || extractAudioPattern.MatchString(line) {
 		pt.state.Phase = domain.DownloadPhaseMerging
 		pt.state.CurrentProgress = 95 // Merging phase
-		log.WithField("line", line).Debug("Merge phase detected")
-	} else if extractAudioPattern.MatchString(line) {
-		// Audio extraction/conversion after the download finishes
-		pt.state.Phase = domain.DownloadPhaseMerging
-		pt.state.CurrentProgress = 95
-		log.WithField("line", line).Debug("Audio extraction phase detected")
+		log.WithField("line", line).Debug("Merging/extraction phase detected")
 	}
 
 	// Check for item completion patterns
@@ -426,12 +438,11 @@ func (pt *ProgressTracker) detectPhase(line string) {
 	if previousPhase != pt.state.Phase {
 		log.WithFields(log.Fields{
 			"previousPhase": previousPhase,
-			"newPhase":     pt.state.Phase,
-			"line":         line,
+			"newPhase":      pt.state.Phase,
+			"line":          line,
 		}).Debug("Phase transition detected")
 	}
 }
-
 
 // handleSpecialCases deals with edge cases like already downloaded files and retries
 func (pt *ProgressTracker) handleSpecialCases(line string) {
@@ -661,20 +672,20 @@ func (pt *ProgressTracker) broadcastUpdate() {
 		Warnings:             pt.state.Warnings,
 	}
 
-	pt.service.hub.broadcast <- update
+	pt.service.hub.Broadcast(update)
 
 	if os.Getenv("DEBUG") == "true" {
 		log.WithFields(log.Fields{
-			"jobID":              update.JobID,
-			"currentItem":        update.CurrentItem,
-			"totalItems":         update.TotalItems,
-			"overallProgress":    update.Progress,
-			"currentProgress":    update.CurrentVideoProgress,
-			"phase":              update.DownloadPhase,
-			"contentType":        pt.state.ContentType,
-			"isRetrying":         update.IsRetrying,
-			"retryCount":         update.RetryCount,
-			"warningCount":       len(update.Warnings),
+			"jobID":           update.JobID,
+			"currentItem":     update.CurrentItem,
+			"totalItems":      update.TotalItems,
+			"overallProgress": update.Progress,
+			"currentProgress": update.CurrentVideoProgress,
+			"phase":           update.DownloadPhase,
+			"contentType":     pt.state.ContentType,
+			"isRetrying":      update.IsRetrying,
+			"retryCount":      update.RetryCount,
+			"warningCount":    len(update.Warnings),
 		}).Debug("Progress update broadcast")
 	}
 }
@@ -712,29 +723,3 @@ func (pt *ProgressTracker) updateJobProgress(jobID string, progress float64) err
 	job.Warnings = pt.state.Warnings
 	return pt.service.jobs.Update(job)
 }
-
-// Legacy functions for metadata handling (unchanged)
-func (s *Service) processPlaylistMetadata(jobID string, metadataPath string) {
-	data, err := os.ReadFile(metadataPath)
-	if err != nil {
-		log.WithError(err).Error("Failed to read playlist metadata file")
-		return
-	}
-
-	var metadata domain.PlaylistMetadata
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		log.WithError(err).Error("Failed to parse playlist metadata")
-		return
-	}
-
-	update := domain.MetadataUpdate{
-		JobID:    jobID,
-		Metadata: &metadata,
-	}
-	s.hub.broadcast <- update
-
-	if err := s.jobs.StoreMetadata(jobID, &metadata); err != nil {
-		log.WithError(err).Error("Failed to store playlist metadata")
-	}
-}
-
