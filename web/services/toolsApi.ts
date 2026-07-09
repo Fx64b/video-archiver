@@ -115,16 +115,19 @@ export async function listToolJobs(
     status?: string,
     operationType?: string
 ): Promise<PaginatedJobs> {
-    const url = new URL(`${BASE}/tools/jobs`)
-    url.searchParams.set('page', String(page))
-    url.searchParams.set('limit', String(limit))
+    // Query built by hand: BASE is a relative path (/api) by default, which
+    // the URL constructor rejects.
+    const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+    })
     if (status) {
-        url.searchParams.set('status', status)
+        params.set('status', status)
     }
     if (operationType) {
-        url.searchParams.set('operation_type', operationType)
+        params.set('operation_type', operationType)
     }
-    const res = await fetch(url.toString())
+    const res = await fetch(`${BASE}/tools/jobs?${params}`)
     if (!res.ok) {
         throw new Error(await parseError(res))
     }

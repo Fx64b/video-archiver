@@ -140,6 +140,25 @@ type ToolsRepository interface {
 	GetByID(id string) (*ToolsJob, error)
 	GetAll() ([]*ToolsJob, error)
 	GetByStatus(status ToolsJobStatus) ([]*ToolsJob, error)
+	FindLatestConvertForInput(jobID string) (*ToolsJob, error)
 	Delete(id string) error
 	List(page int, limit int, status string, operationType string) ([]*ToolsJob, int, error)
+}
+
+// PlaybackInfo describes whether a downloaded video's codecs can be decoded by
+// browsers, and any transcode job that produces a compatible version.
+type PlaybackInfo struct {
+	Container   string             `json:"container"`
+	VideoCodec  string             `json:"video_codec"`
+	AudioCodec  string             `json:"audio_codec"`
+	BrowserSafe bool               `json:"browser_safe"`
+	Transcode   *PlaybackTranscode `json:"transcode,omitempty"`
+}
+
+// PlaybackTranscode is the state of the convert job backing a browser-safe
+// version of a video.
+type PlaybackTranscode struct {
+	JobID    string         `json:"job_id"`
+	Status   ToolsJobStatus `json:"status"`
+	Progress float64        `json:"progress"`
 }

@@ -34,16 +34,15 @@ type activeJob struct {
 }
 
 type Service struct {
-	config        *Config
-	jobs          domain.JobRepository
-	settings      domain.SettingsRepository
-	queue         chan domain.Job
-	wg            sync.WaitGroup
-	hub           *WebSocketHub
-	ctx           context.Context
-	cancel        context.CancelFunc
-	metadataPaths sync.Map
-	activeJobs    sync.Map // map[string]*activeJob
+	config     *Config
+	jobs       domain.JobRepository
+	settings   domain.SettingsRepository
+	queue      chan domain.Job
+	wg         sync.WaitGroup
+	hub        *WebSocketHub
+	ctx        context.Context
+	cancel     context.CancelFunc
+	activeJobs sync.Map // map[string]*activeJob
 }
 
 func NewService(config *Config) *Service {
@@ -75,6 +74,7 @@ func (s *Service) Start() error {
 func (s *Service) Stop() {
 	s.cancel()
 	s.wg.Wait()
+	s.hub.Stop()
 }
 
 func (s *Service) GetHub() *WebSocketHub {
@@ -89,8 +89,17 @@ func (s *Service) Submit(job domain.Job) error {
 		return fmt.Errorf("failed to create job: %w", err)
 	}
 
-	s.queue <- job
-	return nil
+	// Never block the HTTP handler on a full queue — reject and clean up the
+	// record instead.
+	select {
+	case s.queue <- job:
+		return nil
+	default:
+		if err := s.jobs.DeleteJob(job.ID); err != nil {
+			log.WithError(err).WithField("jobID", job.ID).Warn("Failed to remove rejected job")
+		}
+		return fmt.Errorf("download queue is full, try again later")
+	}
 }
 
 func (s *Service) CancelJob(id string) error {
@@ -129,7 +138,7 @@ func (s *Service) CancelJob(id string) error {
 		Status:   domain.JobStatusCancelled,
 		Progress: job.Progress,
 	}
-	s.hub.broadcast <- cancelUpdate
+	s.hub.Broadcast(cancelUpdate)
 
 	log.WithField("job_id", id).Info("Download job cancelled")
 	return nil
@@ -155,7 +164,7 @@ func (s *Service) DeleteJob(id string) error {
 	}
 
 	if meta, ok := jwm.Metadata.(*domain.VideoMetadata); ok && meta != nil {
-		s.removeVideoFiles(meta)
+		s.removeVideoFiles(jwm.Job.FilePath, meta)
 	}
 
 	if err := s.jobs.DeleteJob(id); err != nil {
@@ -169,8 +178,8 @@ func (s *Service) DeleteJob(id string) error {
 // removeVideoFiles deletes a video's media file and its yt-dlp sidecar files
 // (.info.json etc.) from disk. Missing files are not an error — the library
 // record should be removable even if the file is already gone.
-func (s *Service) removeVideoFiles(meta *domain.VideoMetadata) {
-	path, err := tools.ResolveVideoFile(s.config.DownloadPath, meta)
+func (s *Service) removeVideoFiles(storedPath string, meta *domain.VideoMetadata) {
+	path, err := tools.ResolveVideoFileWithHint(s.config.DownloadPath, storedPath, meta)
 	if err != nil {
 		log.WithField("title", meta.Title).Debug("No media file found to delete")
 		return
@@ -192,10 +201,6 @@ func (s *Service) removeVideoFiles(meta *domain.VideoMetadata) {
 
 func (s *Service) GetRepository() domain.JobRepository {
 	return s.jobs
-}
-
-func (s *Service) GetRecent(limit int) ([]*domain.Job, error) {
-	return s.jobs.GetRecent(limit)
 }
 
 func (s *Service) processJobs() {
@@ -237,7 +242,7 @@ func (s *Service) processJobs() {
 						Status:   domain.JobStatusError,
 						Progress: job.Progress,
 					}
-					s.hub.broadcast <- errorUpdate
+					s.hub.Broadcast(errorUpdate)
 				}
 			}
 
@@ -247,29 +252,18 @@ func (s *Service) processJobs() {
 	}
 }
 
-func (s *Service) setMetadataPath(jobID string, path string) {
-	s.metadataPaths.Store(jobID, path)
-}
-
-func (s *Service) getMetadataPath(jobID string) (string, bool) {
-	path, ok := s.metadataPaths.Load(jobID)
-	if !ok {
-		return "", false
-	}
-	return path.(string), true
-}
-
 func (s *Service) processJob(ctx context.Context, job domain.Job) error {
-	job.Status = domain.JobStatusPending
-	job.Progress = 0
-	_ = s.jobs.Create(&job)
-
+	// The job record was created by Submit; only the status changes here.
 	job.Status = domain.JobStatusInProgress
 	if err := s.jobs.Update(&job); err != nil {
 		return fmt.Errorf("failed to update job status: %w", err)
 	}
 
-	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s", s.config.DownloadPath)
+	// The explicit %(ext)s matters: without it, merged downloads get an
+	// extension appended by the merger anyway, but single-format downloads
+	// (direct files, extractors offering one muxed format) are written
+	// extension-less, which breaks --add-metadata and container detection.
+	basePath := fmt.Sprintf("%s/%%(uploader)s/%%(title)s.%%(ext)s", s.config.DownloadPath)
 
 	log.Infof("Download Path: %s", basePath)
 
@@ -298,9 +292,11 @@ func (s *Service) processJob(ctx context.Context, job domain.Job) error {
 		// The main goroutine may read the metadata while the async goroutine modifies it
 		metadataCopy := copyMetadata(extractedMetadata)
 
-		// Create a detached context that survives the main job context
-		// This prevents the goroutine from being abruptly terminated if the job is canceled
-		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		// Derive from the service context, not the per-job context: metadata
+		// enhancement survives job cancellation but must still stop on service
+		// shutdown — a detached context here used to hang Stop() for up to
+		// five minutes.
+		asyncCtx, asyncCancel := context.WithTimeout(s.ctx, 5*time.Minute)
 
 		// Track the goroutine to prevent leaks during service shutdown
 		s.wg.Add(1)
@@ -426,8 +422,6 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	// This provides enough info to distinguish video/audio streams and track progress accurately
 	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
-		"--merge-output-format", "mp4",
 		"--newline", // Important for progress parsing
 		"--progress-template", fmt.Sprintf(
 			"[%d][%%(info.playlist_index)s][%%(info.id)s][%%(info.title).50s][%%(info.format_id)s][%%(info.format_note)s][%%(info.vcodec)s][%%(info.acodec)s]prog:[%%(progress.downloaded_bytes)s/%%(progress.total_bytes)s][%%(progress._percent_str)s][%%(progress.speed)s][%%(progress.eta)s]",
@@ -444,14 +438,21 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 		"--output", outputPath,
 		"--yes-playlist", // Ensure playlist processing is enabled
 	}
-	
+	cmdArgs = append(cmdArgs, downloadFormatArgs(maxQuality)...)
+
+	printFile, cleanupPrintFile := createPrintFile(job.ID)
+	if printFile != "" {
+		defer cleanupPrintFile()
+		cmdArgs = append(cmdArgs, "--print-to-file", "after_move:%(id)s\t%(filepath)s", printFile)
+	}
+
 	// Add channel-specific arguments if this is a channel
 	if _, isChannel := metadataModel.(*domain.ChannelMetadata); isChannel {
 		// For channels, we may want to limit the number of videos or specify sorting
 		// Add any channel-specific parameters here if needed
 		log.Info("Adding channel-specific download parameters")
 	}
-	
+
 	cmdArgs = append(cmdArgs, downloadURL)
 	downloadCmd := exec.CommandContext(ctx, "yt-dlp", cmdArgs...)
 
@@ -473,16 +474,27 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 	var stderrBuf bytes.Buffer
 	stderrReader := io.TeeReader(stderr, &stderrBuf)
 
-	// Track progress in separate goroutines
-	go s.trackProgress(stdout, job.ID, string(domain.JobTypeVideo))
-	go s.trackProgress(stderrReader, job.ID, string(domain.JobTypeVideo))
+	// One tracker fed by both pipes; the pipes must be drained before Wait.
+	tracker := NewProgressTracker(s, job.ID, string(domain.JobTypeVideo))
+	waitForOutput := tracker.track(stdout, stderrReader)
+	waitForOutput()
 
-	// Wait for command to complete
 	if err := downloadCmd.Wait(); err != nil {
 		// With --ignore-errors, yt-dlp won't fail even if some videos fail
 		// But we still log if there's a complete failure
 		log.WithError(err).Warn("Download command completed with error (may be partial failure)")
 	}
+	tracker.finish()
+	// Collect where yt-dlp put each finished video so child jobs can record
+	// their media file location.
+	printedPaths := map[string]string{}
+	if printFile != "" {
+		if f, err := os.Open(printFile); err == nil {
+			printedPaths = printedFilepathsByID(f)
+			f.Close()
+		}
+	}
+
 	// Process failed videos from stderr
 	failedVideos := s.parseFailedVideos(stderrBuf.String())
 	if len(failedVideos) > 0 {
@@ -590,6 +602,9 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 				existingJob, err := s.jobs.GetByID(videoJobID)
 				if err == nil && existingJob != nil {
 					log.Debugf("Job already exists for video %s, linking to parent", videoJobID)
+					if existingJob.FilePath == "" {
+						s.recordFilePath(videoJobID, printedPaths[id])
+					}
 					// Job exists, create membership relationship
 					membershipType := "unknown"
 					switch metadataModel.(type) {
@@ -625,6 +640,7 @@ func (s *Service) downloadPlaylistOrChannel(ctx context.Context, job domain.Job,
 					continue
 				}
 				log.Debugf("Successfully created virtual job for video %s", videoJobID)
+				s.recordFilePath(videoJobID, printedPaths[id])
 
 				// Extract and store the video metadata
 				videoMetadata, err := metadata.ExtractMetadata(metadataFilePath)
@@ -887,10 +903,8 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		log.Infof("[Job %s] Starting video download with quality: %dp, concurrency: %d", job.ID, maxQuality, concurrency)
 	}
 
-	downloadCmd := exec.CommandContext(ctx, "yt-dlp",
+	cmdArgs := []string{
 		"-N", fmt.Sprintf("%d", concurrency),
-		"--format", fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best", maxQuality),
-		"--merge-output-format", "mp4",
 		"--newline",
 		// Enhanced progress template with format info to distinguish video/audio streams
 		"--progress-template", "[NA][NA][%(info.id)s][%(info.title).50s][%(info.format_id)s][%(info.format_note)s][%(info.vcodec)s][%(info.acodec)s]prog:[%(progress.downloaded_bytes)s/%(progress.total_bytes)s][%(progress._percent_str)s][%(progress.speed)s][%(progress.eta)s]",
@@ -902,8 +916,17 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		"--add-metadata",
 		"--write-info-json", // Write metadata with actual downloaded format info
 		"--output", outputPath,
-		job.URL,
-	)
+	}
+	cmdArgs = append(cmdArgs, downloadFormatArgs(maxQuality)...)
+
+	printFile, cleanupPrintFile := createPrintFile(job.ID)
+	if printFile != "" {
+		defer cleanupPrintFile()
+		cmdArgs = append(cmdArgs, "--print-to-file", "after_move:%(filepath)s", printFile)
+	}
+
+	cmdArgs = append(cmdArgs, job.URL)
+	downloadCmd := exec.CommandContext(ctx, "yt-dlp", cmdArgs...)
 
 	stdout, err := downloadCmd.StdoutPipe()
 	if err != nil {
@@ -919,18 +942,26 @@ func (s *Service) downloadVideo(ctx context.Context, job domain.Job, outputPath 
 		return fmt.Errorf("failed to start download: %w", err)
 	}
 
-	// Track progress in separate goroutines
-	go s.trackProgress(stdout, job.ID, string(domain.JobTypeVideo))
-	go s.trackProgress(stderr, job.ID, string(domain.JobTypeVideo))
+	// One tracker fed by both pipes; the pipes must be drained before Wait.
+	tracker := NewProgressTracker(s, job.ID, string(domain.JobTypeVideo))
+	waitForOutput := tracker.track(stdout, stderr)
+	waitForOutput()
 
-	// Wait for command to complete
 	err = downloadCmd.Wait()
 	if err != nil {
 		log.WithError(err).WithField("jobID", job.ID).Error("yt-dlp command failed")
 		return err
 	}
+	tracker.finish()
 
 	log.WithField("jobID", job.ID).Info("yt-dlp download completed successfully")
+
+	if printFile != "" {
+		if f, err := os.Open(printFile); err == nil {
+			s.recordFilePath(job.ID, printedFilepath(f))
+			f.Close()
+		}
+	}
 
 	// After download, update metadata with actual downloaded resolution
 	if err := s.updateDownloadedMetadata(job.ID, maxQuality); err != nil {
@@ -974,7 +1005,7 @@ func (s *Service) extractBasicMetadata(ctx context.Context, job domain.Job, outp
 		JobType:  string(domain.JobTypeMetadata),
 		Progress: 0,
 	}
-	s.hub.broadcast <- update
+	s.hub.Broadcast(update)
 
 	if err := metadataCmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start metadata extraction: %w", err)
@@ -1013,12 +1044,12 @@ func (s *Service) extractBasicMetadata(ctx context.Context, job domain.Job, outp
 			JobID:    job.ID,
 			Metadata: extractedMetadata,
 		}
-		s.hub.broadcast <- basicMetadataUpdate
+		s.hub.Broadcast(basicMetadataUpdate)
 		log.Debug("Sent immediate basic metadata update to UI")
 	}
 
 	update.Progress = 1
-	s.hub.broadcast <- update
+	s.hub.Broadcast(update)
 
 	return extractedMetadata, nil
 }
@@ -1058,7 +1089,7 @@ func (s *Service) enhanceMetadataAsync(ctx context.Context, job domain.Job, basi
 			JobID:    job.ID,
 			Metadata: basicMetadata,
 		}
-		s.hub.broadcast <- enhancedMetadataUpdate
+		s.hub.Broadcast(enhancedMetadataUpdate)
 		log.WithField("jobID", job.ID).Info("Sent enhanced metadata update to UI")
 	}
 }
@@ -1250,15 +1281,6 @@ func getString(data map[string]interface{}, key string) string {
 		return val
 	}
 	return ""
-}
-
-func isPlaylistOrChannel(metadata domain.Metadata) bool {
-	switch metadata.(type) {
-	case *domain.PlaylistMetadata, *domain.ChannelMetadata:
-		return true
-	default:
-		return false
-	}
 }
 
 // copyMetadata creates a deep copy of metadata to avoid race conditions

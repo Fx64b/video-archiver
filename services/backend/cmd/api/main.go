@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"github.com/go-chi/chi"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/go-chi/chi"
+	log "github.com/sirupsen/logrus"
 	"video-archiver/internal/api/handlers"
 	"video-archiver/internal/config"
 	"video-archiver/internal/repositories/sqlite"
@@ -79,11 +84,6 @@ __     _____ ____  _____ ___
 	defer downloadService.Stop()
 
 	fmt.Println("Starting Tools Service...")
-	processedPath := os.Getenv("PROCESSED_PATH")
-	if processedPath == "" {
-		processedPath = "./data/processed"
-	}
-
 	toolsService := tools.NewService(&tools.Config{
 		ToolsRepository: toolsRepo,
 		JobRepository:   jobRepo,
@@ -91,7 +91,7 @@ __     _____ ____  _____ ___
 		// the frontend over the same /ws connection.
 		Broadcaster:   downloadService.GetHub(),
 		DownloadPath:  cfg.Server.DownloadPath,
-		ProcessedPath: processedPath,
+		ProcessedPath: cfg.Server.ProcessedPath,
 		Concurrency:   2,
 	})
 
@@ -100,25 +100,50 @@ __     _____ ____  _____ ___
 	}
 	defer toolsService.Stop()
 
-	handler := handlers.NewHandler(downloadService, cfg.Server.DownloadPath, settingsRepo)
+	handler := handlers.NewHandler(downloadService, cfg.Server.DownloadPath, settingsRepo,
+		toolsService, toolsRepo, tools.NewFFmpeg())
 	toolsHandler := handlers.NewToolsHandler(toolsService)
 
+	// One router, one port: /ws lives next to the REST routes so deployments
+	// only need a single upstream and the frontend can use same-origin URLs.
 	apiRouter := chi.NewRouter()
 	handler.RegisterRoutes(apiRouter)
 	toolsHandler.RegisterRoutes(apiRouter)
 
-	wsRouter := chi.NewRouter()
-	handler.RegisterWSRoutes(wsRouter)
+	// Explicit timeouts so slow or stalled clients can't pin server resources
+	// indefinitely. Write timeouts are deliberately absent: /video streams
+	// large files and /ws connections are long-lived.
+	apiServer := &http.Server{
+		Addr:              cfg.Server.Port,
+		Handler:           apiRouter,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 
+	serverErrors := make(chan error, 1)
 	go func() {
-		fmt.Printf("Starting WebSocket server on %s...\n", cfg.Server.WSPort)
-		if err := http.ListenAndServe(cfg.Server.WSPort, wsRouter); err != nil {
-			log.Fatal(err)
-		}
+		fmt.Printf("Starting API server on %s...\n", cfg.Server.Port)
+		serverErrors <- apiServer.ListenAndServe()
 	}()
 
-	fmt.Printf("Starting API server on %s...\n", cfg.Server.Port)
-	if err := http.ListenAndServe(cfg.Server.Port, apiRouter); err != nil {
-		log.Fatal(err)
+	// Shutdown order: stop accepting HTTP traffic, then stop the services
+	// (which cancels running yt-dlp/ffmpeg processes and closes the WebSocket
+	// hub via their deferred Stop calls), then close the database (deferred).
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			log.WithError(err).Error("HTTP server failed")
+		}
+	case <-ctx.Done():
+		fmt.Println("Shutting down...")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := apiServer.Shutdown(shutdownCtx); err != nil {
+		log.WithError(err).Warn("API server shutdown incomplete")
 	}
 }

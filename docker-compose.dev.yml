@@ -1,0 +1,62 @@
+# Development stack with hot reload — use via `./run.sh dev`.
+#
+# Backend: Air watches the bind-mounted source and rebuilds in <1s.
+# Web: the Vite dev server serves the bind-mounted source with HMR and
+#      proxies /api (including the WebSocket) to the backend container,
+#      so no URLs are baked in and there is no CORS.
+name: video-archiver-dev
+
+services:
+  backend:
+    build:
+      context: ./services/backend
+      target: dev
+    init: true
+    user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
+    volumes:
+      - ./services/backend:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/.cache/go-build
+      - ./data/downloads:/app/data/downloads:Z
+      - ./data/processed:/app/data/processed:Z
+      - ./data/db:/app/data/db:Z
+      - ./data/cache:/app/cache:Z
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=:8080
+      - DOWNLOAD_PATH=/app/data/downloads
+      - PROCESSED_PATH=/app/data/processed
+      - DATABASE_PATH=/app/data/db/video-archiver.db
+      - DEBUG=${DEBUG:-true}
+      - XDG_CACHE_HOME=/app/cache
+      - GOCACHE=/.cache/go-build
+
+  web:
+    image: node:24-alpine
+    working_dir: /app
+    # The pnpm store lives in a named volume so `pnpm install` after the
+    # first run only verifies the lockfile. node_modules stays inside the
+    # container (anonymous volume) — host node_modules are never touched.
+    command: >
+      sh -c "corepack enable
+      && corepack prepare pnpm@10.33.0 --activate
+      && pnpm config set store-dir /pnpm-store
+      && pnpm install
+      && pnpm dev --host --port 3000"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - pnpm-store:/pnpm-store
+    ports:
+      - "3000:3000"
+    environment:
+      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+      - VITE_PROXY_TARGET=http://backend:8080
+    depends_on:
+      - backend
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  pnpm-store:

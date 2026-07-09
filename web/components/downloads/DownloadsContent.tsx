@@ -120,19 +120,24 @@ export default function DownloadsContent() {
             const start = Date.now()
 
             try {
-                const url = new URL(`${SERVER_URL}/downloads/${activeTab}`)
-                url.searchParams.append('page', String(currentPage))
-                url.searchParams.append('limit', String(pageSize))
-                url.searchParams.append('sort_by', sortBy)
-                url.searchParams.append('order', order)
+                // Query built by hand: SERVER_URL is a relative path (/api)
+                // by default, which the URL constructor rejects.
+                const params = new URLSearchParams({
+                    page: String(currentPage),
+                    limit: String(pageSize),
+                    sort_by: sortBy,
+                    order: order,
+                })
                 if (search) {
-                    url.searchParams.append('search', search)
+                    params.append('search', search)
                 }
                 if (tag) {
-                    url.searchParams.append('tag', tag)
+                    params.append('tag', tag)
                 }
 
-                const response = await fetch(url.toString())
+                const response = await fetch(
+                    `${SERVER_URL}/downloads/${activeTab}?${params}`
+                )
 
                 if (response.status === 404) {
                     setData({

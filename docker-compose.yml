@@ -10,15 +10,15 @@ services:
     user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
     volumes:
       - ./data/downloads:/app/data/downloads:Z
+      - ./data/processed:/app/data/processed:Z
       - ./data/db:/app/data/db:Z
       - ./data/cache:/app/cache:Z
     ports:
       - "8080:8080"
-      - "8081:8081"
     environment:
       - PORT=:8080
-      - WS_PORT=:8081
       - DOWNLOAD_PATH=/app/data/downloads
+      - PROCESSED_PATH=/app/data/processed
       - DATABASE_PATH=/app/data/db/video-archiver.db
       - DEBUG=${DEBUG:-false}
       - XDG_CACHE_HOME=/app/cache
@@ -26,9 +26,6 @@ services:
   web:
     build:
       context: ./web
-      args:
-        - VITE_SERVER_URL=http://localhost:8080
-        - VITE_SERVER_URL_WS=ws://localhost:8081
     restart: unless-stopped
     depends_on:
       - backend

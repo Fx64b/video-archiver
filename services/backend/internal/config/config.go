@@ -6,10 +6,10 @@ import (
 
 type Config struct {
 	Server struct {
-		Port         string `env:"PORT" envDefault:":8080"`
-		WSPort       string `env:"WS_PORT" envDefault:":8081"`
-		DownloadPath string `env:"DOWNLOAD_PATH" envDefault:"./data/downloads"`
-		DatabasePath string `env:"DATABASE_PATH" envDefault:"./data/db/video-archiver.db"`
+		Port          string `env:"PORT" envDefault:":8080"`
+		DownloadPath  string `env:"DOWNLOAD_PATH" envDefault:"./data/downloads"`
+		ProcessedPath string `env:"PROCESSED_PATH" envDefault:"./data/processed"`
+		DatabasePath  string `env:"DATABASE_PATH" envDefault:"./data/db/video-archiver.db"`
 	}
 	YtDlp struct {
 		Concurrency int `env:"YTDLP_CONCURRENCY" envDefault:"2"`

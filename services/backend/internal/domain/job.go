@@ -19,6 +19,10 @@ type Job struct {
 	Progress      float64   `json:"progress"`
 	CustomQuality *int      `json:"custom_quality,omitempty"`
 	Warnings      []string  `json:"warnings,omitempty"`
+	// FilePath is the absolute on-disk path of the downloaded media file,
+	// captured from yt-dlp when the download finishes. Empty for playlist and
+	// channel parent jobs and for downloads made before this field existed.
+	FilePath string `json:"file_path,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -27,6 +31,7 @@ type Job struct {
 type JobRepository interface {
 	Create(job *Job) error
 	Update(job *Job) error
+	SetFilePath(jobID string, path string) error
 	GetByID(id string) (*Job, error)
 	GetRecent(limit int) ([]*Job, error)
 	StoreMetadata(jobID string, metadata Metadata) error

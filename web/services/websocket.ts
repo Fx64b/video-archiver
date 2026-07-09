@@ -1,7 +1,7 @@
 import { toast } from 'sonner'
 import { create } from 'zustand'
 
-import { SERVER_URL_WS } from '@/lib/env'
+import { serverWsUrl } from '@/lib/env'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -35,7 +35,7 @@ const useWebSocketStore = create<WebSocketState>((set, get) => ({
         // Close existing socket if it exists but isn't open
         if (socket) disconnect()
 
-        const wsUrl = SERVER_URL_WS + '/ws'
+        const wsUrl = serverWsUrl() + '/ws'
         const newSocket = new WebSocket(wsUrl)
 
         newSocket.onopen = () => {
