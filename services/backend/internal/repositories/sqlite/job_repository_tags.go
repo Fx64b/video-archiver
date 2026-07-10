@@ -154,6 +154,7 @@ func (r *JobRepository) DeleteJob(jobID string) error {
 		`DELETE FROM playlists WHERE job_id = ?`,
 		`DELETE FROM channels WHERE job_id = ?`,
 		`DELETE FROM video_memberships WHERE video_job_id = ? OR parent_job_id = ?`,
+		`DELETE FROM collection_videos WHERE video_job_id = ?`,
 		`DELETE FROM job_tags WHERE job_id = ?`,
 		`DELETE FROM jobs WHERE job_id = ?`,
 	}

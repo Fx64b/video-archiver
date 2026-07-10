@@ -26,6 +26,7 @@ import { useParams } from 'react-router-dom'
 import { SERVER_URL } from '@/lib/env'
 import { formatBytes, formatSeconds, formatSubscriberNumber } from '@/lib/utils'
 
+import { AddToCollectionDialog } from '@/components/collections/AddToCollectionDialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { TagEditor } from '@/components/tag-editor'
 import { Badge } from '@/components/ui/badge'
@@ -321,6 +322,9 @@ export default function VideoDetailPage() {
 
                 {/* Sidebar */}
                 <div className="space-y-4">
+                    {/* Collections */}
+                    {id && <AddToCollectionDialog videoId={id} />}
+
                     {/* Parent playlists/channels */}
                     {parents.length > 0 && (
                         <Card>

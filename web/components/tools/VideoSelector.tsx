@@ -1,6 +1,7 @@
+import { listCollections } from '@/services/collectionsApi'
 import useToolsState from '@/store/toolsState'
-import { JobWithMetadata } from '@/types'
-import { AlertCircle, Check } from 'lucide-react'
+import { Collection, JobWithMetadata } from '@/types'
+import { AlertCircle, Check, FolderOpen } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
@@ -46,6 +47,7 @@ export default function VideoSelector({
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [data, setData] = useState<PaginatedResponse | null>(null)
+    const [collections, setCollections] = useState<Collection[]>([])
     const [currentPage, setCurrentPage] = useState(1)
     const pageSize = 12
 
@@ -61,6 +63,22 @@ export default function VideoSelector({
         const fetchData = async () => {
             setLoading(true)
             setError(null)
+
+            // Collections come from their own (unpaginated) endpoint.
+            if (activeTab === 'collections') {
+                try {
+                    setCollections(await listCollections())
+                } catch (err) {
+                    setError(
+                        err instanceof Error
+                            ? err.message
+                            : 'Failed to load collections'
+                    )
+                } finally {
+                    setLoading(false)
+                }
+                return
+            }
 
             try {
                 // Query built by hand: SERVER_URL is a relative path (/api)
@@ -159,6 +177,23 @@ export default function VideoSelector({
         }
     }
 
+    const handleCollectionClick = (collection: Collection) => {
+        if (isInputSelected(collection.id)) {
+            removeSelectedInput(collection.id)
+            return
+        }
+        if (mode === 'single') {
+            selectedInputs.forEach((input) => removeSelectedInput(input.id))
+        }
+        addSelectedInput({
+            id: collection.id,
+            type: 'collection',
+            title: collection.name,
+            thumbnail: collection.thumbnail,
+            videoCount: collection.video_count,
+        })
+    }
+
     const handleTabChange = (value: string) => {
         setActiveTab(value)
         setCurrentPage(1)
@@ -252,6 +287,67 @@ export default function VideoSelector({
             )
         }
 
+        if (activeTab === 'collections') {
+            if (collections.length === 0) {
+                return (
+                    <div className="text-muted-foreground py-12 text-center">
+                        <p>No collections found.</p>
+                        <p className="mt-2 text-sm">
+                            Create collections from the Collections page or a
+                            video&apos;s detail page.
+                        </p>
+                    </div>
+                )
+            }
+            return (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {collections.map((collection) => {
+                        const isSelected = isInputSelected(collection.id)
+                        return (
+                            <Card
+                                key={collection.id}
+                                className={`cursor-pointer transition-all hover:shadow-lg ${
+                                    isSelected ? 'ring-primary ring-2' : ''
+                                }`}
+                                onClick={() =>
+                                    handleCollectionClick(collection)
+                                }
+                            >
+                                <CardContent className="p-0">
+                                    <div className="bg-muted relative aspect-video">
+                                        {collection.thumbnail ? (
+                                            <img
+                                                src={collection.thumbnail}
+                                                alt={collection.name}
+                                                className="absolute inset-0 h-full w-full rounded-t-lg object-cover"
+                                            />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <FolderOpen className="text-muted-foreground h-8 w-8" />
+                                            </div>
+                                        )}
+                                        {isSelected && (
+                                            <div className="bg-primary text-primary-foreground absolute top-2 right-2 rounded-full p-1">
+                                                <Check className="h-4 w-4" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-4">
+                                        <h3 className="mb-1 line-clamp-2 font-semibold">
+                                            {collection.name}
+                                        </h3>
+                                        <p className="text-muted-foreground text-sm">
+                                            {collection.video_count} videos
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )
+                    })}
+                </div>
+            )
+        }
+
         if (!data || data.items.length === 0) {
             return (
                 <div className="text-muted-foreground py-12 text-center">
@@ -312,10 +408,11 @@ export default function VideoSelector({
             onValueChange={handleTabChange}
             className="w-full"
         >
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="videos">Videos</TabsTrigger>
                 <TabsTrigger value="playlists">Playlists</TabsTrigger>
                 <TabsTrigger value="channels">Channels</TabsTrigger>
+                <TabsTrigger value="collections">Collections</TabsTrigger>
             </TabsList>
 
             <TabsContent value="videos" className="mt-6">
@@ -327,6 +424,10 @@ export default function VideoSelector({
             </TabsContent>
 
             <TabsContent value="channels" className="mt-6">
+                {renderContent()}
+            </TabsContent>
+
+            <TabsContent value="collections" className="mt-6">
                 {renderContent()}
             </TabsContent>
         </Tabs>
