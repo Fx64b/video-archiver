@@ -45,8 +45,8 @@ func TestOrderedExtensions(t *testing.T) {
 	}
 
 	got = orderedExtensions("")
-	if !reflect.DeepEqual(got, videoFileExtensions) {
-		t.Errorf("empty preference = %v, want %v", got, videoFileExtensions)
+	if !reflect.DeepEqual(got, mediaFileExtensions) {
+		t.Errorf("empty preference = %v, want %v", got, mediaFileExtensions)
 	}
 
 	got = orderedExtensions(".MP4")

@@ -31,6 +31,7 @@ var (
 	metadataPattern       = regexp.MustCompile(`\[youtube\] [^:]+: Downloading (webpage|tv.*API JSON|tv client config)`)
 	streamDownloadPattern = regexp.MustCompile(`\[download\] Destination: (.+) \[([A-Za-z0-9_-]+)\]\.f(\d+)\.(mp4|webm|m4a)`)
 	mergePattern          = regexp.MustCompile(`\[Merger\] Merging formats into`)
+	extractAudioPattern   = regexp.MustCompile(`\[ExtractAudio\] Destination:`)
 
 	// Progress parsing pattern for yt-dlp template output
 	// Format: [totalItems][playlist_index][video_id][title][format_id][format_note][vcodec][acodec]prog:[bytes/total][percent][speed][eta]
@@ -81,34 +82,38 @@ type ProgressState struct {
 // download and is fed from both the stdout and stderr pipes; mu serializes
 // those two readers over the shared state.
 type ProgressTracker struct {
-	mu              sync.Mutex
-	state           *ProgressState
-	service         *Service
-	updateThrottle  time.Duration
-	lastBroadcast   time.Time
+	mu             sync.Mutex
+	state          *ProgressState
+	service        *Service
+	updateThrottle time.Duration
+	lastBroadcast  time.Time
 }
 
 // NewProgressTracker creates a new progress tracker
 func NewProgressTracker(service *Service, jobID, jobType string) *ProgressTracker {
 	return &ProgressTracker{
 		state: &ProgressState{
-			JobID:          jobID,
-			JobType:        jobType,
-			ContentType:    "video", // default
-			Phase:          domain.DownloadPhaseMetadata,
-			CurrentItem:    1,
-			TotalItems:     1,
-			ItemsCompleted: 0,
-			LastUpdate:     time.Now(),
-			VideoStreams:   make(map[string]int),
-			RawProgress:    make(map[string]float64),
+			JobID:             jobID,
+			JobType:           jobType,
+			ContentType:       "video", // default
+			Phase:             domain.DownloadPhaseMetadata,
+			CurrentItem:       1,
+			TotalItems:        1,
+			ItemsCompleted:    0,
+			LastUpdate:        time.Now(),
+			VideoStreams:      make(map[string]int),
+			RawProgress:       make(map[string]float64),
 			CurrentStreamType: make(map[string]string),
-			VideoProgress: make(map[string]float64),
-			Warnings:      make([]string, 0),
+			VideoProgress:     make(map[string]float64),
+			Warnings:          make([]string, 0),
 		},
 		service:        service,
 		updateThrottle: 100 * time.Millisecond, // 0.1 seconds max for more responsive updates
 	}
+}
+
+func (pt *ProgressTracker) isAudioOnly() bool {
+	return pt.state.JobType == string(domain.JobTypeAudio)
 }
 
 // consume reads one of yt-dlp's output pipes to exhaustion, feeding each line
@@ -201,7 +206,6 @@ func (pt *ProgressTracker) processLine(line string) {
 	// 6. Send throttled update (this handles the 0.25s throttling)
 	pt.sendThrottledUpdate()
 }
-
 
 // detectContentType determines if this is a video, playlist, or channel download
 func (pt *ProgressTracker) detectContentType(line string) {
@@ -325,7 +329,10 @@ func (pt *ProgressTracker) detectPhase(line string) {
 				pt.state.RawProgress[videoID] = percent
 
 				// Determine phase and progress based on current stream type
-				if streamType == "audio" {
+				if pt.isAudioOnly() {
+					pt.state.Phase = domain.DownloadPhaseAudio
+					pt.state.CurrentProgress = percent * 0.95
+				} else if streamType == "audio" {
 					pt.state.Phase = domain.DownloadPhaseAudio
 					// Use saved video progress as base (default to 80 if not set)
 					videoBaseProgress := pt.state.VideoProgress[videoID]
@@ -360,7 +367,7 @@ func (pt *ProgressTracker) detectPhase(line string) {
 		// Handle stream destination announcements to determine stream type
 		videoID := streamMatch[2]
 		formatCode := streamMatch[3] // Extract format code (e.g., "401", "251")
-		extension := streamMatch[4]   // Extract extension (e.g., "mp4", "webm", "m4a")
+		extension := streamMatch[4]  // Extract extension (e.g., "mp4", "webm", "m4a")
 
 		// Initialize maps if needed
 		if pt.state.CurrentStreamType == nil {
@@ -393,7 +400,9 @@ func (pt *ProgressTracker) detectPhase(line string) {
 		pt.state.CurrentStreamType[videoID] = streamType
 
 		// If transitioning from video to audio, update phase immediately
-		if previousStreamType == "video" && streamType == "audio" {
+		if pt.isAudioOnly() {
+			pt.state.Phase = domain.DownloadPhaseAudio
+		} else if previousStreamType == "video" && streamType == "audio" {
 			pt.state.Phase = domain.DownloadPhaseAudio
 			log.WithFields(log.Fields{
 				"videoID":            videoID,
@@ -414,10 +423,10 @@ func (pt *ProgressTracker) detectPhase(line string) {
 			"line":       line,
 		}).Debug("Stream destination detected - stream type determined")
 
-	} else if mergePattern.MatchString(line) {
+	} else if mergePattern.MatchString(line) || extractAudioPattern.MatchString(line) {
 		pt.state.Phase = domain.DownloadPhaseMerging
 		pt.state.CurrentProgress = 95 // Merging phase
-		log.WithField("line", line).Debug("Merge phase detected")
+		log.WithField("line", line).Debug("Merging/extraction phase detected")
 	}
 
 	// Check for item completion patterns
@@ -429,12 +438,11 @@ func (pt *ProgressTracker) detectPhase(line string) {
 	if previousPhase != pt.state.Phase {
 		log.WithFields(log.Fields{
 			"previousPhase": previousPhase,
-			"newPhase":     pt.state.Phase,
-			"line":         line,
+			"newPhase":      pt.state.Phase,
+			"line":          line,
 		}).Debug("Phase transition detected")
 	}
 }
-
 
 // handleSpecialCases deals with edge cases like already downloaded files and retries
 func (pt *ProgressTracker) handleSpecialCases(line string) {
@@ -668,16 +676,16 @@ func (pt *ProgressTracker) broadcastUpdate() {
 
 	if os.Getenv("DEBUG") == "true" {
 		log.WithFields(log.Fields{
-			"jobID":              update.JobID,
-			"currentItem":        update.CurrentItem,
-			"totalItems":         update.TotalItems,
-			"overallProgress":    update.Progress,
-			"currentProgress":    update.CurrentVideoProgress,
-			"phase":              update.DownloadPhase,
-			"contentType":        pt.state.ContentType,
-			"isRetrying":         update.IsRetrying,
-			"retryCount":         update.RetryCount,
-			"warningCount":       len(update.Warnings),
+			"jobID":           update.JobID,
+			"currentItem":     update.CurrentItem,
+			"totalItems":      update.TotalItems,
+			"overallProgress": update.Progress,
+			"currentProgress": update.CurrentVideoProgress,
+			"phase":           update.DownloadPhase,
+			"contentType":     pt.state.ContentType,
+			"isRetrying":      update.IsRetrying,
+			"retryCount":      update.RetryCount,
+			"warningCount":    len(update.Warnings),
 		}).Debug("Progress update broadcast")
 	}
 }
@@ -715,4 +723,3 @@ func (pt *ProgressTracker) updateJobProgress(jobID string, progress float64) err
 	job.Warnings = pt.state.Warnings
 	return pt.service.jobs.Update(job)
 }
-

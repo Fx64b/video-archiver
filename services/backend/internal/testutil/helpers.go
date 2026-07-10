@@ -25,6 +25,7 @@ func CreateTestDB(t *testing.T) *sql.DB {
 		url TEXT NOT NULL,
 		status TEXT NOT NULL,
 		progress REAL NOT NULL,
+		media_type TEXT NOT NULL DEFAULT 'video',
 		warnings TEXT,
 		file_path TEXT,
 		created_at DATETIME NOT NULL,

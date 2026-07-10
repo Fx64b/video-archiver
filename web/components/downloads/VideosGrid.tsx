@@ -1,5 +1,10 @@
-import { JobStatusError, JobWithMetadata, VideoMetadata } from '@/types'
-import { AlertTriangle, Film, Play } from 'lucide-react'
+import {
+    JobStatusError,
+    JobWithMetadata,
+    MediaTypeAudio,
+    VideoMetadata,
+} from '@/types'
+import { AlertTriangle, Film, Music, Play } from 'lucide-react'
 
 import { useNavigate } from 'react-router-dom'
 
@@ -41,6 +46,7 @@ export function VideosGrid({ items }: VideosGridProps) {
                     ? formatSeconds(metadata.duration)
                     : `?:??`
                 const isFailed = item.job?.status === JobStatusError
+                const isAudio = item.job?.media_type === MediaTypeAudio
 
                 return (
                     <Card
@@ -93,7 +99,16 @@ export function VideosGrid({ items }: VideosGridProps) {
                                 </span>
                             </div>
                             <div className="mt-6 flex items-center gap-2">
-                                {metadata?.resolution && (
+                                {isAudio && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="flex items-center gap-1 text-xs"
+                                    >
+                                        <Music className="h-3 w-3" />
+                                        Audio
+                                    </Badge>
+                                )}
+                                {!isAudio && metadata?.resolution && (
                                     <Badge
                                         variant="outline"
                                         className="text-xs"

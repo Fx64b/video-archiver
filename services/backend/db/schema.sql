@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS jobs (
                                     url TEXT NOT NULL,
                                     status TEXT,
                                     progress REAL,
+                                    media_type TEXT NOT NULL DEFAULT 'video',
                                     warnings TEXT,
                                     file_path TEXT,
                                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

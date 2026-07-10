@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"video-archiver/internal/domain"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -75,7 +76,15 @@ func createPrintFile(jobID string) (string, func()) {
 // falling back gracefully when unavailable. Merging into mp4 only remuxes, so
 // preferring mp4-native codecs here is what keeps the file playable in the
 // web player.
-func downloadFormatArgs(maxQuality int) []string {
+func downloadFormatArgs(job domain.Job, maxQuality int) []string {
+	if job.IsAudio() {
+		return []string{
+			"--format", "bestaudio/best",
+			"--extract-audio",
+			"--audio-format", "mp3",
+			"--audio-quality", "0",
+		}
+	}
 	return []string{
 		"-f", "bv*+ba/b",
 		"-S", "res:" + strconv.Itoa(maxQuality) + ",vcodec:h264,acodec:m4a",

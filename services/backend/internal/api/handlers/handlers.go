@@ -19,8 +19,9 @@ import (
 )
 
 type DownloadRequest struct {
-	URL     string `json:"url"`
-	Quality *int   `json:"quality,omitempty"`
+	URL       string `json:"url"`
+	Quality   *int   `json:"quality,omitempty"`
+	MediaType string `json:"media_type,omitempty"` // "video" (default) or "audio"
 }
 
 type Response struct {
@@ -151,15 +152,26 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mediaType := domain.MediaTypeVideo
+	switch req.MediaType {
+	case "", string(domain.MediaTypeVideo):
+	case string(domain.MediaTypeAudio):
+		mediaType = domain.MediaTypeAudio
+	default:
+		http.Error(w, "Invalid media_type. Must be 'video' or 'audio'", http.StatusBadRequest)
+		return
+	}
+
 	if req.Quality != nil {
-		log.Infof("Received download request for URL: %s with custom quality: %dp", req.URL, *req.Quality)
+		log.Infof("Received %s download request for URL: %s with custom quality: %dp", mediaType, req.URL, *req.Quality)
 	} else {
-		log.Infof("Received download request for URL: %s", req.URL)
+		log.Infof("Received %s download request for URL: %s", mediaType, req.URL)
 	}
 
 	job := domain.Job{
 		ID:            uuid.New().String(),
 		URL:           req.URL,
+		MediaType:     mediaType,
 		CustomQuality: req.Quality,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),

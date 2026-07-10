@@ -9,6 +9,7 @@ import {
     JobStatusError,
     JobStatusInProgress,
     JobStatusPending,
+    JobTypeAudio,
     JobTypeMetadata,
     Metadata,
     ProgressUpdate,
@@ -226,6 +227,9 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                                 'downloadPhase' in job
                                                     ? job.downloadPhase
                                                     : 'video'
+                                            const isAudioJob =
+                                                'jobType' in job &&
+                                                job.jobType === JobTypeAudio
                                             const progress = Math.round(
                                                 job.progress
                                             )
@@ -238,7 +242,9 @@ export const MetadataCard: React.FC<MetadataCardProps> = ({
                                                 case DownloadPhaseAudio:
                                                     return `Downloading audio (${progress}%)`
                                                 case DownloadPhaseMerging:
-                                                    return `Merging streams (${progress}%)`
+                                                    return isAudioJob
+                                                        ? `Extracting audio (${progress}%)`
+                                                        : `Merging streams (${progress}%)`
                                                 case DownloadPhaseComplete:
                                                     return `Download complete (${progress}%)`
                                                 default:

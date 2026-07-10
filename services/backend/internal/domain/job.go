@@ -12,11 +12,21 @@ const (
 	JobStatusCancelled  JobStatus = "cancelled"
 )
 
+// MediaType selects what a download job produces: the full video or an
+// audio-only extraction.
+type MediaType string
+
+const (
+	MediaTypeVideo MediaType = "video"
+	MediaTypeAudio MediaType = "audio"
+)
+
 type Job struct {
 	ID            string    `json:"id"`
 	URL           string    `json:"url"`
 	Status        JobStatus `json:"status"`
 	Progress      float64   `json:"progress"`
+	MediaType     MediaType `json:"media_type,omitempty"`
 	CustomQuality *int      `json:"custom_quality,omitempty"`
 	Warnings      []string  `json:"warnings,omitempty"`
 	// FilePath is the absolute on-disk path of the downloaded media file,
@@ -25,6 +35,12 @@ type Job struct {
 	FilePath string `json:"file_path,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// IsAudio reports whether the job downloads audio only. The zero value of
+// MediaType (legacy rows, default requests) means video.
+func (j *Job) IsAudio() bool {
+	return j.MediaType == MediaTypeAudio
 }
 
 //tygo:ignore

@@ -81,6 +81,32 @@ func TestHandleDownload(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			checkResponse:  true,
 		},
+		{
+			name: "valid audio download request",
+			requestBody: DownloadRequest{
+				URL:       "https://youtube.com/watch?v=test",
+				MediaType: "audio",
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse:  true,
+		},
+		{
+			name: "explicit video media type",
+			requestBody: DownloadRequest{
+				URL:       "https://youtube.com/watch?v=test",
+				MediaType: "video",
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse:  true,
+		},
+		{
+			name: "invalid media type",
+			requestBody: DownloadRequest{
+				URL:       "https://youtube.com/watch?v=test",
+				MediaType: "podcast",
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"video-archiver/internal/domain"
 )
 
 func TestPrintedFilepath(t *testing.T) {
@@ -76,7 +77,7 @@ func TestValidMediaPath(t *testing.T) {
 }
 
 func TestDownloadFormatArgs(t *testing.T) {
-	args := downloadFormatArgs(1080)
+	args := downloadFormatArgs(domain.Job{MediaType: domain.MediaTypeVideo}, 1080)
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "-S res:1080,vcodec:h264,acodec:m4a") {
 		t.Errorf("expected format sort for browser-safe codecs, got %q", joined)
@@ -86,5 +87,10 @@ func TestDownloadFormatArgs(t *testing.T) {
 	}
 	if !strings.Contains(joined, "--merge-output-format mp4") {
 		t.Errorf("expected mp4 merge container, got %q", joined)
+	}
+
+	audioArgs := strings.Join(downloadFormatArgs(domain.Job{MediaType: domain.MediaTypeAudio}, 1080), " ")
+	if !strings.Contains(audioArgs, "--extract-audio") || !strings.Contains(audioArgs, "--audio-format mp3") {
+		t.Errorf("expected audio extraction args, got %q", audioArgs)
 	}
 }

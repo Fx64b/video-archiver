@@ -15,6 +15,13 @@ import (
 // extension is a hint rather than a guarantee.
 var videoFileExtensions = []string{"mp4", "mkv", "webm", "avi", "mov"}
 
+// audioFileExtensions are the extensions an audio-only download may have.
+var audioFileExtensions = []string{"mp3", "m4a", "opus", "aac", "flac", "wav", "ogg"}
+
+// mediaFileExtensions is every extension a downloaded media file may have,
+// video containers first since they are the common case.
+var mediaFileExtensions = append(append([]string{}, videoFileExtensions...), audioFileExtensions...)
+
 // sanitizeFilename mirrors the way the download service names files closely
 // enough to locate them, replacing characters that are illegal on common
 // filesystems. It also strips leading/trailing dots and spaces.
@@ -65,16 +72,16 @@ func candidateDirs(downloadPath string, meta *domain.VideoMetadata) []string {
 }
 
 // orderedExtensions returns the metadata extension first (if known and valid)
-// followed by the remaining known video extensions, without duplicates.
+// followed by the remaining known media extensions, without duplicates.
 func orderedExtensions(preferred string) []string {
 	preferred = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(preferred)), ".")
-	exts := make([]string, 0, len(videoFileExtensions)+1)
+	exts := make([]string, 0, len(mediaFileExtensions)+1)
 	seen := map[string]bool{}
 	if preferred != "" {
 		exts = append(exts, preferred)
 		seen[preferred] = true
 	}
-	for _, e := range videoFileExtensions {
+	for _, e := range mediaFileExtensions {
 		if !seen[e] {
 			exts = append(exts, e)
 			seen[e] = true
@@ -129,7 +136,7 @@ func findVideoInDir(dir, title string) (string, bool) {
 		}
 		name := e.Name()
 		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(name)), ".")
-		if !contains(videoFileExtensions, ext) {
+		if !contains(mediaFileExtensions, ext) {
 			continue
 		}
 		stem := normalizeForMatch(strings.TrimSuffix(name, filepath.Ext(name)))
