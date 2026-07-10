@@ -48,6 +48,29 @@ var migrations = []func(*sql.DB) error{
 	func(db *sql.DB) error {
 		return addColumnIfMissing(db, "jobs", "file_path", "TEXT")
 	},
+	// 4: collections (user-defined video sets)
+	func(db *sql.DB) error {
+		_, err := db.Exec(`
+        CREATE TABLE IF NOT EXISTS collections (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS collection_videos (
+            collection_id TEXT NOT NULL,
+            video_job_id TEXT NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (collection_id, video_job_id),
+            FOREIGN KEY (collection_id) REFERENCES collections (id),
+            FOREIGN KEY (video_job_id) REFERENCES jobs (job_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_collection_videos_video ON collection_videos(video_job_id);
+    `)
+		return err
+	},
 }
 
 func NewDB(dbPath string) (*sql.DB, error) {

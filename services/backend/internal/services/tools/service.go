@@ -22,23 +22,25 @@ type Broadcaster interface {
 }
 
 type Config struct {
-	ToolsRepository domain.ToolsRepository
-	JobRepository   domain.JobRepository
-	Broadcaster     Broadcaster
-	FFmpeg          *FFmpeg
-	DownloadPath    string
-	ProcessedPath   string
-	Concurrency     int
+	ToolsRepository      domain.ToolsRepository
+	JobRepository        domain.JobRepository
+	CollectionRepository domain.CollectionRepository
+	Broadcaster          Broadcaster
+	FFmpeg               *FFmpeg
+	DownloadPath         string
+	ProcessedPath        string
+	Concurrency          int
 }
 
 type Service struct {
-	toolsRepo     domain.ToolsRepository
-	jobRepo       domain.JobRepository
-	broadcaster   Broadcaster
-	ffmpeg        *FFmpeg
-	downloadPath  string
-	processedPath string
-	concurrency   int
+	toolsRepo      domain.ToolsRepository
+	jobRepo        domain.JobRepository
+	collectionRepo domain.CollectionRepository
+	broadcaster    Broadcaster
+	ffmpeg         *FFmpeg
+	downloadPath   string
+	processedPath  string
+	concurrency    int
 
 	queue      chan *domain.ToolsJob
 	activeJobs sync.Map // job ID -> context.CancelFunc
@@ -71,16 +73,17 @@ func NewService(config *Config) *Service {
 	}
 
 	return &Service{
-		toolsRepo:     config.ToolsRepository,
-		jobRepo:       config.JobRepository,
-		broadcaster:   config.Broadcaster,
-		ffmpeg:        config.FFmpeg,
-		downloadPath:  config.DownloadPath,
-		processedPath: config.ProcessedPath,
-		concurrency:   concurrency,
-		queue:         make(chan *domain.ToolsJob, 100),
-		ctx:           ctx,
-		cancel:        cancel,
+		toolsRepo:      config.ToolsRepository,
+		jobRepo:        config.JobRepository,
+		collectionRepo: config.CollectionRepository,
+		broadcaster:    config.Broadcaster,
+		ffmpeg:         config.FFmpeg,
+		downloadPath:   config.DownloadPath,
+		processedPath:  config.ProcessedPath,
+		concurrency:    concurrency,
+		queue:          make(chan *domain.ToolsJob, 100),
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 }
 
@@ -349,16 +352,34 @@ func (s *Service) expandInputFiles(job *domain.ToolsJob) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("get videos for %s: %w", job.InputType, err)
 		}
-		ids := make([]string, 0, len(videos))
-		for _, v := range videos {
-			if v != nil && v.Job != nil {
-				ids = append(ids, v.Job.ID)
-			}
+		return videoJobIDs(videos), nil
+	case domain.InputTypeCollection:
+		if len(job.InputFiles) != 1 {
+			return nil, fmt.Errorf("%s input requires exactly one parent ID", job.InputType)
 		}
-		return ids, nil
+		if s.collectionRepo == nil {
+			return nil, fmt.Errorf("collections are not available")
+		}
+		// GetVideos preserves collection order, so multi-input operations like
+		// concat process the videos in the order the user arranged them.
+		videos, err := s.collectionRepo.GetVideos(job.InputFiles[0])
+		if err != nil {
+			return nil, fmt.Errorf("get videos for %s: %w", job.InputType, err)
+		}
+		return videoJobIDs(videos), nil
 	default:
 		return nil, fmt.Errorf("invalid input type: %q", job.InputType)
 	}
+}
+
+func videoJobIDs(videos []*domain.JobWithMetadata) []string {
+	ids := make([]string, 0, len(videos))
+	for _, v := range videos {
+		if v != nil && v.Job != nil {
+			ids = append(ids, v.Job.ID)
+		}
+	}
+	return ids
 }
 
 // resolveVideoPath maps a video job ID to the file on disk.

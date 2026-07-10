@@ -21,7 +21,7 @@ export type ToolOperation =
     | 'rotate'
     | 'workflow'
 
-export type SelectedType = 'video' | 'playlist' | 'channel'
+export type SelectedType = 'video' | 'playlist' | 'channel' | 'collection'
 
 export interface ToolInput {
     id: string
@@ -41,16 +41,16 @@ interface PaginatedJobs {
 }
 
 /**
- * resolveInputs turns the selected items into the backend payload. Playlists
- * and channels are passed as a single parent ID that the backend expands into
- * its videos; individual videos are passed through as a list.
+ * resolveInputs turns the selected items into the backend payload. Playlists,
+ * channels and collections are passed as a single parent ID that the backend
+ * expands into its videos; individual videos are passed through as a list.
  */
 function resolveInputs(inputs: ToolInput[]): {
     input_files: string[]
-    input_type: 'videos' | 'playlist' | 'channel'
+    input_type: 'videos' | 'playlist' | 'channel' | 'collection'
 } {
     const first = inputs[0]
-    if (first && (first.type === 'playlist' || first.type === 'channel')) {
+    if (first && first.type !== 'video') {
         return { input_files: [first.id], input_type: first.type }
     }
     return { input_files: inputs.map((i) => i.id), input_type: 'videos' }

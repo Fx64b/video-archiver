@@ -28,14 +28,15 @@ const (
 type ToolsInputType string
 
 const (
-	InputTypeVideos   ToolsInputType = "videos"
-	InputTypePlaylist ToolsInputType = "playlist"
-	InputTypeChannel  ToolsInputType = "channel"
+	InputTypeVideos     ToolsInputType = "videos"
+	InputTypePlaylist   ToolsInputType = "playlist"
+	InputTypeChannel    ToolsInputType = "channel"
+	InputTypeCollection ToolsInputType = "collection"
 )
 
 // ToolsJob represents a single media-processing job operating on already
 // downloaded videos. InputFiles holds download job IDs (videos, or a single
-// playlist/channel that is expanded into its videos).
+// playlist/channel/collection that is expanded into its videos).
 type ToolsJob struct {
 	ID            string             `json:"id"`
 	OperationType ToolsOperationType `json:"operation_type"`
