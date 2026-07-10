@@ -81,6 +81,26 @@ CREATE TABLE IF NOT EXISTS tools_jobs (
                                           audio_codec TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS collections (
+                                           id TEXT PRIMARY KEY,
+                                           name TEXT NOT NULL,
+                                           description TEXT NOT NULL DEFAULT '',
+                                           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS collection_videos (
+                                                 collection_id TEXT NOT NULL,
+                                                 video_job_id TEXT NOT NULL,
+                                                 position INTEGER NOT NULL DEFAULT 0,
+                                                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                                 PRIMARY KEY (collection_id, video_job_id),
+                                                 FOREIGN KEY (collection_id) REFERENCES collections (id),
+                                                 FOREIGN KEY (video_job_id) REFERENCES jobs (job_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_videos_video ON collection_videos(video_job_id);
+
 CREATE TABLE IF NOT EXISTS tags (
                                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                                     name TEXT NOT NULL UNIQUE COLLATE NOCASE,

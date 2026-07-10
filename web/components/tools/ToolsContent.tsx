@@ -124,8 +124,8 @@ export default function ToolsContent() {
                             <div>
                                 <CardTitle>Select Videos</CardTitle>
                                 <CardDescription>
-                                    Choose videos, playlists, or channels to
-                                    process
+                                    Choose videos, playlists, channels, or
+                                    collections to process
                                 </CardDescription>
                             </div>
                             {hasSelection && (
@@ -231,8 +231,8 @@ export default function ToolsContent() {
                     </CardHeader>
                     <CardContent className="text-muted-foreground space-y-1.5 text-sm">
                         <p>
-                            • Select individual videos, entire playlists, or
-                            whole channels as input
+                            • Select individual videos, entire playlists, whole
+                            channels, or your own collections as input
                         </p>
                         <p>
                             • Use workflows to chain multiple operations

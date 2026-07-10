@@ -3,18 +3,19 @@ import { create } from 'zustand'
 
 export interface SelectedInput {
     id: string
-    type: 'video' | 'playlist' | 'channel'
+    type: 'video' | 'playlist' | 'channel' | 'collection'
     title: string
     thumbnail?: string
-    /** Number of videos a playlist/channel selection expands into. */
+    /** Number of videos a playlist/channel/collection selection expands into. */
     videoCount?: number
 }
 
 /**
  * countSelectedVideos returns how many videos a selection effectively covers:
- * playlists and channels are expanded into their videos by the backend, so
- * they count as their video count (or at least 2 when the count is unknown).
- * Used to gate tools with a minimum input requirement such as concat.
+ * playlists, channels and collections are expanded into their videos by the
+ * backend, so they count as their video count (or at least 2 when the count
+ * is unknown). Used to gate tools with a minimum input requirement such as
+ * concat.
  */
 export function countSelectedVideos(inputs: SelectedInput[]): number {
     return inputs.reduce((sum, input) => {

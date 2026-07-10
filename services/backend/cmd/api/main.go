@@ -60,6 +60,7 @@ __     _____ ____  _____ ___
 	jobRepo := sqlite.NewJobRepository(db)
 	settingsRepo := sqlite.NewSettingsRepository(db)
 	toolsRepo := sqlite.NewToolsRepository(db)
+	collectionRepo := sqlite.NewCollectionRepository(db)
 
 	// Tag items downloaded before auto-tagging existed; idempotent, so it can
 	// run on every startup without growing the tag set.
@@ -85,8 +86,9 @@ __     _____ ____  _____ ___
 
 	fmt.Println("Starting Tools Service...")
 	toolsService := tools.NewService(&tools.Config{
-		ToolsRepository: toolsRepo,
-		JobRepository:   jobRepo,
+		ToolsRepository:      toolsRepo,
+		JobRepository:        jobRepo,
+		CollectionRepository: collectionRepo,
 		// Reuse the download service's WebSocket hub so tools progress reaches
 		// the frontend over the same /ws connection.
 		Broadcaster:   downloadService.GetHub(),
@@ -103,12 +105,14 @@ __     _____ ____  _____ ___
 	handler := handlers.NewHandler(downloadService, cfg.Server.DownloadPath, settingsRepo,
 		toolsService, toolsRepo, tools.NewFFmpeg())
 	toolsHandler := handlers.NewToolsHandler(toolsService)
+	collectionsHandler := handlers.NewCollectionsHandler(collectionRepo)
 
 	// One router, one port: /ws lives next to the REST routes so deployments
 	// only need a single upstream and the frontend can use same-origin URLs.
 	apiRouter := chi.NewRouter()
 	handler.RegisterRoutes(apiRouter)
 	toolsHandler.RegisterRoutes(apiRouter)
+	collectionsHandler.RegisterRoutes(apiRouter)
 
 	// Explicit timeouts so slow or stalled clients can't pin server resources
 	// indefinitely. Write timeouts are deliberately absent: /video streams

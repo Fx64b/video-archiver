@@ -17,13 +17,16 @@ func validateJob(job *domain.ToolsJob) error {
 	}
 
 	switch job.InputType {
-	case domain.InputTypeVideos, domain.InputTypePlaylist, domain.InputTypeChannel, "":
+	case domain.InputTypeVideos, domain.InputTypePlaylist, domain.InputTypeChannel,
+		domain.InputTypeCollection, "":
 	default:
 		return fmt.Errorf("invalid input_type: %q", job.InputType)
 	}
 
-	// playlist/channel inputs reference a single parent that is expanded later.
-	if job.InputType == domain.InputTypePlaylist || job.InputType == domain.InputTypeChannel {
+	// playlist/channel/collection inputs reference a single parent that is
+	// expanded later.
+	if job.InputType == domain.InputTypePlaylist || job.InputType == domain.InputTypeChannel ||
+		job.InputType == domain.InputTypeCollection {
 		if len(job.InputFiles) != 1 {
 			return fmt.Errorf("%s input requires exactly one parent ID", job.InputType)
 		}

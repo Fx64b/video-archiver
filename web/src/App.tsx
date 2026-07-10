@@ -7,6 +7,8 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
 
 import ChannelDetail from './pages/ChannelDetail'
+import CollectionDetail from './pages/CollectionDetail'
+import Collections from './pages/Collections'
 import Downloads from './pages/Downloads'
 import Overview from './pages/Overview'
 import PlaylistDetail from './pages/PlaylistDetail'
@@ -56,6 +58,11 @@ export default function App() {
                         <Route
                             path="/downloads/channel/:id"
                             element={<ChannelDetail />}
+                        />
+                        <Route path="/collections" element={<Collections />} />
+                        <Route
+                            path="/collections/:id"
+                            element={<CollectionDetail />}
                         />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/tools" element={<ToolsHome />} />

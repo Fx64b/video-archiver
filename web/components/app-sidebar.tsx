@@ -1,5 +1,6 @@
 import {
     ChartArea,
+    FolderOpen,
     GitBranch,
     Home,
     MonitorDown,
@@ -37,6 +38,11 @@ const items = [
         title: 'Downloads',
         url: '/downloads',
         icon: MonitorDown,
+    },
+    {
+        title: 'Collections',
+        url: '/collections',
+        icon: FolderOpen,
     },
     {
         title: 'Tools',
