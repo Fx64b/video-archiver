@@ -37,7 +37,7 @@ ENV CGO_ENABLED=0
 CMD ["air"]
 
 # Runtime stage
-FROM alpine:3.21 AS runner
+FROM alpine:3.24 AS runner
 
 # Deno is required by recent yt-dlp versions to solve YouTube's JavaScript
 # challenges (nsig / PO tokens). The official Deno binary is built against
