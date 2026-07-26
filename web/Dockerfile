@@ -1,6 +1,6 @@
 # Build stage: compile the Vite app to static files.
 # Pin pnpm to the 10.x line that matches the lockfile (lockfileVersion 9.0).
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
